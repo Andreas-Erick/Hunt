@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Auto Backup up to Android 11 (android:fullBackupContent). The sync token is a credential
+    tied to this device's Keystore key, so it never leaves the device; AtomicFile's temporary
+    siblings are excluded too. Everything else (hunt-mobile-state.json, WebView storage) is
+    still backed up.
+-->
+<full-backup-content>
+    <exclude domain="file" path="hunt-sync-token.txt" />
+    <exclude domain="file" path="hunt-sync-token.txt.new" />
+    <exclude domain="file" path="hunt-sync-token.txt.bak" />
+</full-backup-content>

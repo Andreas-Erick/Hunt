@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cloud backup and device-to-device transfer on Android 12+ (android:dataExtractionRules).
+    Same rule as backup_rules.xml: the sync token (and AtomicFile's temporary siblings) never
+    leaves the device; everything else is still included.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="hunt-sync-token.txt" />
+        <exclude domain="file" path="hunt-sync-token.txt.new" />
+        <exclude domain="file" path="hunt-sync-token.txt.bak" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="hunt-sync-token.txt" />
+        <exclude domain="file" path="hunt-sync-token.txt.new" />
+        <exclude domain="file" path="hunt-sync-token.txt.bak" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive launcher icon background: the Hunt tile gradient (top #15171c -> bottom #0b0c0e). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="270" android:startColor="#FF15171C" android:endColor="#FF0B0C0E" />
+</shape>

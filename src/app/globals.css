@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --font-jetbrains-mono: "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --font-space-grotesk: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  color: #e2e8f0;
+  font-family: var(--font-space-grotesk), sans-serif;
+  overflow-x: hidden;
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background: rgba(0, 240, 255, 0.25);
+  color: #00f0ff;
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07080a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.22);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.45);
+}
+
+@layer utilities {
+  /* Scrollable without a visible scrollbar (the header nav on narrow screens). */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

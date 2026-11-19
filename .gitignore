@@ -1,0 +1,42 @@
+# Dependencies & Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js & TypeScript build outputs
+.next/
+out/
+build/
+coverage/
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Local user data, pairing keys & backups (NEVER commit)
+data/
+.env
+.env.*
+!.env.example
+
+# Android build intermediates & compiled binaries
+android-app/app/build/
+.build-*/
+Hunt-Mobile.apk
+public/Hunt-Mobile.apk
+*.apk
+*.apk.bak
+*.apk.idsig
+
+# Local workstation artifacts & scratch archives
+_archive/
+HUNT.lnk
+Instructions_for_AI.md
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

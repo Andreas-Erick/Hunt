@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.hunt.companion"
+    android:versionCode="8"
+    android:versionName="1.5.2">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <!-- Required to sync with Laptop over local Wi-Fi / Hotspot -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Connectivity checks (getActiveNetwork, VPN detection, default-network callback) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+        enableOnBackInvokedCallback="false": keep the legacy Activity.onBackPressed() dispatch
+        (MainActivity asks the page via window.__huntBack first). Explicit so predictive back /
+        OnBackInvokedCallback never takes over the Back key at this targetSdk (34).
+        Backup rules: the state file is backed up, the sync token file never leaves the device.
+    -->
+    <application
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="false"
+        android:theme="@style/Theme.HuntCompanion">
+
+        <!--
+            configChanges: the page draws its own fixed dark theme and adapts to any size, so
+            rotation, split-screen/foldable resizing, keyboards and dark-mode (uiMode) switches
+            are handled in place instead of recreating the Activity and reloading the page.
+            (density / fontScale are left out on purpose: recreation keeps WebView in sync.)
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
