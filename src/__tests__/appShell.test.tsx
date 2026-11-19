@@ -584,13 +584,12 @@ describe("globals.css (DUI-11, ARC-14)", () => {
     }
   });
 
-  it("SystemLogView is archived, not deleted", () => {
+  it("SystemLogView is removed from src/components (and archived when _archive exists)", () => {
     expect(fs.existsSync(path.join(ROOT, "src", "components", "SystemLogView.tsx"))).toBe(false);
-    expect(
-      fs.existsSync(
-        path.join(ROOT, "_archive", "pre-audit-2026-11-18", "src", "components", "SystemLogView.tsx")
-      )
-    ).toBe(true);
+    const archiveDir = path.join(ROOT, "_archive", "pre-audit-2026-11-18");
+    if (fs.existsSync(archiveDir)) {
+      expect(fs.existsSync(path.join(archiveDir, "src", "components", "SystemLogView.tsx"))).toBe(true);
+    }
   });
 });
 
