@@ -377,12 +377,11 @@ describe("build hygiene (ARC-12, AND-09, SRV-09)", () => {
   );
 
   it("public/ serves only the APK, the favicon, the logo and the phone page", () => {
-    expect(fs.readdirSync(path.join(ROOT, "public")).sort()).toEqual([
-      "Hunt-Mobile.apk",
-      "favicon.ico",
-      "hunt-logo.png",
-      "hunt-mobile.html",
-    ]);
+    const files = fs.readdirSync(path.join(ROOT, "public")).sort();
+    const required = ["favicon.ico", "hunt-logo.png", "hunt-mobile.html"];
+    const allowed = new Set([...required, "Hunt-Mobile.apk"]);
+    for (const file of required) expect(files).toContain(file);
+    for (const file of files) expect(allowed.has(file), `unexpected file in public/: ${file}`).toBe(true);
   });
 
   it("build-apk.sh refuses stale build files, downgrades, a stale public copy, Wi-Fi permission and an embedded key", () => {

@@ -39,7 +39,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - uses: actions/setup-java@v4
@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" \
+          (yes || true) | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" \
             "build-tools;36.0.0" \
             "platforms;android-36" > /dev/null
 
@@ -119,7 +119,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Download freshly built Android APK into public/
@@ -219,11 +219,17 @@ jobs:
         run: |
           TAG="${{ needs.verify.outputs.tag }}"
           VERSION="${{ needs.verify.outputs.version }}"
+          printf '%s\n' \
+            "### Installers" \
+            "- **Windows Desktop Installer:** \`Hunt-Desktop-Setup-${VERSION}.exe\` (bundles Node.js runtime + Start Menu/Desktop shortcuts)" \
+            "- **Windows Portable Bundle:** \`Hunt-Desktop-Windows-${VERSION}.zip\`" \
+            "- **Android Companion APK:** \`Hunt-Mobile-${VERSION}.apk\` (installs in-place without wiping data)" \
+            "- **Checksums:** \`SHA256SUMS.txt\`" \
+            > release-notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release-assets/* --clobber
           else
             gh release create "$TAG" release-assets/* \
               --title "Hunt ${TAG}" \
-              --generate-notes \
-              --notes "### Installers\n- **Windows Desktop Installer:** \`Hunt-Desktop-Setup-${VERSION}.exe\` (bundles Node.js runtime + Start Menu/Desktop shortcuts)\n- **Windows Portable Bundle:** \`Hunt-Desktop-Windows-${VERSION}.zip\`\n- **Android Companion APK:** \`Hunt-Mobile-${VERSION}.apk\` (installs in-place without wiping data)\n- **Checksums:** \`SHA256SUMS.txt\`"
+              --notes-file release-notes.md
           fi

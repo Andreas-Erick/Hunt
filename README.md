@@ -127,7 +127,7 @@ flowchart LR
 
 ### Prerequisites
 
-- **Node.js** 18+ and **npm**
+- **Node.js** 22+ (tested on Node 24) and **npm**
 - *(Optional, for Android APK builds)* **JDK 11+** and **Android SDK** (`build-tools` + `platforms` + `adb`)
 
 ### Installation
