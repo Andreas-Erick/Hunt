@@ -9,10 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml/badge.svg" />
+  </a>
   <img alt="Next.js 14" src="https://img.shields.io/badge/Next.js-14-0B0C0E?style=flat-square&logo=nextdotjs&logoColor=white" />
   <img alt="TypeScript 5.7" src="https://img.shields.io/badge/TypeScript-5.7-0B0C0E?style=flat-square&logo=typescript&logoColor=00F0FF" />
   <img alt="Android API 26-36" src="https://img.shields.io/badge/Android-API%2026--36-0B0C0E?style=flat-square&logo=android&logoColor=00FF9D" />
-  <img alt="Vitest 980 Tests" src="https://img.shields.io/badge/Tests-28%20suites%20%7C%20980%20passed-0B0C0E?style=flat-square&logo=vitest&logoColor=FFB800" />
 </p>
 
 ---
@@ -23,10 +25,21 @@ Hunt is built for deep-work practitioners who want calm, single-task execution i
 
 All data lives locally on your devices — IndexedDB (Dexie) on desktop and atomic JSON files on Android — and converges automatically over your local Wi-Fi or Tailscale network through an authenticated `/api/sync` merge server.
 
-<!-- Visual Proof: Add desktop and mobile screenshots to docs/screenshots/ and reference them here -->
-<p align="center">
-  <img src="brand/logo/hunt-contact-sheet.png" alt="Hunt visual identity and icon system" width="640" />
-</p>
+### Desktop Interface
+
+| Today & Done-List Timeline | Distraction-Free Focus Mode |
+| :---: | :---: |
+| ![Hunt Desktop Home](docs/screenshots/desktop-home.png) | ![Hunt Desktop Focus](docs/screenshots/desktop-focus.png) |
+
+| Daily Habits & Consistency | Weekly Review Telemetry |
+| :---: | :---: |
+| ![Hunt Desktop Habits](docs/screenshots/desktop-habits.png) | ![Hunt Desktop Review](docs/screenshots/desktop-review.png) |
+
+### Android Companion (`Pixel 9 Pro XL`)
+
+| Today Queue & Spotlight | Daily Habits & Streaks | Weekly Review Telemetry |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/mobile-today.png" alt="Hunt Android Today" width="240" /> | <img src="docs/screenshots/mobile-habits.png" alt="Hunt Android Habits" width="240" /> | <img src="docs/screenshots/mobile-review.png" alt="Hunt Android Review" width="240" /> |
 
 ---
 
@@ -97,7 +110,12 @@ flowchart LR
 │       ├── AndroidManifest.xml     # Least-privilege permissions & backup exclusion rules
 │       ├── assets/hunt-mobile.html # Byte-identical mirror verified by mobileMirror.test.ts
 │       └── java/com/hunt/companion/MainActivity.java
-├── brand/logo/                     # Vector logo marks and icon contact sheets
+├── .github/workflows/
+│   ├── ci.yml                      # Automated Vitest, tsc & Next.js build verification
+│   └── release.yml                 # Builds & publishes Windows .exe/.zip + Android .apk
+├── installer/hunt-desktop.iss      # Inno Setup script for Hunt-Desktop-Setup.exe
+├── docs/screenshots/               # Desktop & Pixel 9 Pro XL app screenshots
+├── brand/logo/                     # Vector logo marks and icon assets
 ├── Start-Hunt.bat                  # Windows standalone app-mode launcher
 ├── Start-Server.bat                # Production/dev server bootstrapper
 └── .env.example                    # Optional runtime environment variables
@@ -164,3 +182,14 @@ adb install -r "./Hunt-Mobile.apk"
 ```
 
 Pair the phone once by opening **Phone & Sync** on desktop and scanning/entering the local LAN URL and pairing token stored in `data/hunt-sync.key`.
+
+---
+
+## Releases & Automated Installers
+
+Pushing a version tag (e.g., `git tag v1.5.2 && git push origin v1.5.2`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 980 tests + TypeScript and publishes a GitHub Release containing:
+
+- **`Hunt-Desktop-Setup-<version>.exe`** — Windows Inno Setup installer (bundles Node.js + standalone Next.js server + Desktop/Start Menu shortcuts with `HUNT.ico`; no Node.js install required).
+- **`Hunt-Desktop-Windows-<version>.zip`** — Self-contained portable Windows bundle.
+- **`Hunt-Mobile-<version>.apk`** — Signed Android companion APK built via `build-apk.sh` (installs in-place over prior releases without wiping app data).
+- **`SHA256SUMS.txt`** — Verification checksums for all release assets.

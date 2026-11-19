@@ -43,7 +43,7 @@ Function IsServerProcessRunning()
     Set procs = wmi.ExecQuery("SELECT CommandLine FROM Win32_Process WHERE Name = 'node.exe'")
     For Each proc In procs
         cmd = LCase("" & proc.CommandLine)
-        If InStr(cmd, "journey\node_modules\next") > 0 Then
+        If InStr(cmd, LCase(appDir)) > 0 And (InStr(cmd, "next") > 0 Or InStr(cmd, "server.js") > 0) Then
             IsServerProcessRunning = True
             Exit For
         End If

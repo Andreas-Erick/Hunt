@@ -9,6 +9,7 @@ pnpm-debug.log*
 .next/
 out/
 build/
+dist/
 coverage/
 tsconfig.tsbuildinfo
 next-env.d.ts
