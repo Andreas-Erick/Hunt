@@ -1526,3 +1526,137 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
     }
   });
 });
+
+describe("mobile Review analytics: multi-horizon, Quest X filter, Tasks metric & Heatmap", () => {
+  it("counts hours and completed tasks per quest across Day/Week/Month/Qtr/Year and renders interactive 16-week heatmap with 48px controls", () => {
+    const todayK = localKey(NOW);
+    const twoDaysAgoK = localKey(NOW - 2 * 86_400_000);
+    const p = load({
+      seedState: baseState({
+        quests: [
+          quest("quest-a", "Deep Engine", "cyan", { targetWeeklyHours: 14 }),
+          quest("quest-b", "Writing", "emerald", { targetWeeklyHours: 7 }),
+        ],
+        tasks: [
+          task("t-a1", "Build parser", {
+            questId: "quest-a",
+            status: "completed",
+            completedAt: NOW,
+            scheduledDate: todayK,
+          }),
+          task("t-a2", "Daily benchmark", {
+            questId: "quest-a",
+            habitId: "hab-bench",
+            status: "completed",
+            completedAt: NOW - 2 * 86_400_000,
+            scheduledDate: twoDaysAgoK,
+          }),
+          task("t-b1", "Draft intro", {
+            questId: "quest-b",
+            status: "completed",
+            completedAt: NOW,
+            scheduledDate: todayK,
+          }),
+        ],
+        timeLogs: [
+          {
+            id: "log-a1",
+            taskId: "t-a1",
+            taskTitleSnapshot: "Build parser",
+            questId: "quest-a",
+            questCodeSnapshot: "ENGINE",
+            accentColorSnapshot: "cyan",
+            startTime: NOW - 7200_000,
+            endTime: NOW,
+            durationSeconds: 7200, // 2.0h today
+            dateKey: todayK,
+          },
+          {
+            id: "log-a2",
+            taskId: "t-a2",
+            taskTitleSnapshot: "Daily benchmark",
+            questId: "quest-a",
+            questCodeSnapshot: "ENGINE",
+            accentColorSnapshot: "cyan",
+            startTime: NOW - 2 * 86_400_000 - 3600_000,
+            endTime: NOW - 2 * 86_400_000,
+            durationSeconds: 3600, // 1.0h two days ago
+            dateKey: twoDaysAgoK,
+          },
+          {
+            id: "log-b1",
+            taskId: "t-b1",
+            taskTitleSnapshot: "Draft intro",
+            questId: "quest-b",
+            questCodeSnapshot: "WRITE",
+            accentColorSnapshot: "emerald",
+            startTime: NOW - 1800_000,
+            endTime: NOW,
+            durationSeconds: 1800, // 0.5h today
+            dateKey: todayK,
+          },
+        ],
+      }),
+    });
+
+    p.switchView("telemetry");
+
+    // Touch targets on new horizon buttons and quest breakdown buttons are >= 48px
+    p.document.querySelectorAll(".review-horizon-btn").forEach((btn, i) => {
+      expect(px(p.getComputedStyle(btn).minHeight), "horizon btn " + i).toBeGreaterThanOrEqual(48);
+    });
+    p.document.querySelectorAll(".review-quest-btn").forEach((btn, i) => {
+      expect(px(p.getComputedStyle(btn).minHeight), "quest btn " + i).toBeGreaterThanOrEqual(48);
+    });
+
+    // Default Week + All Quests: 3.5h total quest hours, 3 completed tasks
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("3.5h");
+    expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("3");
+
+    // Filter to Quest "Deep Engine" via filter pill
+    const enginePill = Array.from(p.document.querySelectorAll(".chip-strip .filter-pill")).find(
+      (b) => b.textContent?.includes("Deep Engine")
+    );
+    click(p, enginePill ?? null);
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Deep Engine · Hours");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("3.0h");
+    expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("2");
+    expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("1 steps · 1 habits");
+
+    // Switch to Day horizon -> 2.0h and 1 completed task today for Deep Engine
+    const dayBtn = Array.from(p.document.querySelectorAll(".review-horizon-btn")).find(
+      (b) => b.textContent?.trim() === "Day"
+    );
+    click(p, dayBtn ?? null);
+    expect(p.document.querySelector(".hero-title")?.textContent).toBe("Daily review");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("2.0h");
+    expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("1");
+
+    // Switch through Month, Qtr, Year cleanly
+    for (const [tab, heading] of [
+      ["Month", "Monthly review"],
+      ["Qtr", "Quarterly review"],
+      ["Year", "Yearly review"],
+    ] as const) {
+      const btn = Array.from(p.document.querySelectorAll(".review-horizon-btn")).find(
+        (b) => b.textContent?.trim() === tab
+      );
+      click(p, btn ?? null);
+      expect(p.document.querySelector(".hero-title")?.textContent).toBe(heading);
+    }
+
+    // Toggle chart metric to Tasks
+    const tasksMetricBtn = Array.from(p.document.querySelectorAll(".mini-chip-btn")).find(
+      (b) => b.textContent?.trim() === "Tasks"
+    );
+    click(p, tasksMetricBtn ?? null);
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Completed Tasks · Per Month");
+
+    // Tap twoDaysAgo cell in 16-week Heatmap -> inspector updates to 1.0h · 1 task
+    const hmCells = Array.from(p.document.querySelectorAll('[data-review-heatmap="true"] .heatmap-cell'));
+    expect(hmCells.length).toBeGreaterThanOrEqual(105);
+    p.eval(`selectedReviewHeatmapKey = ${JSON.stringify(twoDaysAgoK)}; renderApp();`);
+    expect(p.document.querySelector('[data-review-heatmap="true"]')?.textContent).toContain("1.0h · 1 task");
+    expect(pageErrors(p)).toEqual([]);
+  });
+});

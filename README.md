@@ -82,9 +82,10 @@ flowchart LR
 
 - **Clock-Independent CRDT Sync & Crash-Safe Storage:** [`src/lib/syncTypes.ts`](src/lib/syncTypes.ts) and [`src/app/api/sync/route.ts`](src/app/api/sync/route.ts) implement a commutative, associative, idempotent last-write-wins merge over quests, tasks, habits, time logs, and bounded tombstone sets — verified across 400-seed property tests in [`syncProperties.test.ts`](src/__tests__/syncProperties.test.ts). Open and completed tasks, habits, quests, and focus logs support safe deletion (two-step confirm on desktop; 5-second Undo hold pill on Android) with deterministic cross-device tombstone convergence. Writes use temp-file + atomic rename with automatic rollback recovery across main, backup, and 14-day snapshots.
 - **Deterministic Offline Daily Habits:** Daily habits materialize into per-day tasks using deterministic IDs (`habtsk-<YYYY-MM-DD>-<habitId>`), allowing laptop and phone to materialize identical tasks independently offline and converge without duplicate rows upon reconnect.
+- **Multi-Horizon Review Telemetry & Activity Heatmap:** [`src/lib/reviewAnalytics.ts`](src/lib/reviewAnalytics.ts), [`TelemetryDashboardView.tsx`](src/components/TelemetryDashboardView.tsx), and the Android Review view provide DST-safe analytics across **Day, Week, Month, Quarter, and Year** horizons — counting both **focus hours** and **completed tasks** (split by regular steps vs. daily habits), session bout duration, active-day consistency, Quest "X" drill-down filtering, and a Monday–Sunday **Activity Heatmap** with streak and peak-rhythm insights.
 - **Zero-Gradle Direct Android Build & Zero-Shift Mobile UX:** [`android-app/build-apk.sh`](android-app/build-apk.sh) compiles and signs the Android companion directly with `aapt2`, `javac`, `d8`, `zipalign`, and `apksigner` (verifying the pinned signing certificate and scanning for leaked secrets). [`MainActivity.java`](android-app/app/src/main/java/com/hunt/companion/MainActivity.java) stores pairing tokens exclusively in AndroidKeyStore AES-256-GCM envelopes, locks WebView navigation to an explicit origin allowlist, and pairs `SOFT_INPUT_ADJUST_NOTHING` inside a safe-area-padded `FrameLayout` with top-anchored floating composer sheets, a spacious 5-tab navigation bar (**Today · Plan · Focus · Quests · Habits**) + 1-tap **Review** header access, and compact bottom-anchored confirmation/Undo capsules.
 - **Structured Observability & Root-Cause Diagnostics:** [`src/lib/diagnostics.ts`](src/lib/diagnostics.ts) propagates `X-Hunt-Correlation-Id` end-to-end across desktop, `/api/sync`, and mobile, records `durationMs` I/O telemetry, maintains bounded circular breadcrumb flight recorders, wires global unhandled fault traps (`error` / `unhandledrejection`), and recursively redacts bearer tokens and 64-hex keys (`[REDACTED]`).
-- **Adversarial Security & Chaos Test Suite:** 28 Vitest suites (1,009+ tests) exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, 150-step mobile delete/Undo/sync chaos fuzzing, Europe/Berlin DST rollover fuzzing, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
+- **Adversarial Security & Chaos Test Suite:** 29 Vitest suites (1,015+ tests) exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, 150-step mobile delete/Undo/sync chaos fuzzing, 100-seed multi-horizon telemetry property checks, Europe/Berlin DST rollover fuzzing, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
 
 ---
 
@@ -97,16 +98,17 @@ flowchart LR
 │   │   ├── api/sync/route.ts       # Authenticated CRDT merge API + atomic backup store
 │   │   ├── layout.tsx              # Root shell, typography, icons & 100dvh layout
 │   │   └── page.tsx                # View router, boot pipeline & global fault traps
-│   ├── components/                 # Home, Habits, Plan, Quests, Focus, Review, Guide & Sync UI
+│   ├── components/                 # Home, Habits, Plan, Quests, Focus, Review, Heatmap, Guide & Sync UI
 │   ├── lib/
 │   │   ├── db.ts                   # Dexie IndexedDB v3 schema, DST-safe dates & formatters
 │   │   ├── diagnostics.ts          # Structured logging, redaction, breadcrumbs & fault traps
 │   │   ├── hudAudio.ts             # Silent-by-default audio state & context lifecycle
+│   │   ├── reviewAnalytics.ts      # Multi-horizon focus/task telemetry & activity heatmap engine
 │   │   ├── syncEngine.ts           # Client diff-apply, AbortController timeout & tombstones
 │   │   ├── syncTypes.ts            # Strict runtime schema validators & LWW CRDT merge
 │   │   └── taskCompletionMotion.ts # Two-beat Things 3 / Linear task completion choreography
 │   ├── store/useCommandStore.ts    # Zustand state machine, focus sessions & habit engine
-│   └── __tests__/                  # 28 test suites (1,009+ unit, property, fuzz & security tests)
+│   └── __tests__/                  # 29 test suites (1,015+ unit, property, fuzz & security tests)
 ├── public/
 │   └── hunt-mobile.html            # Self-contained mobile web & Android WebView UI
 ├── android-app/

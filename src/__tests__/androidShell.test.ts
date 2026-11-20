@@ -299,10 +299,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 14 (1.6.5) so it installs over the shipped 1.6.4 (13)", () => {
+  it("is versionCode >= 15 (1.7.0) so it installs over the shipped 1.6.5 (14)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(14);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.6.5");
+    expect(code).toBeGreaterThanOrEqual(15);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.7.0");
   });
 
   it("handles API 30+ system bars & IME via a padded FrameLayout container without panning WebView or jumping on Samsung IME bars", () => {

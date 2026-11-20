@@ -1373,3 +1373,93 @@ describe("long unbroken text", () => {
     expect(tombstones.deletedTaskIds).toContain("tsk-plan-done");
   });
 });
+
+describe("Review multi-horizon analytics, Quest X drill-down, and Activity Heatmap", () => {
+  it("switches Day/Week/Month/Quarter/Year, filters to Quest X for hours + tasks, toggles chart metric, and inspects heatmap days using indexed reads only", async () => {
+    await seed({
+      quests: [
+        makeQuest("quest-alpha", "Compiler", 0, 14),
+        makeQuest("quest-beta", "Fitness", 1, 7),
+      ],
+      tasks: [
+        makeTask("tsk-a1", "Lexer pass", "quest-alpha", 1000, "2026-03-30", {
+          status: "completed",
+          completedAt: dateFromKey("2026-03-30").getTime(),
+        }),
+        makeTask("tsk-a2", "Parser AST", "quest-alpha", 2000, "2026-03-10", {
+          status: "completed",
+          completedAt: dateFromKey("2026-03-10").getTime(),
+        }),
+        makeTask("tsk-a3", "IR design", "quest-alpha", 3000, "2026-01-20", {
+          status: "completed",
+          completedAt: dateFromKey("2026-01-20").getTime(),
+        }),
+        makeTask("tsk-b1", "Run 10k", "quest-beta", 4000, "2026-03-30", {
+          status: "completed",
+          completedAt: dateFromKey("2026-03-30").getTime(),
+          habitId: "hab-run",
+        }),
+      ],
+      logs: [
+        makeLog("log-a-today", "2026-03-30", "quest-alpha", 7200, 60), // 2.0h
+        makeLog("log-b-today", "2026-03-30", "quest-beta", 3600, 120), // 1.0h
+        makeLog("log-a-mar", "2026-03-10", "quest-alpha", 10800, 60), // 3.0h
+        makeLog("log-a-jan", "2026-01-20", "quest-alpha", 14400, 60), // 4.0h
+      ],
+    });
+
+    const wholeTableSpies = [
+      vi.spyOn(db.timeLogs, "toArray"),
+      vi.spyOn(db.timeLogs, "orderBy"),
+      vi.spyOn(db.timeLogs, "toCollection"),
+    ];
+
+    render(<TelemetryDashboardView />);
+    expect(await within(kpiCard("Quest Hours")).findByText("3.0h")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByTestId("stat-tasks-completed")).getByText("2")).toBeInTheDocument()
+    );
+
+    // Drill into Quest "Compiler" via its row in Hours & Tasks by Quest
+    fireEvent.click(screen.getByRole("button", { name: "Inspect quest Compiler" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("2.0h")).toBeInTheDocument();
+    expect(within(screen.getByTestId("stat-tasks-completed")).getByText("1")).toBeInTheDocument();
+
+    // Switch across Month -> Quarter -> Year -> Day and verify Compiler's hours & completed tasks
+    fireEvent.click(screen.getByRole("button", { name: "Month" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("5.0h")).toBeInTheDocument();
+    expect(within(screen.getByTestId("stat-tasks-completed")).getByText("2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Quarter" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("9.0h")).toBeInTheDocument();
+    expect(within(screen.getByTestId("stat-tasks-completed")).getByText("3")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Year" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("9.0h")).toBeInTheDocument();
+    expect(within(screen.getByTestId("stat-tasks-completed")).getByText("3")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Day" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("2.0h")).toBeInTheDocument();
+    expect(within(screen.getByTestId("stat-tasks-completed")).getByText("1")).toBeInTheDocument();
+
+    // Toggle bar chart to Tasks metric
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    expect(screen.getByText(/Completed Tasks · By Time Block/)).toBeInTheDocument();
+
+    // Inspect March 10 cell on the 26-week Activity Heatmap
+    const mar10Cell = screen
+      .getAllByTestId("heatmap-cell")
+      .find((el) => el.dataset.dateKey === "2026-03-10");
+    expect(mar10Cell).toBeDefined();
+    fireEvent.click(mar10Cell!);
+    expect(screen.getByTestId("heatmap-inspector").textContent).toContain("3.0h focus");
+    expect(screen.getByTestId("heatmap-inspector").textContent).toContain("1 task done");
+
+    // Reset quest filter back to All Quests
+    fireEvent.click(screen.getByRole("button", { name: "Clear quest filter" }));
+    expect(await within(kpiCard("Quest Hours")).findByText("3.0h")).toBeInTheDocument();
+
+    // Never performed a whole-table scan on db.timeLogs
+    expect(wholeTableSpies.reduce((n, s) => n + s.mock.calls.length, 0)).toBe(0);
+  });
+});

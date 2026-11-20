@@ -1081,6 +1081,109 @@
       margin-bottom: 14px;
     }
 
+    .review-horizon-bar {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 3px;
+      margin-bottom: 14px;
+    }
+    .review-horizon-btn {
+      min-height: var(--touch-min);
+      padding: 0 4px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .review-horizon-btn.active {
+      background: var(--surface-3);
+      color: white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+    }
+
+    .review-quest-btn {
+      display: block;
+      width: 100%;
+      min-height: var(--touch-min);
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border-radius: 13px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .review-quest-btn:last-child {
+      margin-bottom: 0;
+    }
+    .review-quest-btn.selected {
+      border-color: rgba(255, 255, 255, 0.24);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .heatmap-months {
+      display: grid;
+      grid-template-columns: repeat(16, minmax(0, 1fr));
+      gap: 3px;
+      padding-left: 26px;
+      margin-bottom: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--dim);
+    }
+    .heatmap-body {
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+    .heatmap-weekdays {
+      display: grid;
+      grid-template-rows: repeat(7, 1fr);
+      gap: 3px;
+      width: 22px;
+      flex-shrink: 0;
+      font-size: 9px;
+      color: var(--dim);
+      align-items: center;
+    }
+    .heatmap-cols {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(16, minmax(0, 1fr));
+      gap: 3px;
+    }
+    .heatmap-col {
+      display: grid;
+      grid-template-rows: repeat(7, 1fr);
+      gap: 3px;
+    }
+    .heatmap-cell {
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      border-radius: 3px;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+    }
+    .heatmap-cell.selected {
+      outline: 1.5px solid white;
+      outline-offset: 1px;
+    }
+    .heatmap-cell.today:not(.selected) {
+      outline: 1px solid rgba(255, 255, 255, 0.42);
+    }
+
     .mini-chip-btn {
       height: 30px;
       font-size: 11px;
@@ -2369,6 +2472,10 @@
     let planDayOffset = 0;
     let selectedPlanDateKey = toLocalDateKey();
     let reviewWeekOffset = 0;
+    let reviewHorizon = "week";
+    let reviewScope = "ALL";
+    let reviewChartMetric = "hours";
+    let selectedReviewHeatmapKey = null;
     let showReviewSessionLog = false;
     let showAllCompletedToday = false;
     const COMPLETED_PREVIEW = 4;
@@ -7193,138 +7300,584 @@
       }
 
       // =====================================================================
-      // VIEW 5: WEEKLY REVIEW
+      // VIEW 5: REVIEW & DEEP-WORK TELEMETRY (Day · Week · Month · Qtr · Year)
       // =====================================================================
       else if (activeView === "telemetry") {
-        const weekDays = [];
-        for (let i = 6; i >= 0; i--) {
-          const dk = dayKeyOffset(reviewWeekOffset * 7 - i, now);
-          const d = noonOfDateKey(dk);
-          weekDays.push({
-            dateKey: dk,
-            weekday: d.toLocaleDateString("en-US", { weekday: "short" }),
-            shortDate: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            isToday: dk === todayKey
-          });
-        }
-        const rangeLabel = weekDays[0].shortDate + " – " + weekDays[6].shortDate;
-        const weekKeySet = new Set(weekDays.map(d => d.dateKey));
-        const weekLogs = state.timeLogs.filter(l => weekKeySet.has(l.dateKey));
+        const safeOffset = Math.min(0, Math.trunc(Number(reviewWeekOffset) || 0));
+        const todayNoon = noonOfDateKey(todayKey);
 
-        // Single-pass O(L) aggregation by day and by quest.
-        const byDay = new Map();
-        const byQuest = new Map();
-        for (const l of weekLogs) {
-          let b = byDay.get(l.dateKey);
-          if (!b) { b = { questSec: 0, otherSec: 0 }; byDay.set(l.dateKey, b); }
-          if (l.questId !== null) {
-            b.questSec += l.durationSeconds;
-            byQuest.set(l.questId, (byQuest.get(l.questId) || 0) + l.durationSeconds);
-          } else {
-            b.otherSec += l.durationSeconds;
+        const calendarSpanDays = (sKey, eKey) => {
+          const sp = sKey.split("-").map(Number);
+          const ep = eKey.split("-").map(Number);
+          return Math.max(1, Math.round((Date.UTC(ep[0], ep[1] - 1, ep[2]) - Date.UTC(sp[0], sp[1] - 1, sp[2])) / 86400000) + 1);
+        };
+        const stepFromKey = (baseKey, deltaDays) => {
+          const d = noonOfDateKey(baseKey);
+          d.setDate(d.getDate() + deltaDays);
+          return toLocalDateKey(d.getTime());
+        };
+        const completedTaskKey = (t) => {
+          if (!t || t.status !== "completed") return null;
+          if (typeof t.completedAt === "number" && Number.isFinite(t.completedAt) && t.completedAt > 0) {
+            return toLocalDateKey(t.completedAt);
+          }
+          if (typeof t.scheduledDate === "string" && DATE_KEY_RE.test(t.scheduledDate)) {
+            return t.scheduledDate;
+          }
+          if (typeof t.updatedAt === "number" && Number.isFinite(t.updatedAt) && t.updatedAt > 0) {
+            return toLocalDateKey(t.updatedAt);
+          }
+          return null;
+        };
+
+        let win;
+        if (reviewHorizon === "day") {
+          const dk = dayKeyOffset(safeOffset, now);
+          const d = noonOfDateKey(dk);
+          win = {
+            horizon: "day",
+            startKey: dk,
+            endKey: dk,
+            totalDays: 1,
+            elapsedDays: 1,
+            rangeLabel: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+            heading: "Daily review",
+            prevLabel: "Previous day",
+            nextLabel: "Next day",
+            currentLabel: "Today"
+          };
+        } else if (reviewHorizon === "month") {
+          const first = new Date(todayNoon.getFullYear(), todayNoon.getMonth() + safeOffset, 1, 12);
+          const last = new Date(first.getFullYear(), first.getMonth() + 1, 0, 12);
+          const sKey = toLocalDateKey(first.getTime());
+          const eKey = toLocalDateKey(last.getTime());
+          const totalDays = last.getDate();
+          win = {
+            horizon: "month",
+            startKey: sKey,
+            endKey: eKey,
+            totalDays,
+            elapsedDays: safeOffset === 0 ? Math.max(1, todayNoon.getDate()) : totalDays,
+            rangeLabel: first.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+            heading: "Monthly review",
+            prevLabel: "Previous month",
+            nextLabel: "Next month",
+            currentLabel: "This month"
+          };
+        } else if (reviewHorizon === "quarter") {
+          const curQ = Math.floor(todayNoon.getMonth() / 3);
+          const totalQ = todayNoon.getFullYear() * 4 + curQ + safeOffset;
+          const qYear = Math.floor(totalQ / 4);
+          const qIdx = ((totalQ % 4) + 4) % 4;
+          const first = new Date(qYear, qIdx * 3, 1, 12);
+          const last = new Date(qYear, qIdx * 3 + 3, 0, 12);
+          const sKey = toLocalDateKey(first.getTime());
+          const eKey = toLocalDateKey(last.getTime());
+          const totalDays = calendarSpanDays(sKey, eKey);
+          win = {
+            horizon: "quarter",
+            startKey: sKey,
+            endKey: eKey,
+            totalDays,
+            elapsedDays: safeOffset === 0 ? Math.min(totalDays, calendarSpanDays(sKey, todayKey)) : totalDays,
+            rangeLabel: "Q" + (qIdx + 1) + " " + qYear,
+            heading: "Quarterly review",
+            prevLabel: "Previous quarter",
+            nextLabel: "Next quarter",
+            currentLabel: "This qtr"
+          };
+        } else if (reviewHorizon === "year") {
+          const yr = todayNoon.getFullYear() + safeOffset;
+          const sKey = yr + "-01-01";
+          const eKey = yr + "-12-31";
+          const totalDays = calendarSpanDays(sKey, eKey);
+          win = {
+            horizon: "year",
+            startKey: sKey,
+            endKey: eKey,
+            totalDays,
+            elapsedDays: safeOffset === 0 ? Math.min(totalDays, calendarSpanDays(sKey, todayKey)) : totalDays,
+            rangeLabel: String(yr),
+            heading: "Yearly review",
+            prevLabel: "Previous year",
+            nextLabel: "Next year",
+            currentLabel: "This year"
+          };
+        } else {
+          const sKey = dayKeyOffset(safeOffset * 7 - 6, now);
+          const eKey = dayKeyOffset(safeOffset * 7, now);
+          const sd = noonOfDateKey(sKey);
+          const ed = noonOfDateKey(eKey);
+          win = {
+            horizon: "week",
+            startKey: sKey,
+            endKey: eKey,
+            totalDays: 7,
+            elapsedDays: 7,
+            rangeLabel: sd.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " – " + ed.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            heading: "Weekly review",
+            prevLabel: "Previous week",
+            nextLabel: "Next week",
+            currentLabel: "This week"
+          };
+        }
+
+        const selectedQuest = (reviewScope !== "ALL" && reviewScope !== "OTHER")
+          ? state.quests.find(q => q.id === reviewScope) || null
+          : null;
+        const effectiveScope = (reviewScope !== "ALL" && reviewScope !== "OTHER" && !selectedQuest) ? "ALL" : reviewScope;
+        const matchesScope = (qId) => {
+          const norm = qId || null;
+          if (effectiveScope === "ALL") return norm !== null;
+          if (effectiveScope === "OTHER") return norm === null;
+          return norm === effectiveScope;
+        };
+
+        const scopeHex = selectedQuest
+          ? (ACCENT_HEX[selectedQuest.accentColor] || ACCENT_HEX.amber)
+          : effectiveScope === "OTHER"
+          ? "var(--muted)"
+          : "var(--amber)";
+
+        // Build horizon buckets
+        const buckets = [];
+        if (win.horizon === "day") {
+          const labels = ["12a", "4a", "8a", "12p", "4p", "8p"];
+          const curHour = new Date(now).getHours();
+          for (let i = 0; i < 6; i++) {
+            buckets.push({ key: win.startKey + "-b" + i, label: labels[i], scopeSec: 0, tasks: 0, isCurrent: win.startKey === todayKey && Math.floor(curHour / 4) === i });
+          }
+        } else if (win.horizon === "week") {
+          for (let i = 0; i < 7; i++) {
+            const dk = stepFromKey(win.startKey, i);
+            const d = noonOfDateKey(dk);
+            buckets.push({ key: dk, label: d.toLocaleDateString("en-US", { weekday: "short" }), scopeSec: 0, tasks: 0, isCurrent: dk === todayKey });
+          }
+        } else if (win.horizon === "month") {
+          const ym = win.startKey.slice(0, 7);
+          let sd = 1, wk = 1;
+          while (sd <= win.totalDays) {
+            const ed = Math.min(win.totalDays, sd + 6);
+            const sk = ym + "-" + String(sd).padStart(2, "0");
+            const ek = ym + "-" + String(ed).padStart(2, "0");
+            buckets.push({ key: ym + "-w" + wk, label: sd + "–" + ed, scopeSec: 0, tasks: 0, isCurrent: todayKey >= sk && todayKey <= ek });
+            sd += 7;
+            wk++;
+          }
+        } else if (win.horizon === "quarter") {
+          const sp = win.startKey.split("-").map(Number);
+          for (let i = 0; i < 3; i++) {
+            const d = new Date(sp[0], sp[1] - 1 + i, 1, 12);
+            const ym = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+            buckets.push({ key: ym, label: d.toLocaleDateString("en-US", { month: "short" }), scopeSec: 0, tasks: 0, isCurrent: todayKey.startsWith(ym) });
+          }
+        } else {
+          const yr = Number(win.startKey.slice(0, 4));
+          for (let m = 0; m < 12; m++) {
+            const d = new Date(yr, m, 1, 12);
+            const ym = yr + "-" + String(m + 1).padStart(2, "0");
+            const sm = d.toLocaleDateString("en-US", { month: "short" });
+            buckets.push({ key: ym, label: sm.slice(0, 1), scopeSec: 0, tasks: 0, isCurrent: todayKey.startsWith(ym) });
           }
         }
 
-        const dailyStats = weekDays.map(day => {
-          const b = byDay.get(day.dateKey);
-          return {
-            ...day,
-            questHours: Number(((b ? b.questSec : 0) / 3600).toFixed(1)),
-            otherHours: Number(((b ? b.otherSec : 0) / 3600).toFixed(1))
-          };
-        });
+        const bucketIndex = (dk, ts) => {
+          if (win.horizon === "day") {
+            if (typeof ts === "number" && Number.isFinite(ts) && ts > 0) return Math.min(5, Math.max(0, Math.floor(new Date(ts).getHours() / 4)));
+            return 2;
+          }
+          if (win.horizon === "week") return calendarSpanDays(win.startKey, dk) - 1;
+          if (win.horizon === "month") return Math.floor(((Number(dk.slice(8, 10)) || 1) - 1) / 7);
+          if (win.horizon === "quarter") return Math.min(2, Math.max(0, Number(dk.slice(5, 7)) - Number(win.startKey.slice(5, 7))));
+          return Math.min(11, Math.max(0, (Number(dk.slice(5, 7)) || 1) - 1));
+        };
 
-        const totalQuestH = dailyStats.reduce((a, d) => a + d.questHours, 0);
-        const totalOtherH = dailyStats.reduce((a, d) => a + d.otherHours, 0);
-        const grandTotalH = totalQuestH + totalOtherH;
-        const totalTargetH = activeQuests.reduce((a, q) => a + (Number(q.targetWeeklyHours) || 0), 0);
-        const targetPct = totalTargetH > 0 ? Math.round((totalQuestH / totalTargetH) * 100) : 0;
-        const activeDays = Math.max(1, dailyStats.filter(d => d.questHours > 0 || d.otherHours > 0).length);
-        const dailyAvg = totalQuestH / activeDays;
-        const focusPct = grandTotalH > 0 ? Math.round((totalQuestH / grandTotalH) * 100) : 0;
-        const maxDayH = Math.max(5, ...dailyStats.map(d => d.questHours));
+        const byQuestSec = new Map();
+        const byQuestTasks = new Map();
+        const activeDaysSet = new Set();
+        const scopedLogs = [];
+        let questSec = 0;
+        let otherSec = 0;
+        let scopeSec = 0;
+        let sessionsCount = 0;
+        let longestSessionSec = 0;
+
+        for (const l of state.timeLogs) {
+          if (!l || typeof l.dateKey !== "string") continue;
+          if (l.dateKey < win.startKey || l.dateKey > win.endKey) continue;
+          const dur = Math.max(0, Number(l.durationSeconds) || 0);
+          const qId = l.questId || null;
+          if (qId !== null) {
+            questSec += dur;
+            byQuestSec.set(qId, (byQuestSec.get(qId) || 0) + dur);
+          } else {
+            otherSec += dur;
+          }
+          if (effectiveScope === "ALL" && dur > 0) activeDaysSet.add(l.dateKey);
+          const inScope = matchesScope(qId);
+          if (inScope) {
+            scopeSec += dur;
+            sessionsCount++;
+            if (dur > longestSessionSec) longestSessionSec = dur;
+            if (dur > 0 && effectiveScope !== "ALL") activeDaysSet.add(l.dateKey);
+            const b = buckets[bucketIndex(l.dateKey, l.startTime)];
+            if (b) b.scopeSec += dur;
+          }
+          if (effectiveScope === "ALL" || inScope) scopedLogs.push(l);
+        }
+        scopedLogs.sort((a, b) => (Number(b.startTime) || 0) - (Number(a.startTime) || 0));
+
+        let completedTasksCount = 0;
+        let stepTasksCompleted = 0;
+        let habitTasksCompleted = 0;
+        let otherTasksCompleted = 0;
+
+        for (const t of state.tasks) {
+          const dk = completedTaskKey(t);
+          if (!dk || dk < win.startKey || dk > win.endKey) continue;
+          const qId = t.questId || null;
+          if (qId !== null) byQuestTasks.set(qId, (byQuestTasks.get(qId) || 0) + 1);
+          else otherTasksCompleted++;
+          const inScope = effectiveScope === "ALL" ? true : matchesScope(qId);
+          if (!inScope) continue;
+          completedTasksCount++;
+          if (t.habitId) habitTasksCompleted++;
+          else stepTasksCompleted++;
+          if (effectiveScope !== "ALL") activeDaysSet.add(dk);
+          const b = buckets[bucketIndex(dk, t.completedAt)];
+          if (b) b.tasks += 1;
+        }
+
+        const chartBuckets = buckets.map(b => ({
+          ...b,
+          hours: Number((b.scopeSec / 3600).toFixed(1))
+        }));
+
+        const totalQuestH = Number((questSec / 3600).toFixed(1));
+        const totalOtherH = Number((otherSec / 3600).toFixed(1));
+        const grandSec = questSec + otherSec;
+        const focusH = win.horizon === "week"
+          ? Number(chartBuckets.reduce((a, b) => a + b.hours, 0).toFixed(1))
+          : Number((scopeSec / 3600).toFixed(1));
+
+        let weeklyTargetBase = 0;
+        if (effectiveScope === "ALL") {
+          weeklyTargetBase = activeQuests.reduce((a, q) => a + (Number(q.targetWeeklyHours) || 0), 0);
+        } else if (selectedQuest) {
+          weeklyTargetBase = Number(selectedQuest.targetWeeklyHours) || 0;
+        }
+        const totalTargetH = weeklyTargetBase <= 0
+          ? 0
+          : win.horizon === "week"
+          ? weeklyTargetBase
+          : win.horizon === "day"
+          ? Number((weeklyTargetBase / 7).toFixed(1))
+          : Math.round((weeklyTargetBase * win.totalDays) / 7);
+
+        const targetPct = totalTargetH > 0 ? Math.round(((scopeSec / 3600) / totalTargetH) * 100) : 0;
+        const activeDaysCount = activeDaysSet.size;
+        const dailyAvg = focusH / Math.max(1, activeDaysCount);
+        const consistencyPct = Math.min(100, Math.round((activeDaysCount / Math.max(1, win.elapsedDays)) * 100));
+        const focusPct = grandSec > 0 ? Math.round((scopeSec / grandSec) * 100) : 0;
+        const overallQuestPct = grandSec > 0 ? Math.round((questSec / grandSec) * 100) : 0;
+        const avgBoutMin = sessionsCount > 0 ? Math.round(scopeSec / sessionsCount / 60) : 0;
+        const maxBoutMin = Math.round(longestSessionSec / 60);
+
+        const maxBucketVal = reviewChartMetric === "tasks"
+          ? Math.max(4, ...chartBuckets.map(b => b.tasks))
+          : Math.max(5, ...chartBuckets.map(b => b.hours));
 
         const hoursByQuest = state.quests
           .map(q => {
-            const sec = byQuest.get(q.id) || 0;
-            return { quest: q, hours: Number((sec / 3600).toFixed(1)) };
+            const sec = byQuestSec.get(q.id) || 0;
+            const qTasks = byQuestTasks.get(q.id) || 0;
+            return { quest: q, hours: Number((sec / 3600).toFixed(1)), tasks: qTasks };
           })
-          .filter(x => !x.quest.archived || x.hours > 0);
+          .filter(x => !x.quest.archived || x.hours > 0 || x.tasks > 0);
         const maxQuestH = Math.max(4, ...hoursByQuest.map(x => x.hours));
+
+        // 16-week Monday-aligned Activity Heatmap
+        const HEATMAP_WEEKS = 16;
+        const mondayDow = (todayNoon.getDay() + 6) % 7;
+        const hmStartKey = stepFromKey(todayKey, -mondayDow - (HEATMAP_WEEKS - 1) * 7);
+        const hmMap = new Map();
+        for (const l of state.timeLogs) {
+          if (!l || typeof l.dateKey !== "string" || l.dateKey < hmStartKey || l.dateKey > todayKey) continue;
+          const inHm = effectiveScope === "ALL" ? true : matchesScope(l.questId || null);
+          if (!inHm) continue;
+          const dur = Math.max(0, Number(l.durationSeconds) || 0);
+          if (dur <= 0) continue;
+          const cur = hmMap.get(l.dateKey) || { sec: 0, tasks: 0, sessions: 0 };
+          cur.sec += dur;
+          cur.sessions += 1;
+          hmMap.set(l.dateKey, cur);
+        }
+        for (const t of state.tasks) {
+          const dk = completedTaskKey(t);
+          if (!dk || dk < hmStartKey || dk > todayKey) continue;
+          const inHm = effectiveScope === "ALL" ? true : matchesScope(t.questId || null);
+          if (!inHm) continue;
+          const cur = hmMap.get(dk) || { sec: 0, tasks: 0, sessions: 0 };
+          cur.tasks += 1;
+          hmMap.set(dk, cur);
+        }
+
+        const hmBaseRgb = selectedQuest
+          ? (selectedQuest.accentColor === "cyan" ? "0,240,255" : selectedQuest.accentColor === "emerald" ? "0,255,157" : "255,184,0")
+          : effectiveScope === "OTHER"
+          ? "148,163,184"
+          : "255,184,0";
+        const hmLevelBg = [
+          "rgba(255,255,255,0.05)",
+          `rgba(${hmBaseRgb},0.22)`,
+          `rgba(${hmBaseRgb},0.44)`,
+          `rgba(${hmBaseRgb},0.72)`,
+          `rgb(${hmBaseRgb})`
+        ];
+
+        const hmCols = [];
+        const wdTotals = Array.from({ length: 7 }, () => ({ sec: 0, tasks: 0, days: 0 }));
+        const wdNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        let prevHmMonth = -1;
+        let hmActiveDays = 0;
+        let hmRunStreak = 0;
+        let hmBestStreak = 0;
+        let inspectedCell = null;
+        let todayCell = null;
+
+        for (let w = 0; w < HEATMAP_WEEKS; w++) {
+          let mLabel = "";
+          const cells = [];
+          for (let dow = 0; dow < 7; dow++) {
+            const dk = stepFromKey(hmStartKey, w * 7 + dow);
+            const d = noonOfDateKey(dk);
+            if (dow === 0) {
+              const m = d.getMonth();
+              if (m !== prevHmMonth) {
+                mLabel = d.toLocaleDateString("en-US", { month: "short" });
+                prevHmMonth = m;
+              }
+            }
+            const isFuture = dk > todayKey;
+            const rec = isFuture ? null : hmMap.get(dk);
+            const sec = rec ? rec.sec : 0;
+            const tCount = rec ? rec.tasks : 0;
+            const sCount = rec ? rec.sessions : 0;
+            const hrs = Number((sec / 3600).toFixed(1));
+            const score = hrs + tCount * 0.35;
+            const lvl = isFuture || (hrs <= 0 && tCount <= 0) ? 0 : score < 1 ? 1 : score < 2.5 ? 2 : score < 4.5 ? 3 : 4;
+            const shortLbl = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+            if (!isFuture) {
+              wdTotals[dow].sec += sec;
+              wdTotals[dow].tasks += tCount;
+              wdTotals[dow].days += 1;
+              if (sec > 0 || tCount > 0) {
+                hmActiveDays++;
+                hmRunStreak++;
+                if (hmRunStreak > hmBestStreak) hmBestStreak = hmRunStreak;
+              } else {
+                hmRunStreak = 0;
+              }
+            }
+            const cellObj = { dateKey: dk, shortLbl, hours: hrs, tasks: tCount, sessions: sCount, lvl, isToday: dk === todayKey, isFuture };
+            if (cellObj.isToday) todayCell = cellObj;
+            if (!isFuture && selectedReviewHeatmapKey === dk) inspectedCell = cellObj;
+            cells.push(cellObj);
+          }
+          hmCols.push({ weekKey: cells[0].dateKey, monthLabel: mLabel, cells });
+        }
+        if (!inspectedCell) inspectedCell = todayCell;
+
+        let hmCurrentStreak = 0;
+        const todayHm = hmMap.get(todayKey);
+        const startOff = todayHm && (todayHm.sec > 0 || todayHm.tasks > 0) ? 0 : -1;
+        for (let off = startOff; ; off--) {
+          const dk = stepFromKey(todayKey, off);
+          if (dk < hmStartKey) break;
+          const r = hmMap.get(dk);
+          if (r && (r.sec > 0 || r.tasks > 0)) hmCurrentStreak++;
+          else break;
+        }
+
+        let bestWd = null;
+        let bestWdScore = 0;
+        for (let dow = 0; dow < 7; dow++) {
+          const wt = wdTotals[dow];
+          const sc = wt.sec / 3600 + wt.tasks * 0.25;
+          if (sc > bestWdScore && wt.days > 0) {
+            bestWdScore = sc;
+            bestWd = { label: wdNames[dow], avgHours: Number((wt.sec / 3600 / wt.days).toFixed(1)) };
+          }
+        }
+
+        const horizonTabs = [
+          ["day", "Day"],
+          ["week", "Week"],
+          ["month", "Month"],
+          ["quarter", "Qtr"],
+          ["year", "Year"]
+        ];
 
         container.innerHTML = `
           <div class="hero-bar">
             <div>
-              <div class="hero-eyebrow">${rangeLabel}</div>
-              <h1 class="hero-title">Weekly review</h1>
+              <div class="hero-eyebrow">${escapeHtml(win.rangeLabel)}</div>
+              <h1 class="hero-title">${escapeHtml(win.heading)}</h1>
             </div>
             <div class="step-chip-row">
-              <button class="sync-chip step-chip" aria-label="Previous week" onclick="reviewWeekOffset--;renderApp();">‹</button>
-              <button class="sync-chip step-chip" onclick="reviewWeekOffset=0;renderApp();" ${reviewWeekOffset === 0 ? "disabled" : ""}>This week</button>
-              <button class="sync-chip step-chip" aria-label="Next week" onclick="if(reviewWeekOffset<0){reviewWeekOffset++;renderApp();}" ${reviewWeekOffset < 0 ? "" : "disabled"}>›</button>
+              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.prevLabel)}" onclick="reviewWeekOffset--;renderApp();">‹</button>
+              <button class="sync-chip step-chip" onclick="reviewWeekOffset=0;renderApp();" ${safeOffset === 0 ? "disabled" : ""}>${escapeHtml(win.currentLabel)}</button>
+              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.nextLabel)}" onclick="if(reviewWeekOffset<0){reviewWeekOffset++;renderApp();}" ${safeOffset < 0 ? "" : "disabled"}>›</button>
             </div>
+          </div>
+
+          <div class="review-horizon-bar" role="group" aria-label="Review timeframe">
+            ${horizonTabs.map(([id, lbl]) => `
+              <button class="review-horizon-btn ${win.horizon === id ? "active" : ""}" aria-pressed="${win.horizon === id}" onclick="reviewHorizon=${jsArg(id)};reviewWeekOffset=0;renderApp();">${lbl}</button>
+            `).join("")}
+          </div>
+
+          <div class="chip-strip" role="group" aria-label="Filter review by quest">
+            <button class="filter-pill ${effectiveScope === "ALL" ? "active" : ""}" aria-pressed="${effectiveScope === "ALL"}" onclick="reviewScope='ALL';renderApp();">
+              <span>All Quests</span>
+            </button>
+            ${state.quests.map(q => {
+              const qHex = ACCENT_HEX[q.accentColor] || ACCENT_HEX.slate;
+              const isSel = effectiveScope === q.id;
+              return `
+                <button class="filter-pill ${isSel ? "active" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : q.id)};renderApp();">
+                  <span style="width:7px;height:7px;border-radius:50%;background:${qHex};flex-shrink:0;"></span>
+                  <span>${escapeHtml(q.title)}</span>
+                </button>
+              `;
+            }).join("")}
+            <button class="filter-pill ${effectiveScope === "OTHER" ? "active" : ""}" aria-pressed="${effectiveScope === "OTHER"}" onclick="reviewScope=${jsArg(effectiveScope === "OTHER" ? "ALL" : "OTHER")};renderApp();">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--neutral-dot);flex-shrink:0;"></span>
+              <span>Other</span>
+            </button>
           </div>
 
           <div class="review-kpi-grid">
             <div class="review-card" style="grid-column:span 2;margin-bottom:0;">
-              <div class="hero-eyebrow">Quest Hours</div>
+              <div class="hero-eyebrow">${effectiveScope === "OTHER" ? "Other Work Hours" : selectedQuest ? escapeHtml(selectedQuest.title) + " · Hours" : "Quest Hours"}</div>
               <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;font-variant-numeric:tabular-nums;">
-                <span style="font-family:var(--font-display);font-size:36px;font-weight:700;color:var(--amber);">${totalQuestH.toFixed(1)}h</span>
-                <span style="font-size:16px;color:var(--dim);">/ ${totalTargetH}h</span>
-                <span style="margin-left:auto;font-size:12px;color:var(--muted);">${targetPct}% of target</span>
+                <span style="font-family:var(--font-display);font-size:36px;font-weight:700;color:${scopeHex};">${focusH.toFixed(1)}h</span>
+                ${effectiveScope !== "OTHER" ? `<span style="font-size:16px;color:var(--dim);">/ ${totalTargetH}h</span>` : ""}
+                <span style="margin-left:auto;font-size:12px;color:var(--muted);">${effectiveScope === "OTHER" ? "Unassigned work" : `${targetPct}% of target`}</span>
               </div>
             </div>
 
             <div class="review-card" style="margin-bottom:0;">
               <div class="hero-eyebrow">Daily Average</div>
               <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${dailyAvg.toFixed(1)}h</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">${activeDaysCount}/${win.elapsedDays}d active (${consistencyPct}%)</div>
             </div>
 
             <div class="review-card" style="margin-bottom:0;">
-              <div class="hero-eyebrow">Quest vs Other</div>
+              <div class="hero-eyebrow">${effectiveScope === "ALL" ? "Quest vs Other" : "Focus Share"}</div>
               <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${focusPct}<span style="font-size:16px;color:var(--dim);">%</span></div>
+              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">Of ${(grandSec / 3600).toFixed(1)}h total</div>
+            </div>
+
+            <div class="review-card" style="margin-bottom:0;" data-review-stat="tasks">
+              <div class="hero-eyebrow">Tasks Completed</div>
+              <div style="font-family:var(--font-display);font-size:26px;font-weight:700;margin-top:6px;color:var(--emerald);font-variant-numeric:tabular-nums;">${completedTasksCount}</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">${stepTasksCompleted} steps · ${habitTasksCompleted} habits</div>
+            </div>
+
+            <div class="review-card" style="margin-bottom:0;" data-review-stat="sessions">
+              <div class="hero-eyebrow">Focus Sessions</div>
+              <div style="font-family:var(--font-display);font-size:26px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${sessionsCount}</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">${sessionsCount > 0 ? `Avg ${avgBoutMin}m · Max ${maxBoutMin}m` : "No bouts logged"}</div>
             </div>
           </div>
 
           <div class="review-card">
-            <div class="hero-eyebrow" style="margin-bottom:16px;">Quest Hours · Per Day</div>
-            <div style="display:grid;grid-template-columns:repeat(7, 1fr);gap:8px;align-items:end;">
-              ${dailyStats.map(d => {
-                const barPct = d.questHours > 0 ? Math.max(8, Math.round((d.questHours / maxDayH) * 100)) : 3;
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px;">
+              <div class="hero-eyebrow" style="margin-bottom:0;">${reviewChartMetric === "tasks" ? "Completed Tasks" : "Focus Hours"} · ${win.horizon === "day" ? "By Block" : win.horizon === "week" ? "Per Day" : win.horizon === "month" ? "By Week" : "Per Month"}</div>
+              <div style="display:flex;gap:6px;">
+                <button class="sync-chip mini-chip-btn" aria-pressed="${reviewChartMetric === "hours"}" style="${reviewChartMetric === "hours" ? "background:var(--surface-3);color:white;border-color:var(--border-strong);" : "color:var(--muted);"}" onclick="reviewChartMetric='hours';renderApp();">Hours</button>
+                <button class="sync-chip mini-chip-btn" aria-pressed="${reviewChartMetric === "tasks"}" style="${reviewChartMetric === "tasks" ? "background:var(--surface-3);color:white;border-color:var(--border-strong);" : "color:var(--muted);"}" onclick="reviewChartMetric='tasks';renderApp();">Tasks</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(${chartBuckets.length}, minmax(0, 1fr));gap:${chartBuckets.length > 8 ? "4px" : "8px"};align-items:end;">
+              ${chartBuckets.map(d => {
+                const val = reviewChartMetric === "tasks" ? d.tasks : d.hours;
+                const barPct = val > 0 ? Math.max(8, Math.round((val / maxBucketVal) * 100)) : 3;
+                const topLabel = reviewChartMetric === "tasks" ? String(d.tasks) : (d.hours > 0 ? d.hours + "h" : "0h");
                 return `
-                  <div style="display:flex;flex-direction:column;align-items:center;">
-                    <span style="font-family:var(--font-mono);font-size:10px;font-variant-numeric:tabular-nums;margin-bottom:8px;color:${d.isToday ? 'var(--amber)' : (d.questHours > 0 ? 'var(--text-2)' : 'var(--dim)')};">
-                      ${d.questHours > 0 ? d.questHours + "h" : "0h"}
+                  <div style="display:flex;flex-direction:column;align-items:center;min-width:0;">
+                    <span style="font-family:var(--font-mono);font-size:${chartBuckets.length > 8 ? "9px" : "10px"};font-variant-numeric:tabular-nums;margin-bottom:8px;color:${d.isCurrent ? scopeHex : (val > 0 ? "var(--text-2)" : "var(--dim)")};">
+                      ${topLabel}
                     </span>
-                    <div style="height:130px;width:100%;max-width:32px;display:flex;align-items:flex-end;justify-content:center;">
-                      <div style="width:100%;height:${barPct}%;border-radius:6px 6px 2px 2px;background:${d.isToday ? 'var(--amber)' : (d.questHours > 0 ? '#3b3f4c' : 'rgba(255,255,255,0.05)')};"></div>
+                    <div style="height:124px;width:100%;max-width:32px;display:flex;align-items:flex-end;justify-content:center;">
+                      <div style="width:100%;height:${barPct}%;border-radius:6px 6px 2px 2px;background:${d.isCurrent ? scopeHex : (val > 0 ? "#3b3f4c" : "rgba(255,255,255,0.05)")};"></div>
                     </div>
-                    <span style="font-size:11px;margin-top:8px;color:${d.isToday ? 'var(--amber)' : 'var(--dim)'};">${d.weekday}</span>
+                    <span style="font-size:${chartBuckets.length > 8 ? "10px" : "11px"};margin-top:8px;color:${d.isCurrent ? scopeHex : "var(--dim)"};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(d.label)}</span>
                   </div>
                 `;
               }).join("")}
             </div>
           </div>
 
+          <div class="review-card" data-review-heatmap="true">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+              <div>
+                <div class="hero-eyebrow" style="margin-bottom:2px;">Activity Heatmap · 16 Weeks</div>
+                <div style="font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;">${hmActiveDays} active ${hmActiveDays === 1 ? "day" : "days"} · Streak ${hmCurrentStreak}d · Best ${hmBestStreak}d${bestWd ? " · Peak " + bestWd.label : ""}</div>
+              </div>
+            </div>
+            <div class="heatmap-months">
+              ${hmCols.map(c => `<span>${escapeHtml(c.monthLabel)}</span>`).join("")}
+            </div>
+            <div class="heatmap-body">
+              <div class="heatmap-weekdays">
+                <span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span>
+              </div>
+              <div class="heatmap-cols">
+                ${hmCols.map(col => `
+                  <div class="heatmap-col">
+                    ${col.cells.map(cell => cell.isFuture ? `<span style="aspect-ratio:1/1;width:100%;"></span>` : `
+                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" aria-label="${escapeHtml(cell.shortLbl + ": " + cell.hours + "h, " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
+                    `).join("")}
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">
+              <span>${inspectedCell ? `${escapeHtml(inspectedCell.shortLbl)} · ${inspectedCell.hours.toFixed(1)}h · ${inspectedCell.tasks} ${inspectedCell.tasks === 1 ? "task" : "tasks"}` : "Tap a day to inspect"}</span>
+              <span style="display:inline-flex;align-items:center;gap:3px;color:var(--dim);font-size:10px;">
+                Less
+                ${hmLevelBg.map(bg => `<span style="width:8px;height:8px;border-radius:2px;background:${bg};"></span>`).join("")}
+                More
+              </span>
+            </div>
+          </div>
+
           <div class="review-card">
-            <div class="hero-eyebrow" style="margin-bottom:14px;">Hours by Quest</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div class="hero-eyebrow" style="margin-bottom:0;">Hours &amp; Tasks by Quest</div>
+              ${hoursByQuest.length > 0 ? `<span style="font-size:11px;color:var(--dim);">Tap to filter</span>` : ""}
+            </div>
             ${hoursByQuest.length === 0 ? `<div style="font-size:13px;color:var(--dim);">No quests yet. Hours per quest appear here once you create one.</div>` : ""}
-            ${hoursByQuest.map(({ quest, hours }) => {
+            ${hoursByQuest.map(({ quest, hours, tasks }) => {
               const hex = ACCENT_HEX[quest.accentColor] || ACCENT_HEX.slate;
               const wPct = hours > 0 ? Math.max(8, Math.round((hours / maxQuestH) * 100)) : 0;
+              const isSel = effectiveScope === quest.id;
               return `
-                <div style="margin-bottom:14px;font-size:13px;">
-                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;">
+                <button class="review-quest-btn ${isSel ? "selected" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : quest.id)};renderApp();">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;font-size:13px;">
                     <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;">
                       <span style="width:8px;height:8px;margin-top:5px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
                       <span style="line-height:1.35;color:var(--text-2);overflow-wrap:anywhere;text-wrap:pretty;">${escapeHtml(quest.title)}</span>
                     </div>
-                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-2);">${hours}h</span>
+                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-2);"><span style="color:var(--dim);">${tasks} ${tasks === 1 ? "task" : "tasks"} · </span>${hours}h</span>
                   </div>
                   <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:999px;overflow:hidden;">
                     <div style="height:100%;width:${wPct}%;background:${hex};border-radius:999px;"></div>
                   </div>
-                </div>
+                </button>
               `;
             }).join("")}
           </div>
@@ -7332,22 +7885,22 @@
           <div class="review-card">
             <div class="hero-eyebrow" style="margin-bottom:12px;">Quest Work vs Other</div>
             <div style="height:30px;border-radius:9px;background:#1c1f28;overflow:hidden;display:flex;">
-              <div style="height:100%;width:${focusPct}%;background:var(--amber);"></div>
+              <div style="height:100%;width:${overallQuestPct}%;background:var(--amber);"></div>
             </div>
-            <div style="display:flex;gap:18px;margin-top:10px;font-size:12px;">
+            <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;">
               <span style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></span>Quest work · ${totalQuestH.toFixed(1)}h</span>
-              <span style="display:flex;align-items:center;gap:6px;color:var(--dim);"><span style="width:8px;height:8px;border-radius:50%;background:#2c2f3a;"></span>Other · ${totalOtherH.toFixed(1)}h</span>
+              <span style="display:flex;align-items:center;gap:6px;color:var(--dim);"><span style="width:8px;height:8px;border-radius:50%;background:#2c2f3a;"></span>Other · ${totalOtherH.toFixed(1)}h (${otherTasksCompleted} ${otherTasksCompleted === 1 ? "task" : "tasks"})</span>
             </div>
           </div>
 
           <button class="text-action" onclick="showReviewSessionLog=!showReviewSessionLog;renderApp();" aria-expanded="${showReviewSessionLog}" style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin:0 -8px;">
-            ${showReviewSessionLog ? "Hide Session Log ↑" : `View Session Log (${weekLogs.length} session${weekLogs.length === 1 ? "" : "s"}) ↓`}
+            ${showReviewSessionLog ? "Hide Session Log ↑" : `View Session Log (${scopedLogs.length} session${scopedLogs.length === 1 ? "" : "s"}) ↓`}
           </button>
 
           ${showReviewSessionLog ? `
             <div class="review-card" style="margin-top:10px;padding:6px 16px;">
-              ${weekLogs.length === 0 ? `<div style="padding:14px 0;font-size:13px;color:var(--dim);text-align:center;">No focus sessions in this week.</div>` : ""}
-              ${weekLogs.map(log => {
+              ${scopedLogs.length === 0 ? `<div style="padding:14px 0;font-size:13px;color:var(--dim);text-align:center;">No focus sessions in this period.</div>` : ""}
+              ${scopedLogs.map(log => {
                 const hex = ACCENT_HEX[log.accentColorSnapshot] || ACCENT_HEX.slate;
                 return `
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;">
