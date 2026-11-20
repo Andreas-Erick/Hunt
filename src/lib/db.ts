@@ -14,6 +14,7 @@ export interface Quest {
   archived: boolean;
   createdAt: number;
   updatedAt?: number;
+  completedAt?: number;
 }
 
 export interface Habit {

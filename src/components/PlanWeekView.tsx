@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { LayoutGroup, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   ArrowUpToLine,
@@ -60,6 +61,10 @@ function buildDayColumns(todayKey: string, dayOffset: number): DayColumn[] {
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const ADD_BUTTON = `rounded border border-white/10 bg-white/[0.03] p-1 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
+const COMPLETION_HIGHLIGHT_MS = 650;
+const PLAN_FLOW_TRANSITION = {
+  layout: { duration: 0.26, ease: [0.22, 1, 0.36, 1] as const },
+};
 
 export function PlanWeekView() {
   const {
@@ -98,6 +103,18 @@ export function PlanWeekView() {
   const [inputsByDay, setInputsByDay] = useState<Record<string, string>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
+  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
+  const completeHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      if (completeHighlightTimerRef.current !== null) {
+        clearTimeout(completeHighlightTimerRef.current);
+      }
+    };
+  }, []);
 
   // Days with an add in flight; set synchronously, so a double click or a
   // repeated Enter cannot create the task twice before React re-renders.
@@ -114,13 +131,24 @@ export function PlanWeekView() {
     return map;
   }, [quests]);
 
-  // Default quest = first existing quest (never a hardcoded or deleted id).
+  const activeQuests = React.useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
+  const activeQuestMap = React.useMemo(() => {
+    const map = new Map<string, Quest>();
+    activeQuests.forEach((q) => map.set(q.id, q));
+    return map;
+  }, [activeQuests]);
+
+  // Default quest = first active quest (never a hardcoded, completed or deleted id).
   const selectedQuestId: string | null =
     questChoice === null
       ? null
-      : questChoice !== undefined && questMap.has(questChoice)
+      : questChoice !== undefined && activeQuestMap.has(questChoice)
       ? questChoice
-      : quests?.[0]?.id ?? null;
+      : activeQuests[0]?.id ?? null;
   const otherSelected = quests !== undefined && selectedQuestId === null;
 
   const todayKey = toLocalDateKey();
@@ -147,6 +175,19 @@ export function PlanWeekView() {
     );
     card?.querySelector<HTMLElement>("[data-card-title]")?.focus();
   }, [allTasks, columns]);
+
+  const handleCompleteTask = (taskId: string) => {
+    if (completeHighlightTimerRef.current !== null) {
+      clearTimeout(completeHighlightTimerRef.current);
+    }
+    setJustCompletedId(taskId);
+    completeHighlightTimerRef.current = setTimeout(() => {
+      setJustCompletedId((cur) => (cur === taskId ? null : cur));
+      completeHighlightTimerRef.current = null;
+    }, COMPLETION_HIGHLIGHT_MS);
+    hudAudio.playComplete();
+    void completeTaskById(taskId);
+  };
 
   const handleAddForDay = async (dateKey: string, promoteToTop: boolean) => {
     const title = (inputsByDay[dateKey] ?? "").trim();
@@ -245,7 +286,7 @@ export function PlanWeekView() {
             aria-label="Quest for new tasks"
             className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#111318] p-1"
           >
-            {quests?.map((q) => {
+            {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
               const isSelected = selectedQuestId === q.id;
               return (
@@ -339,6 +380,9 @@ export function PlanWeekView() {
           const completedDayTasks = dayTasks.filter(
             (t) => t.status === "completed"
           );
+          const colLayoutKey = `${pendingDayTasks
+            .map((t) => t.id)
+            .join(",")}|${completedDayTasks.map((t) => t.id).join(",")}`;
           const isDragTarget = dragOverDateKey === col.dateKey;
           const dayInput = inputsByDay[col.dateKey] ?? "";
 
@@ -378,11 +422,11 @@ export function PlanWeekView() {
                     {col.weekdayShort}
                   </span>
                   <span
-                    className={
+                    className={`tabular-nums ${
                       col.isToday
                         ? "font-semibold text-[#ffb800]"
                         : "text-hud-muted"
-                    }
+                    }`}
                   >
                     {col.dayNum}
                   </span>
@@ -442,6 +486,7 @@ export function PlanWeekView() {
               )}
 
               {/* Pending Tasks in this Day Column */}
+              <LayoutGroup id={`plan-col-${col.dateKey}`}>
               <div className="space-y-3">
                 {pendingDayTasks.map((task, idx) => {
                   const linkedQuest = task.questId
@@ -451,9 +496,14 @@ export function PlanWeekView() {
                   const questLabel = linkedQuest ? linkedQuest.title : "Other";
                   const isHero = col.isToday && idx === 0;
                   const isRunningHere = activeTaskId === task.id;
+                  const isCompleting = justCompletedId === task.id;
 
                   return (
-                    <div
+                    <motion.div
+                      layout="position"
+                      layoutId={`plan-task-${task.id}`}
+                      layoutDependency={colLayoutKey}
+                      transition={PLAN_FLOW_TRANSITION}
                       key={task.id}
                       data-testid="task-row"
                       data-task-id={task.id}
@@ -465,7 +515,7 @@ export function PlanWeekView() {
                         setDragOverDateKey(null);
                       }}
                       onKeyDown={(e) => void handleCardKeyDown(e, task, col.dateKey)}
-                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-all cursor-grab ${
+                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-colors duration-200 cursor-grab ${
                         isHero
                           ? "border-[#ffb800]/40 bg-[#151820] shadow-[0_0_24px_-10px_rgba(255,184,0,0.2)]"
                           : "border-white/[0.08] bg-[#13151b] hover:border-white/20"
@@ -496,12 +546,15 @@ export function PlanWeekView() {
                               // The second click of a double-click would hit
                               // the next card, which slides up under the cursor.
                               if (e.detail > 1) return;
-                              hudAudio.playComplete();
-                              completeTaskById(task.id);
+                              handleCompleteTask(task.id);
                             }}
                             title="Mark complete"
                             aria-label="Mark complete"
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] ${PRESSABLE}`}
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                              isCompleting
+                                ? `${style.bg} border-transparent text-black`
+                                : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                            }`}
                           >
                             <Check className="h-2.5 w-2.5" />
                           </button>
@@ -546,7 +599,7 @@ export function PlanWeekView() {
                           </ConfirmDeleteButton>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
 
@@ -558,14 +611,23 @@ export function PlanWeekView() {
                     : undefined;
                   const style = accentStyle(linkedQuest?.accentColor);
                   const questLabel = linkedQuest ? linkedQuest.title : "Other";
+                  const isJustCompleted = justCompletedId === task.id;
 
                   return (
-                    <div
+                    <motion.div
+                      layout="position"
+                      layoutId={`plan-task-${task.id}`}
+                      layoutDependency={colLayoutKey}
+                      transition={PLAN_FLOW_TRANSITION}
                       key={task.id}
                       data-testid="task-row"
                       data-task-id={task.id}
                       data-date-key={col.dateKey}
-                      className="group relative overflow-hidden rounded-xl border border-white/[0.05] bg-[#101217]/50 p-4 pl-5"
+                      className={`group relative overflow-hidden rounded-xl border bg-[#101217]/50 p-4 pl-5 transition-[border-color,box-shadow] duration-500 ease-out ${
+                        isJustCompleted
+                          ? "border-[#00ff9d]/35 shadow-[0_0_20px_-8px_rgba(0,255,157,0.3)]"
+                          : "border-white/[0.05]"
+                      }`}
                     >
                       <div
                         className={`absolute bottom-3 left-0 top-3 w-1 rounded-r-full ${style.bg} opacity-40 transition-opacity duration-150 ease-out group-hover:opacity-60`}
@@ -579,9 +641,43 @@ export function PlanWeekView() {
                           onClick={() => reopenTaskById(task.id)}
                           title="Reopen task"
                           aria-label="Reopen task"
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-opacity duration-150 ease-out hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
                         >
-                          <Check className="h-2.5 w-2.5 stroke-[2.5]" />
+                          {isJustCompleted ? (
+                            <motion.span
+                              initial={{ scale: 0.72 }}
+                              animate={{ scale: [0.72, 1.16, 1] }}
+                              transition={{
+                                duration: 0.24,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                              className="flex items-center justify-center"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                className="h-2.5 w-2.5"
+                              >
+                                <motion.path
+                                  d="M20 6 9 17l-5-5"
+                                  strokeDasharray={24}
+                                  initial={{ strokeDashoffset: 24 }}
+                                  animate={{ strokeDashoffset: 0 }}
+                                  transition={{
+                                    duration: 0.2,
+                                    ease: [0.22, 1, 0.36, 1],
+                                  }}
+                                />
+                              </svg>
+                            </motion.span>
+                          ) : (
+                            <Check className="h-2.5 w-2.5 stroke-[2.5]" />
+                          )}
                         </button>
                         <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-neutral-400">
                           <span
@@ -592,10 +688,11 @@ export function PlanWeekView() {
                           </span>
                         </span>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
+              </LayoutGroup>
             </div>
           );
         })}

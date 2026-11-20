@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   Check,
@@ -116,13 +117,24 @@ export function HabitsView() {
     return map;
   }, [quests]);
 
-  // Default quest = first existing quest (or null = Other work).
+  const activeQuests = useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
+  const activeQuestMap = useMemo(() => {
+    const map = new Map<string, Quest>();
+    activeQuests.forEach((q) => map.set(q.id, q));
+    return map;
+  }, [activeQuests]);
+
+  // Default quest = first active quest (or null = Other work).
   const selectedQuestId: string | null =
     questChoice === null
       ? null
-      : questChoice !== undefined && questMap.has(questChoice)
+      : questChoice !== undefined && activeQuestMap.has(questChoice)
       ? questChoice
-      : quests?.[0]?.id ?? null;
+      : activeQuests[0]?.id ?? null;
   const otherSelected = quests !== undefined && selectedQuestId === null;
 
   // Last 7 local days (oldest -> today) for real daily consistency dots.
@@ -335,7 +347,7 @@ export function HabitsView() {
           aria-label="Quest for new habit"
           className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3"
         >
-          {quests?.map((q) => {
+          {activeQuests.map((q) => {
             const st = accentStyle(q.accentColor);
             const isSelected = selectedQuestId === q.id;
             return (
@@ -429,13 +441,37 @@ export function HabitsView() {
                             : `Complete today's habit: ${habit.title}`
                         }
                         aria-pressed={doneToday}
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150 ease-out active:opacity-80 ${
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
                           doneToday
                             ? `${style.bg} border-transparent text-black`
                             : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
                         }`}
                       >
-                        <Check className="h-3 w-3 stroke-[2.5]" />
+                        {doneToday ? (
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            className="h-3 w-3"
+                          >
+                            <motion.path
+                              d="M20 6 9 17l-5-5"
+                              strokeDasharray={24}
+                              initial={{ strokeDashoffset: 24 }}
+                              animate={{ strokeDashoffset: 0 }}
+                              transition={{
+                                duration: 0.22,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                            />
+                          </svg>
+                        ) : (
+                          <Check className="h-3 w-3 stroke-[2.5]" />
+                        )}
                       </button>
 
                       <div className="min-w-0 flex-1">
@@ -597,7 +633,7 @@ export function HabitsView() {
                         aria-label="Habit quest"
                         className="flex min-w-0 flex-wrap items-center gap-1.5"
                       >
-                        {quests?.map((q) => {
+                        {activeQuests.map((q) => {
                           const qStyle = accentStyle(q.accentColor);
                           const active = editQuestId === q.id;
                           return (

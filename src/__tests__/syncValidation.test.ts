@@ -670,3 +670,45 @@ describe("/api/sync with hostile rows", () => {
     expect(json.payload.timeLogs).toEqual([]);
   });
 });
+
+describe("quest completion boundary validation", () => {
+  it("preserves valid boolean archived & stamp completedAt and strips invalid boundary values", () => {
+    const valid = validateSyncPayload({
+      ...createEmptySyncPayload(),
+      quests: [
+        questRow({ id: "quest-done-0", archived: true, completedAt: 0 }),
+        questRow({ id: "quest-done-max", archived: true, completedAt: MAX }),
+        questRow({ id: "quest-open", archived: false, completedAt: null }),
+        questRow({
+          id: "quest-bad-meta",
+          archived: "yes",
+          completedAt: -1,
+        }),
+        questRow({
+          id: "quest-nan-meta",
+          archived: 1,
+          completedAt: Number.NaN,
+        }),
+        questRow({
+          id: "quest-inf-meta",
+          archived: null,
+          completedAt: MAX + 1,
+        }),
+      ],
+    });
+    expect(valid.valid).toBe(true);
+    const qs = valid.payload!.quests;
+    expect(qs).toHaveLength(6);
+
+    expect(qs[0]).toMatchObject({ id: "quest-done-0", archived: true, completedAt: 0 });
+    expect(qs[1]).toMatchObject({ id: "quest-done-max", archived: true, completedAt: MAX });
+    expect(qs[2]).toMatchObject({ id: "quest-open", archived: false, completedAt: null });
+
+    expect(qs[3].archived).toBeUndefined();
+    expect(qs[3].completedAt).toBeUndefined();
+    expect(qs[4].archived).toBeUndefined();
+    expect(qs[4].completedAt).toBeUndefined();
+    expect(qs[5].archived).toBeUndefined();
+    expect(qs[5].completedAt).toBeUndefined();
+  });
+});

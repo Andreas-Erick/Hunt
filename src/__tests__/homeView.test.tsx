@@ -1127,5 +1127,130 @@ describe("CommandCenterView (Home)", () => {
       fireEvent.keyDown(notes, { key: "Escape" });
       expect(screen.queryByPlaceholderText("Add session notes...")).toBeNull();
     });
+
+    it("animates newly completed tasks into Completed with arrival highlight and clears timer cleanly", async () => {
+      await seed({
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [makeTask("tsk-anim", "Ship smooth animation", "quest-0", 1000)],
+      });
+
+      const { unmount } = render(<CommandCenterView />);
+      await screen.findByRole("button", { name: "Ship smooth animation" });
+
+      // Keep setImmediate real for fake-indexeddb and rAF real for Framer Motion
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        await act(async () => {
+          fireEvent.click(
+            within(row("tsk-anim")).getByRole("button", { name: "Mark complete" })
+          );
+          for (let i = 0; i < 6; i++) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        });
+
+        const completedRow = screen.getByTestId("completed-task-row");
+        expect(completedRow).toHaveTextContent("Ship smooth animation");
+        // Arrival highlight ring + animated SVG stroke-draw checkmark are active
+        expect(completedRow.className).toContain("border-[#00ff9d]/35");
+        const reopenBtn = within(completedRow).getByRole("button", {
+          name: "Reopen task",
+        });
+        expect(reopenBtn.querySelector('path[stroke-dasharray="24"]')).not.toBeNull();
+
+        // After 650ms, arrival highlight clears deterministically
+        act(() => {
+          vi.advanceTimersByTime(700);
+        });
+        expect(completedRow.className).not.toContain("border-[#00ff9d]/35");
+
+        // Reopen and complete again, then unmount mid-highlight to verify deterministic timer cleanup
+        await act(async () => {
+          fireEvent.click(reopenBtn);
+          for (let i = 0; i < 6; i++) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        });
+        const clearSpy = vi.spyOn(window, "clearTimeout");
+        await act(async () => {
+          fireEvent.click(
+            within(row("tsk-anim")).getByRole("button", { name: "Mark complete" })
+          );
+          for (let i = 0; i < 6; i++) {
+            await new Promise((resolve) => setImmediate(resolve));
+          }
+        });
+        clearSpy.mockClear();
+        unmount();
+        expect(clearSpy).toHaveBeenCalled();
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("excludes completed quests from filter/new-task pills and target hours while keeping historical badges", async () => {
+      await seed({
+        quests: [
+          makeQuest("quest-active", "Active Quest", 0, 8),
+          {
+            ...makeQuest("quest-retired", "Retired Quest", 1, 12),
+            archived: true,
+            completedAt: T0,
+          },
+        ],
+        tasks: [
+          makeTask("tsk-1", "Active work", "quest-active", 1000),
+          makeTask("tsk-old", "Historical win", "quest-retired", 2000, {
+            status: "completed",
+            completedAt: Date.now(),
+          }),
+        ],
+      });
+
+      render(<CommandCenterView />);
+      await screen.findByRole("button", { name: "Active work" });
+
+      // Filter pills and new-task quest pills only list active quests
+      const filters = screen.getByRole("group", { name: "Filter by quest" });
+      expect(within(filters).getByRole("button", { name: "Active Quest" })).toBeInTheDocument();
+      expect(within(filters).queryByRole("button", { name: "Retired Quest" })).toBeNull();
+
+      const newTaskQuests = screen.getByRole("group", { name: "Quest for new task" });
+      expect(
+        within(newTaskQuests).getByRole("button", { name: "Active Quest" })
+      ).toBeInTheDocument();
+      expect(
+        within(newTaskQuests).queryByRole("button", { name: "Retired Quest" })
+      ).toBeNull();
+
+      // Weekly target denominator sums active quests only (8h, not 20h)
+      expect(screen.getByText(/\/ 8h this week/)).toBeInTheDocument();
+
+      // Completed task still displays its retired quest badge
+      const completedRow = screen.getByTestId("completed-task-row");
+      expect(within(completedRow).getByText("Retired Quest")).toBeInTheDocument();
+    });
+
+    it("flushes and blurs task notes immediately on Ctrl+Enter", async () => {
+      await seed({
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [makeTask("tsk-n", "Notes shortcut", "quest-0", 1000)],
+      });
+      render(<CommandCenterView />);
+      await screen.findByRole("button", { name: "Notes shortcut" });
+
+      fireEvent.click(within(row("tsk-n")).getByTitle("Task notes & options"));
+      const notes = await screen.findByPlaceholderText("Add session notes...");
+      notes.focus();
+      fireEvent.change(notes, { target: { value: "Saved with shortcut" } });
+      fireEvent.keyDown(notes, { key: "Enter", ctrlKey: true });
+
+      await waitFor(async () =>
+        expect((await db.tasks.get("tsk-n"))?.notes).toBe("Saved with shortcut")
+      );
+    });
   });
 });

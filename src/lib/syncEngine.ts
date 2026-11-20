@@ -5,6 +5,7 @@ import {
   redactText,
 } from "./diagnostics";
 import {
+  MAX_TOMBSTONES_PER_KIND,
   mergeSyncPayloads,
   pickLogWinner,
   pickRowWinner,
@@ -155,7 +156,9 @@ function getLocalTombstones(): TombstoneStore {
     }
     const parsed = JSON.parse(raw) as Partial<TombstoneStore>;
     const ids = (arr: unknown): string[] =>
-      Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
+      Array.isArray(arr)
+        ? arr.filter((x): x is string => typeof x === "string").slice(-MAX_TOMBSTONES_PER_KIND)
+        : [];
     return {
       deletedQuestIds: ids(parsed.deletedQuestIds),
       deletedTaskIds: ids(parsed.deletedTaskIds),
@@ -169,8 +172,14 @@ function getLocalTombstones(): TombstoneStore {
 
 function saveLocalTombstones(store: TombstoneStore): void {
   if (typeof window === "undefined") return;
+  const bounded: TombstoneStore = {
+    deletedQuestIds: store.deletedQuestIds.slice(-MAX_TOMBSTONES_PER_KIND),
+    deletedTaskIds: store.deletedTaskIds.slice(-MAX_TOMBSTONES_PER_KIND),
+    deletedLogIds: store.deletedLogIds.slice(-MAX_TOMBSTONES_PER_KIND),
+    deletedHabitIds: store.deletedHabitIds.slice(-MAX_TOMBSTONES_PER_KIND),
+  };
   try {
-    window.localStorage.setItem(TOMBSTONE_STORAGE_KEY, JSON.stringify(store));
+    window.localStorage.setItem(TOMBSTONE_STORAGE_KEY, JSON.stringify(bounded));
   } catch {
     // Ignore storage quota errors
   }

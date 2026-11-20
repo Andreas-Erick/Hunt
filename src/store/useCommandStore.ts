@@ -151,6 +151,14 @@ interface CommandStoreState {
    * true otherwise.
    */
   updateQuest: (questId: string, changes: QuestChanges) => Promise<boolean>;
+  /**
+   * Retires a quest into Completed Quests (`archived: true`, `completedAt: now`),
+   * keeps historical time logs and completed tasks linked, and moves remaining
+   * open tasks and daily habits to Other work (`questId: null`).
+   */
+  completeQuest: (questId: string) => Promise<void>;
+  /** Restores a completed quest back to Active Quests (`archived: false`). */
+  reopenQuest: (questId: string) => Promise<void>;
   deleteQuest: (questId: string) => Promise<void>;
 
   // Daily Habit CRUD & Materialization
@@ -278,6 +286,7 @@ function buildHabitTaskRow(habit: Habit, dateKey: string): Task {
  * Skips any habit whose task for `dateKey` already exists or is tombstoned.
  */
 async function materializeHabitsIntoDB(dateKey: string): Promise<number> {
+  if ((await db.habits.count()) === 0) return 0;
   return db.transaction("rw", db.habits, db.tasks, async () => {
     const habits = (await db.habits.toArray()).sort(compareRank);
     if (habits.length === 0) return 0;
@@ -1148,7 +1157,8 @@ export const useCommandStore = create<CommandStoreState>()(
           if (!trimmed) return;
           const now = Date.now();
           const existing = await db.quests.orderBy("slotIndex").toArray();
-          const nextSlot = (existing.length % 3) as 0 | 1 | 2;
+          const activeCount = existing.filter((q) => !q.archived).length;
+          const nextSlot = (activeCount % 3) as 0 | 1 | 2;
 
           await db.quests.add({
             id: `quest-${now}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1189,6 +1199,67 @@ export const useCommandStore = create<CommandStoreState>()(
           });
           if (written) get().requestSync();
         }),
+
+      completeQuest: async (questId) => {
+        await runAction(set, "completeQuest", async () => {
+          const now = Date.now();
+          const written = await db.transaction(
+            "rw",
+            db.quests,
+            db.tasks,
+            db.habits,
+            async () => {
+              const quest = await db.quests.get(questId);
+              if (!quest) return false;
+              await db.quests.update(questId, {
+                archived: true,
+                completedAt: now,
+                updatedAt: nextStamp(quest),
+              });
+              const linkedTasks = await db.tasks
+                .where("questId")
+                .equals(questId)
+                .toArray();
+              for (const t of linkedTasks) {
+                if (t.status === "queued" || t.status === "active") {
+                  await db.tasks.update(t.id, {
+                    questId: null,
+                    updatedAt: nextStamp(t),
+                  });
+                }
+              }
+              const linkedHabits = await db.habits
+                .where("questId")
+                .equals(questId)
+                .toArray();
+              for (const h of linkedHabits) {
+                await db.habits.update(h.id, {
+                  questId: null,
+                  updatedAt: nextStamp(h),
+                });
+              }
+              return true;
+            }
+          );
+          if (written) get().requestSync();
+        });
+      },
+
+      reopenQuest: async (questId) => {
+        await runAction(set, "reopenQuest", async () => {
+          const written = await db.transaction("rw", db.quests, async () => {
+            const quest = await db.quests.get(questId);
+            if (!quest) return false;
+            await db.quests.update(questId, {
+              archived: false,
+              completedAt: undefined,
+              updatedAt: nextStamp(quest),
+            });
+            return true;
+          });
+          if (written) get().requestSync();
+        });
+      },
 
       deleteQuest: async (questId) => {
         await runAction(set, "deleteQuest", async () => {

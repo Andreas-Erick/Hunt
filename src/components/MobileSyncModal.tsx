@@ -161,15 +161,42 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Focus moves into the dialog and returns to the opener (the Phone button) on
-  // close. A layout effect, so focus is back on the opener before the dialog's
-  // nodes are removed (focus never drops to <body> in between).
+  // Focus moves into the dialog, background siblings are marked `inert`, and
+  // focus returns to the opener (the Phone button) on close. A layout effect
+  // restores `inert` and focus before the dialog's nodes are removed.
   useLayoutEffect(() => {
     const active = document.activeElement;
     const opener =
       active instanceof HTMLElement && active !== document.body ? active : null;
+
+    const inerted: HTMLElement[] = [];
+    let current: HTMLElement | null = dialogRef.current;
+    while (current && current !== document.body) {
+      const parent: HTMLElement | null = current.parentElement;
+      if (!parent) break;
+      for (const sibling of Array.from(parent.children)) {
+        if (
+          sibling !== current &&
+          sibling instanceof HTMLElement &&
+          sibling.tagName !== "SCRIPT" &&
+          sibling.tagName !== "STYLE" &&
+          !sibling.inert &&
+          !sibling.hasAttribute("inert")
+        ) {
+          sibling.inert = true;
+          sibling.setAttribute("inert", "");
+          inerted.push(sibling);
+        }
+      }
+      current = parent;
+    }
+
     closeButtonRef.current?.focus();
     return () => {
+      for (const el of inerted) {
+        el.inert = false;
+        el.removeAttribute("inert");
+      }
       if (opener && opener.isConnected) opener.focus();
     };
   }, []);

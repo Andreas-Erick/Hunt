@@ -299,10 +299,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 8 (1.5.2) so it installs over the shipped 1.5.1 (7)", () => {
+  it("is versionCode >= 9 (1.6.0) so it installs over the shipped 1.5.2 (8)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(8);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.5.2");
+    expect(code).toBeGreaterThanOrEqual(9);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.6.0");
   });
 
   it("handles API 30+ system bars & IME via a padded FrameLayout container (never webView.setPadding)", () => {

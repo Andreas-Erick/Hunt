@@ -154,6 +154,7 @@ export function TaskNotesField({
   taskId,
   notes,
   onBlur,
+  onKeyDown,
   ...textareaProps
 }: TaskNotesFieldProps) {
   const stored = notes ?? "";
@@ -272,12 +273,22 @@ export function TaskNotesField({
     onBlur?.(e);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      flush(taskId);
+      e.currentTarget.blur();
+    }
+    onKeyDown?.(e);
+  };
+
   return (
     <textarea
       {...textareaProps}
       value={draft}
       onChange={handleChange}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
     />
   );
 }

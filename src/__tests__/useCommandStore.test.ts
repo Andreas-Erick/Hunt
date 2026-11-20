@@ -460,4 +460,78 @@ describe("Command Store & Focus State Machine (useCommandStore.ts)", () => {
       expect(useCommandStore.getState().isRunning).toBe(false);
     });
   });
+
+  describe("Quest Completion & Reopening", () => {
+    it("retires a quest, moves open tasks and habits to Other work, preserves completed tasks & logs, and reopens cleanly", async () => {
+      const store = useCommandStore.getState();
+      const futureStamp = Date.now() + 50_000;
+      await db.quests.update("quest-slot-0", { updatedAt: futureStamp });
+
+      await store.createTask({ title: "Open step", questId: "quest-slot-0" });
+      await store.createTask({ title: "Done step", questId: "quest-slot-0" });
+      const tasks = await db.tasks.toArray();
+      const openTask = tasks.find((t) => t.title === "Open step")!;
+      const doneTask = tasks.find((t) => t.title === "Done step")!;
+      await store.completeTaskById(doneTask.id);
+
+      await db.habits.add({
+        id: "hab-quest-0",
+        title: "Daily practice",
+        notes: "",
+        questId: "quest-slot-0",
+        rank: 1000,
+        createdAt: Date.now(),
+        updatedAt: futureStamp,
+      });
+
+      await db.timeLogs.add({
+        id: "log-quest-0",
+        taskId: doneTask.id,
+        taskTitleSnapshot: doneTask.title,
+        questId: "quest-slot-0",
+        questCodeSnapshot: "LAUNCH MY ",
+        accentColorSnapshot: "cyan",
+        startTime: Date.now() - 1800_000,
+        endTime: Date.now(),
+        durationSeconds: 1800,
+        dateKey: toLocalDateKey(),
+      });
+
+      await useCommandStore.getState().completeQuest("quest-slot-0");
+
+      const completedQuest = await db.quests.get("quest-slot-0");
+      expect(completedQuest?.archived).toBe(true);
+      expect(typeof completedQuest?.completedAt).toBe("number");
+      // R6 monotonic stamp even when prior updatedAt was ahead of local clock
+      expect(completedQuest?.updatedAt).toBe(futureStamp + 1);
+
+      const afterOpen = await db.tasks.get(openTask.id);
+      const afterDone = await db.tasks.get(doneTask.id);
+      const afterHabit = await db.habits.get("hab-quest-0");
+      const afterLog = await db.timeLogs.get("log-quest-0");
+
+      expect(afterOpen?.questId).toBeNull();
+      expect(afterDone?.questId).toBe("quest-slot-0");
+      expect(afterHabit?.questId).toBeNull();
+      expect(afterHabit?.updatedAt).toBe(futureStamp + 1);
+      expect(afterLog?.questId).toBe("quest-slot-0");
+
+      // Completing a quest must NOT record a quest deletion tombstone
+      const tombstones = JSON.parse(
+        window.localStorage.getItem("hunt-sync-tombstones-v1") ?? '{"deletedQuestIds":[]}'
+      ) as { deletedQuestIds?: string[] };
+      expect(tombstones.deletedQuestIds ?? []).not.toContain("quest-slot-0");
+
+      // Reopen restores archived=false, clears completedAt, and advances updatedAt
+      await useCommandStore.getState().reopenQuest("quest-slot-0");
+      const reopened = await db.quests.get("quest-slot-0");
+      expect(reopened?.archived).toBe(false);
+      expect(reopened?.completedAt).toBeUndefined();
+      expect(reopened?.updatedAt).toBeGreaterThan(completedQuest!.updatedAt!);
+
+      // Unknown quest IDs are safe no-ops
+      await useCommandStore.getState().completeQuest("quest-missing");
+      await useCommandStore.getState().reopenQuest("quest-missing");
+    });
+  });
 });

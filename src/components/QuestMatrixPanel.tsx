@@ -1,9 +1,19 @@
 "use client";
 
-import React, { useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import { BookOpen, Check, SlidersHorizontal, Play, Plus, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  CheckCircle2,
+  RotateCcw,
+  SlidersHorizontal,
+  Play,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import {
   db,
   QUEST_ACCENT_STYLES,
@@ -13,6 +23,7 @@ import {
   formatChronoMMSS,
   type Quest,
   type QuestAccent,
+  type TimeLog,
 } from "@/lib/db";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
@@ -30,6 +41,13 @@ const ACCENT_OPTIONS: ReadonlyArray<{ id: QuestAccent; label: string }> = [
   { id: "amber", label: "Amber" },
   { id: "emerald", label: "Emerald" },
 ];
+
+/** Armed text of a quest's Complete: completing moves open tasks to Other work. */
+function completeQuestConfirmLabel(openTaskCount: number): string {
+  if (openTaskCount === 0) return "Complete quest?";
+  const tasks = openTaskCount === 1 ? "open task moves" : "open tasks move";
+  return `Complete quest? ${openTaskCount} ${tasks} to Other work`;
+}
 
 /** Armed text of a quest's Delete: deleting moves its tasks to Other work. */
 function deleteQuestConfirmLabel(openTaskCount: number): string {
@@ -124,6 +142,8 @@ export function QuestMatrixPanel() {
     completeTaskById,
     createQuest,
     updateQuest,
+    completeQuest,
+    reopenQuest,
     deleteQuest,
   } = useCommandStore(
     useShallow((s) => ({
@@ -133,6 +153,8 @@ export function QuestMatrixPanel() {
       completeTaskById: s.completeTaskById,
       createQuest: s.createQuest,
       updateQuest: s.updateQuest,
+      completeQuest: s.completeQuest,
+      reopenQuest: s.reopenQuest,
       deleteQuest: s.deleteQuest,
     }))
   );
@@ -142,6 +164,47 @@ export function QuestMatrixPanel() {
     []
   );
   const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
+
+  const activeQuests = useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
+  const completedQuests = useMemo(
+    () =>
+      (quests ?? [])
+        .filter((q) => q.archived)
+        .sort(
+          (a, b) =>
+            (b.completedAt ?? b.updatedAt ?? 0) -
+            (a.completedAt ?? a.updatedAt ?? 0)
+        ),
+    [quests]
+  );
+
+  const completedQuestIdsKey = useMemo(
+    () => completedQuests.map((q) => q.id).join(","),
+    [completedQuests]
+  );
+
+  // Indexed read of total logged hours for completed quests only (zero reads when none).
+  const completedQuestLogs = useLiveQuery(
+    () => {
+      const ids = completedQuestIdsKey ? completedQuestIdsKey.split(",") : [];
+      if (ids.length === 0) return Promise.resolve([] as TimeLog[]);
+      return db.timeLogs.where("questId").anyOf(ids).toArray();
+    },
+    [completedQuestIdsKey]
+  );
+
+  const totalSecondsByCompletedQuest = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const log of completedQuestLogs ?? []) {
+      if (!log.questId) continue;
+      totals.set(log.questId, (totals.get(log.questId) ?? 0) + log.durationSeconds);
+    }
+    return totals;
+  }, [completedQuestLogs]);
 
   // Recomputed when the day changes (the view can stay open past midnight).
   const todayKey = toLocalDateKey();
@@ -262,6 +325,48 @@ export function QuestMatrixPanel() {
       savingEditRef.current = false;
       setSavingEdit(false);
     }
+  };
+
+  const [justCompletedQuestId, setJustCompletedQuestId] = useState<string | null>(
+    null
+  );
+  const questHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      if (questHighlightTimerRef.current !== null) {
+        clearTimeout(questHighlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  const questsLayoutKey = useMemo(
+    () =>
+      `${activeQuests.map((q) => q.id).join(",")}|${completedQuests
+        .map((q) => q.id)
+        .join(",")}|${editingQuest?.id ?? ""}`,
+    [activeQuests, completedQuests, editingQuest]
+  );
+
+  const handleCompleteQuest = async (questId: string) => {
+    if (questHighlightTimerRef.current !== null) {
+      clearTimeout(questHighlightTimerRef.current);
+    }
+    setJustCompletedQuestId(questId);
+    questHighlightTimerRef.current = setTimeout(() => {
+      setJustCompletedQuestId((cur) => (cur === questId ? null : cur));
+      questHighlightTimerRef.current = null;
+    }, 700);
+    hudAudio.playComplete();
+    setEditingQuest((current) => (current?.id === questId ? null : current));
+    await completeQuest(questId);
+  };
+
+  const handleReopenQuest = async (questId: string) => {
+    hudAudio.playLockOn();
+    await reopenQuest(questId);
   };
 
   const handleDeleteQuest = async (questId: string) => {
@@ -473,18 +578,19 @@ export function QuestMatrixPanel() {
         </form>
       )}
 
+      <LayoutGroup id="quests-matrix">
       {/* 3-Column Spacious Quest Grid */}
       {quests === undefined ? (
         // Still loading: keep the grid's place without claiming it is empty.
         <div aria-busy="true" className="grid grid-cols-1 gap-8 lg:grid-cols-3" />
-      ) : quests.length === 0 ? (
+      ) : activeQuests.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/10 py-16 text-center text-sm text-hud-muted">
           No active Quests. Click <strong>+ New Quest</strong> above to create
           one.
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {quests.map((quest) => {
+          {activeQuests.map((quest) => {
             const style = accentStyle(quest.accentColor);
             const weeklySeconds = weeklySecondsByQuest.get(quest.id) ?? 0;
 
@@ -506,15 +612,19 @@ export function QuestMatrixPanel() {
               .sort(compareRank);
 
             return (
-              <div
+              <motion.div
+                layout="position"
+                layoutId={`quest-card-${quest.id}`}
+                layoutDependency={questsLayoutKey}
+                transition={{ layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
                 key={quest.id}
                 data-testid="quest-card"
                 data-quest-id={quest.id}
                 className="flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-7"
               >
                 <div>
-                  {/* Top Row: Colored Dot + Quest Title + Edit Button */}
-                  <div className="flex items-start justify-between gap-4">
+                  {/* Top Row: Colored Dot + Quest Title + Complete & Edit Buttons */}
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <span
                         className={`mt-2 h-3 w-3 shrink-0 rounded-full ${style.bg}`}
@@ -524,16 +634,31 @@ export function QuestMatrixPanel() {
                       </h2>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => startEdit(quest, e.currentTarget)}
-                      title="Edit or Delete Quest"
-                      aria-label={`Edit quest ${quest.title}`}
-                      aria-expanded={isEditing}
-                      className="shrink-0 rounded-lg p-2 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors"
-                    >
-                      <SlidersHorizontal className="h-4 w-4" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <ConfirmDeleteButton
+                        label={`Complete quest ${quest.title}`}
+                        confirmLabel={completeQuestConfirmLabel(
+                          questTasks.length
+                        )}
+                        armedClassName="text-hud-emerald font-medium"
+                        onConfirm={() => handleCompleteQuest(quest.id)}
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-300 hover:border-[#00ff9d]/40 hover:bg-[#00ff9d]/10 hover:text-[#00ff9d] data-[state=armed]:border-[#00ff9d]/45 data-[state=armed]:bg-[#00ff9d]/15"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff9d]" />
+                        <span>Complete</span>
+                      </ConfirmDeleteButton>
+
+                      <button
+                        type="button"
+                        onClick={(e) => startEdit(quest, e.currentTarget)}
+                        title="Edit or Delete Quest"
+                        aria-label={`Edit quest ${quest.title}`}
+                        aria-expanded={isEditing}
+                        className="shrink-0 rounded-lg p-2 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors"
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {quest.description && (
@@ -668,53 +793,58 @@ export function QuestMatrixPanel() {
                       {allTasks === undefined ? "" : ` (${questTasks.length})`}
                     </div>
 
-                    {questTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <AnimatePresence initial={false}>
+                      {questTasks.map((t) => (
+                        <motion.div
+                          layout="position"
+                          exit={{ opacity: 0, scale: 0.97 }}
+                          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                          key={t.id}
+                          className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                // The second click of a double-click would hit
+                                // the next row, which slides up under the cursor.
+                                if (e.detail > 1) return;
+                                hudAudio.playComplete();
+                                completeTaskById(t.id);
+                              }}
+                              title="Mark complete"
+                              aria-label="Mark complete"
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
+                            >
+                              <Check className="h-2.5 w-2.5" />
+                            </button>
+                            <span
+                              className="truncate text-neutral-200"
+                              title={t.title}
+                            >
+                              {t.title}
+                            </span>
+                          </div>
+
                           <button
                             type="button"
-                            onClick={(e) => {
-                              // The second click of a double-click would hit
-                              // the next row, which slides up under the cursor.
-                              if (e.detail > 1) return;
-                              hudAudio.playComplete();
-                              completeTaskById(t.id);
+                            onClick={() => {
+                              hudAudio.playLockOn();
+                              initializeFocus(t.id);
                             }}
-                            title="Mark complete"
-                            aria-label="Mark complete"
-                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
+                            aria-label={`Start focus: ${t.title}`}
+                            className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
                           >
-                            <Check className="h-2.5 w-2.5" />
+                            {t.accumulatedSeconds > 0 && (
+                              <span className="font-mono tabular-nums">
+                                {formatChronoMMSS(t.accumulatedSeconds).formatted}
+                              </span>
+                            )}
+                            <Play className="h-3.5 w-3.5 fill-current" />
                           </button>
-                          <span
-                            className="truncate text-neutral-200"
-                            title={t.title}
-                          >
-                            {t.title}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            hudAudio.playLockOn();
-                            initializeFocus(t.id);
-                          }}
-                          aria-label={`Start focus: ${t.title}`}
-                          className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
-                        >
-                          {t.accumulatedSeconds > 0 && (
-                            <span className="font-mono tabular-nums">
-                              {formatChronoMMSS(t.accumulatedSeconds).formatted}
-                            </span>
-                          )}
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                        </button>
-                      </div>
-                    ))}
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                   </div>
                 </div>
 
@@ -748,11 +878,108 @@ export function QuestMatrixPanel() {
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
       )}
+
+      {/* Completed Quests Section */}
+      {completedQuests.length > 0 && (
+        <section
+          aria-label="Completed Quests"
+          className="mt-14 space-y-5"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted tabular-nums">
+              Completed Quests ({completedQuests.length})
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {completedQuests.map((quest) => {
+              const style = accentStyle(quest.accentColor);
+              const totalHours =
+                (totalSecondsByCompletedQuest.get(quest.id) ?? 0) / 3600;
+              const isJustFinished = justCompletedQuestId === quest.id;
+
+              return (
+                <motion.div
+                  layout="position"
+                  layoutId={`quest-card-${quest.id}`}
+                  layoutDependency={questsLayoutKey}
+                  transition={{
+                    layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+                  }}
+                  key={quest.id}
+                  data-testid="completed-quest-card"
+                  data-quest-id={quest.id}
+                  className={`flex min-w-0 flex-col justify-between rounded-2xl border bg-[#0e1015]/80 p-6 transition-[border-color,box-shadow] duration-500 ease-out ${
+                    isJustFinished
+                      ? "border-[#00ff9d]/40 shadow-[0_0_26px_-10px_rgba(0,255,157,0.35)]"
+                      : "border-white/[0.06]"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span
+                          className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${style.bg} opacity-65`}
+                        />
+                        <h3 className="min-w-0 break-words [text-wrap:balance] text-lg font-medium leading-snug text-neutral-200">
+                          {quest.title}
+                        </h3>
+                      </div>
+
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#00ff9d]">
+                        <Check className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />
+                        <span>Completed</span>
+                      </span>
+                    </div>
+
+                    {quest.description && (
+                      <p className="mt-2 break-words text-xs leading-relaxed text-hud-muted">
+                        {quest.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4 text-xs">
+                    <span className="font-mono text-hud-muted tabular-nums">
+                      {completedQuestLogs === undefined
+                        ? "–"
+                        : `${totalHours.toFixed(1)}h logged`}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleReopenQuest(quest.id)}
+                        aria-label={`Reopen quest ${quest.title}`}
+                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>Reopen</span>
+                      </button>
+
+                      <ConfirmDeleteButton
+                        label={`Delete quest ${quest.title}`}
+                        confirmLabel="Delete quest?"
+                        onConfirm={() => handleDeleteQuest(quest.id)}
+                        className="flex items-center gap-1 rounded-lg border border-[#ff2a5f]/25 bg-[#ff2a5f]/[0.06] px-2.5 py-1.5 text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/15 data-[state=armed]:bg-[#ff2a5f]/20"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>Delete</span>
+                      </ConfirmDeleteButton>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      </LayoutGroup>
     </div>
   );
 }

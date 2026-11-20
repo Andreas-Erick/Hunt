@@ -1,5 +1,11 @@
 "use client";
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 export const AUDIO_MUTED_STORAGE_KEY = "hunt-audio-muted-v1";
 
 function readPersistedMute(): boolean {
@@ -45,10 +51,7 @@ class HudSoundEngine {
   private getContext(): AudioContext | null {
     if (typeof window === "undefined" || this.muted) return null;
     if (!this.ctx) {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext;
+      const AudioCtx = window.AudioContext ?? window.webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }
@@ -57,6 +60,19 @@ class HudSoundEngine {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;
+  }
+
+  /** Deterministically closes the underlying AudioContext when shutting down. */
+  async dispose(): Promise<void> {
+    const current = this.ctx;
+    this.ctx = null;
+    if (current && typeof current.close === "function") {
+      try {
+        await current.close();
+      } catch {
+        // Ignore already-closed context errors.
+      }
+    }
   }
 
   playLockOn() {

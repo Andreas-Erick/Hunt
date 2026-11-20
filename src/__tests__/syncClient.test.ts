@@ -701,4 +701,31 @@ describe("desktop sync client (syncEngine.ts)", () => {
       expect(describeSyncError("too_large")).not.toMatch(/MB/);
     });
   });
+
+  describe("bounded local tombstones", () => {
+    it("caps persisted local tombstone arrays to the newest 5,000 IDs per kind", async () => {
+      const oversized = Array.from({ length: 5120 }, (_, i) => `tsk-old-${i}`);
+      window.localStorage.setItem(
+        TOMBSTONE_KEY,
+        JSON.stringify({
+          deletedQuestIds: [],
+          deletedTaskIds: oversized,
+          deletedLogIds: [],
+          deletedHabitIds: [],
+        })
+      );
+
+      recordDeletedTaskTombstone("tsk-newest");
+
+      const payload = await buildLocalSyncPayload(NO_FOCUS);
+      expect(payload.deletedTaskIds).toHaveLength(5000);
+      expect(payload.deletedTaskIds[0]).toBe("tsk-old-121");
+      expect(payload.deletedTaskIds[4999]).toBe("tsk-newest");
+
+      const stored = JSON.parse(window.localStorage.getItem(TOMBSTONE_KEY) ?? "{}") as {
+        deletedTaskIds?: string[];
+      };
+      expect(stored.deletedTaskIds).toHaveLength(5000);
+    });
+  });
 });

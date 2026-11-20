@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   Play,
@@ -37,6 +37,12 @@ const RUNNING_TICK_MS = 1000;
 const IDLE_TICK_MS = 60_000;
 /** Calendar days in the week KPI, today included. */
 const WEEK_DAYS = 7;
+/** Duration (ms) of the subtle arrival glow on a freshly completed task card. */
+const COMPLETION_HIGHLIGHT_MS = 650;
+/** Harmonized spatial FLIP transition for queue reorder & completion glide. */
+const TASK_FLOW_TRANSITION = {
+  layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+};
 
 /** Elements where Alt+Arrow keys belong to text editing, not to reordering. */
 function isTextEntryTarget(target: EventTarget): boolean {
@@ -113,6 +119,20 @@ export function CommandCenterView() {
   // Expanded Task ID (for notes / quest change)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
+  // Recently completed task id for tactile arrival highlight & checkmark draw
+  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
+  const completeHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  useEffect(() => {
+    return () => {
+      if (completeHighlightTimerRef.current !== null) {
+        clearTimeout(completeHighlightTimerRef.current);
+      }
+    };
+  }, []);
+
   // Live session delta for active task & timeline
   const [liveDelta, setLiveDelta] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -146,15 +166,31 @@ export function CommandCenterView() {
     return map;
   }, [quests]);
 
-  // Default quest for new tasks = first existing quest (never a hardcoded or
-  // deleted id); an explicit pick sticks while that quest exists.
+  const activeQuests = React.useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
+  const activeQuestMap = React.useMemo(() => {
+    const map = new Map<string, Quest>();
+    activeQuests.forEach((q) => map.set(q.id, q));
+    return map;
+  }, [activeQuests]);
+
+  // Default quest for new tasks = first active quest (never a hardcoded,
+  // completed or deleted id); an explicit pick sticks while that quest is active.
   const selectedQuestId: string | null =
     questChoice === null
       ? null
-      : questChoice !== undefined && questMap.has(questChoice)
+      : questChoice !== undefined && activeQuestMap.has(questChoice)
       ? questChoice
-      : quests?.[0]?.id ?? null;
+      : activeQuests[0]?.id ?? null;
   const otherWorkSelected = quests !== undefined && selectedQuestId === null;
+
+  const effectiveFilterQuestId =
+    filterQuestId === "ALL" || activeQuestMap.has(filterQuestId)
+      ? filterQuestId
+      : "ALL";
 
   const todayKey = toLocalDateKey(nowMs);
 
@@ -194,9 +230,9 @@ export function CommandCenterView() {
           isTaskVisibleToday(t, todayKey)
       )
       .sort(compareRank);
-    if (filterQuestId === "ALL") return list;
-    return list.filter((t) => t.questId === filterQuestId);
-  }, [allTasks, filterQuestId, todayKey]);
+    if (effectiveFilterQuestId === "ALL") return list;
+    return list.filter((t) => t.questId === effectiveFilterQuestId);
+  }, [allTasks, effectiveFilterQuestId, todayKey]);
 
   const questQueue = React.useMemo(
     () => pendingTasks.filter((t) => t.questId !== null),
@@ -208,21 +244,26 @@ export function CommandCenterView() {
     [pendingTasks]
   );
 
-  // framer-motion `layout` rows measure the DOM on every render unless given a
-  // layoutDependency. Only the visible order and the expanded drawer move rows,
-  // so clock ticks, sync updates and typing no longer trigger measurements.
-  const questQueueLayoutKey = React.useMemo(
-    () => `${questQueue.map((t) => t.id).join(",")}|${expandedTaskId ?? ""}`,
-    [questQueue, expandedTaskId]
-  );
-
-  // Completed tasks (most recent 5)
+  // Completed tasks (most recent 4)
   const completedTasks = React.useMemo(() => {
     return (allTasks ?? [])
       .filter((t) => t.status === "completed")
       .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
       .slice(0, 4);
   }, [allTasks]);
+
+  // framer-motion `layout` rows measure the DOM on every render unless given a
+  // layoutDependency. Only visible list membership/order and the expanded drawer
+  // move rows, so clock ticks, sync updates and typing trigger zero measurements.
+  const taskFlowLayoutKey = React.useMemo(
+    () =>
+      `${questQueue.map((t) => t.id).join(",")}|${maintenanceQueue
+        .map((t) => t.id)
+        .join(",")}|${completedTasks.map((t) => t.id).join(",")}|${
+        expandedTaskId ?? ""
+      }`,
+    [questQueue, maintenanceQueue, completedTasks, expandedTaskId]
+  );
 
   // Today's & Weekly Quest Hours
   const activeTaskObj = React.useMemo(
@@ -256,8 +297,11 @@ export function CommandCenterView() {
   const weekQuestSeconds = weekQuestLoggedSeconds + liveQuestSeconds;
 
   const totalWeeklyTargetHours = React.useMemo(() => {
-    return (quests ?? []).reduce((acc, q) => acc + (Number(q.targetWeeklyHours) || 0), 0);
-  }, [quests]);
+    return activeQuests.reduce(
+      (acc, q) => acc + (Number(q.targetWeeklyHours) || 0),
+      0
+    );
+  }, [activeQuests]);
 
   const weeklyProgressPct =
     totalWeeklyTargetHours > 0
@@ -278,6 +322,20 @@ export function CommandCenterView() {
       day: "numeric",
     });
   }, [todayKey]);
+
+  const handleCompleteTask = (taskId: string) => {
+    if (completeHighlightTimerRef.current !== null) {
+      clearTimeout(completeHighlightTimerRef.current);
+    }
+    setExpandedTaskId((cur) => (cur === taskId ? null : cur));
+    setJustCompletedId(taskId);
+    completeHighlightTimerRef.current = setTimeout(() => {
+      setJustCompletedId((cur) => (cur === taskId ? null : cur));
+      completeHighlightTimerRef.current = null;
+    }, COMPLETION_HIGHLIGHT_MS);
+    hudAudio.playComplete();
+    void completeTaskById(taskId);
+  };
 
   const handleAdd = async (promoteToTop: boolean) => {
     const title = newTitle.trim();
@@ -483,18 +541,18 @@ export function CommandCenterView() {
               <button
                 type="button"
                 onClick={() => setFilterQuestId("ALL")}
-                aria-pressed={filterQuestId === "ALL"}
+                aria-pressed={effectiveFilterQuestId === "ALL"}
                 className={`rounded-lg px-2.5 py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
-                  filterQuestId === "ALL"
+                  effectiveFilterQuestId === "ALL"
                     ? "bg-white/10 text-white"
                     : "text-hud-muted hover:text-neutral-300"
                 }`}
               >
                 All
               </button>
-              {quests?.map((q) => {
+              {activeQuests.map((q) => {
                 const st = accentStyle(q.accentColor);
-                const active = filterQuestId === q.id;
+                const active = effectiveFilterQuestId === q.id;
                 return (
                   <button
                     key={q.id}
@@ -569,7 +627,7 @@ export function CommandCenterView() {
               aria-label="Quest for new task"
               className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3"
             >
-              {quests?.map((q) => {
+              {activeQuests.map((q) => {
                 const st = accentStyle(q.accentColor);
                 const isSelected = selectedQuestId === q.id;
                 return (
@@ -614,6 +672,7 @@ export function CommandCenterView() {
             </div>
           </div>
 
+          <LayoutGroup id="home-task-flow">
           {/* =============================================================== */}
           {/* QUEST WORK TASK CARDS                                           */}
           {/* =============================================================== */}
@@ -636,14 +695,17 @@ export function CommandCenterView() {
                 const isCurrentlyActive = activeTaskId === task.id;
                 const isExpanded = expandedTaskId === task.id;
                 const isDragOver = dragOverTaskId === task.id;
+                const isCompleting = justCompletedId === task.id;
                 const taskTotalSec =
                   (task.accumulatedSeconds || 0) +
                   (isCurrentlyActive ? liveDelta : 0);
 
                 return (
                   <motion.div
-                    layout
-                    layoutDependency={questQueueLayoutKey}
+                    layout="position"
+                    layoutId={`home-task-${task.id}`}
+                    layoutDependency={taskFlowLayoutKey}
+                    transition={TASK_FLOW_TRANSITION}
                     key={task.id}
                     data-testid="task-row"
                     data-task-id={task.id}
@@ -661,7 +723,7 @@ export function CommandCenterView() {
                       setDraggedTaskId(null);
                       setDragOverTaskId(null);
                     }}
-                    className={`group relative overflow-hidden rounded-2xl border transition-all ${
+                    className={`group relative overflow-hidden rounded-2xl border transition-colors duration-200 ${
                       isDragOver
                         ? "border-white/40 bg-[#1a1d24]"
                         : isTopTask
@@ -697,12 +759,15 @@ export function CommandCenterView() {
                               // The second click of a double-click would hit
                               // the next row, which slides up under the cursor.
                               if (e.detail > 1) return;
-                              hudAudio.playComplete();
-                              completeTaskById(task.id);
+                              handleCompleteTask(task.id);
                             }}
                             title="Mark complete"
                             aria-label="Mark complete"
-                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                              isCompleting
+                                ? `${style.bg} border-transparent text-black`
+                                : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                            }`}
                           >
                             <Check className="h-3 w-3" />
                           </button>
@@ -810,7 +875,7 @@ export function CommandCenterView() {
 
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                            {quests?.map((q) => {
+                            {activeQuests.map((q) => {
                               const qStyle = accentStyle(q.accentColor);
                               const isCurrentQuest = task.questId === q.id;
                               return (
@@ -880,12 +945,17 @@ export function CommandCenterView() {
 
               {maintenanceQueue.map((task) => {
                 const taskTotalSec = task.accumulatedSeconds || 0;
+                const isCompleting = justCompletedId === task.id;
                 return (
-                  <div
+                  <motion.div
+                    layout="position"
+                    layoutId={`home-task-${task.id}`}
+                    layoutDependency={taskFlowLayoutKey}
+                    transition={TASK_FLOW_TRANSITION}
                     key={task.id}
                     data-testid="task-row"
                     data-task-id={task.id}
-                    className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#101115] p-5 pl-6 hover:border-white/15 transition-all"
+                    className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#101115] p-5 pl-6 hover:border-white/15 transition-colors duration-200"
                   >
                     <div className="absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full bg-neutral-600" />
 
@@ -907,12 +977,15 @@ export function CommandCenterView() {
                           onClick={(e) => {
                             // Ignore the second click of a double-click.
                             if (e.detail > 1) return;
-                            hudAudio.playComplete();
-                            completeTaskById(task.id);
+                            handleCompleteTask(task.id);
                           }}
                           title="Mark complete"
                           aria-label="Mark complete"
-                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/20 text-transparent hover:border-white hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                            isCompleting
+                              ? "border-transparent bg-slate-400 text-black"
+                              : "border-white/20 text-transparent hover:border-white hover:text-white"
+                          }`}
                         >
                           <Check className="h-3 w-3" />
                         </button>
@@ -939,7 +1012,7 @@ export function CommandCenterView() {
                             initializeFocus(task.id);
                           }}
                           aria-label={`Start focus: ${task.title}`}
-                          className="flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                          className="flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs tabular-nums text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
                         >
                           {taskTotalSec > 0 && (
                             <span>
@@ -961,7 +1034,7 @@ export function CommandCenterView() {
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
@@ -978,13 +1051,24 @@ export function CommandCenterView() {
                   : undefined;
                 const style = accentStyle(linkedQuest?.accentColor ?? "slate");
                 const questLabel = linkedQuest ? linkedQuest.title : "Other work";
+                const isJustCompleted = justCompletedId === task.id;
 
                 // Only the accent bar and the check are dimmed (the card used
                 // to be, which took the title below AA contrast).
                 return (
-                  <div
+                  <motion.div
+                    layout="position"
+                    layoutId={`home-task-${task.id}`}
+                    layoutDependency={taskFlowLayoutKey}
+                    transition={TASK_FLOW_TRANSITION}
                     key={task.id}
-                    className="group relative overflow-hidden rounded-2xl border border-white/[0.05] bg-[#0e1014]/60 p-5 pl-6"
+                    data-testid="completed-task-row"
+                    data-task-id={task.id}
+                    className={`group relative overflow-hidden rounded-2xl border bg-[#0e1014]/60 p-5 pl-6 transition-[border-color,box-shadow] duration-500 ease-out ${
+                      isJustCompleted
+                        ? "border-[#00ff9d]/35 shadow-[0_0_24px_-10px_rgba(0,255,157,0.32)]"
+                        : "border-white/[0.05]"
+                    }`}
                   >
                     <div
                       className={`absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full ${style.bg} opacity-40 transition-opacity duration-150 ease-out group-hover:opacity-60`}
@@ -1004,9 +1088,43 @@ export function CommandCenterView() {
                           }}
                           title="Reopen task"
                           aria-label="Reopen task"
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-opacity duration-150 ease-out group-hover:opacity-95 focus-visible:opacity-100`}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 group-hover:opacity-95 focus-visible:opacity-100`}
                         >
-                          <Check className="h-3 w-3 stroke-[2.5]" />
+                          {isJustCompleted ? (
+                            <motion.span
+                              initial={{ scale: 0.72 }}
+                              animate={{ scale: [0.72, 1.16, 1] }}
+                              transition={{
+                                duration: 0.26,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                              className="flex items-center justify-center"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                className="h-3 w-3"
+                              >
+                                <motion.path
+                                  d="M20 6 9 17l-5-5"
+                                  strokeDasharray={24}
+                                  initial={{ strokeDashoffset: 24 }}
+                                  animate={{ strokeDashoffset: 0 }}
+                                  transition={{
+                                    duration: 0.22,
+                                    ease: [0.22, 1, 0.36, 1],
+                                  }}
+                                />
+                              </svg>
+                            </motion.span>
+                          ) : (
+                            <Check className="h-3 w-3 stroke-[2.5]" />
+                          )}
                         </button>
 
                         <span className="flex min-w-0 max-w-full items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-xs text-neutral-400">
@@ -1019,17 +1137,18 @@ export function CommandCenterView() {
                         </span>
 
                         {task.accumulatedSeconds > 0 && (
-                          <span className="shrink-0 font-mono text-xs text-hud-muted">
+                          <span className="shrink-0 font-mono text-xs tabular-nums text-hud-muted">
                             {formatChronoMMSS(task.accumulatedSeconds).formatted}
                           </span>
                         )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           )}
+          </LayoutGroup>
         </div>
 
         {/* ================================================================= */}
@@ -1040,7 +1159,7 @@ export function CommandCenterView() {
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
               Today&apos;s Timeline
             </span>
-            <span className="text-xs text-hud-muted">
+            <span className="text-xs tabular-nums text-hud-muted">
               {todayLogs.length} session{todayLogs.length === 1 ? "" : "s"}{" "}
               logged
             </span>
@@ -1122,7 +1241,7 @@ export function CommandCenterView() {
                       {log.taskTitleSnapshot}
                     </div>
                     {heightPx >= 46 && (
-                      <div className="mt-0.5 font-mono text-[11px] text-neutral-400">
+                      <div className="mt-0.5 font-mono text-[11px] tabular-nums text-neutral-400">
                         {startStr} – {endStr}
                       </div>
                     )}

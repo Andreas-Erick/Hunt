@@ -61,7 +61,7 @@ function VerdictBadge({ evaluation }: { evaluation: DraftEvaluation }) {
   return (
     <span
       data-testid="lab-verdict"
-      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${styles[evaluation.verdict]}`}
+      className={`rounded-full border px-2.5 py-0.5 text-xs font-medium tabular-nums ${styles[evaluation.verdict]}`}
     >
       {labels[evaluation.verdict]} · {evaluation.score}/{evaluation.maxScore}
     </span>
@@ -133,13 +133,18 @@ export function GuideLabSection() {
     }, CONFIRM_FEEDBACK_MS);
   };
 
+  const activeQuests = useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
   const selectedQuestId = useMemo(() => {
     if (taskQuestChoice === null) return null;
-    if (taskQuestChoice && quests?.some((q) => q.id === taskQuestChoice)) {
+    if (taskQuestChoice && activeQuests.some((q) => q.id === taskQuestChoice)) {
       return taskQuestChoice;
     }
-    return quests?.[0]?.id ?? null;
-  }, [taskQuestChoice, quests]);
+    return activeQuests[0]?.id ?? null;
+  }, [taskQuestChoice, activeQuests]);
 
   const taskEvaluation = useMemo(
     () => evaluateTaskDraft(taskTitle, taskNotes),
@@ -285,7 +290,7 @@ export function GuideLabSection() {
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-quest-count"
-                    className={`font-mono text-2xl font-medium ${
+                    className={`font-mono text-2xl font-medium tabular-nums ${
                       audit.questLoadStatus === "optimal"
                         ? "text-hud-emerald"
                         : audit.questLoadStatus === "empty"
@@ -310,7 +315,7 @@ export function GuideLabSection() {
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-weekly-hours"
-                    className={`font-mono text-2xl font-medium ${
+                    className={`font-mono text-2xl font-medium tabular-nums ${
                       audit.budgetStatus === "sustainable"
                         ? "text-hud-emerald"
                         : audit.budgetStatus === "overbooked"
@@ -335,7 +340,7 @@ export function GuideLabSection() {
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-task-clarity"
-                    className={`font-mono text-2xl font-medium ${
+                    className={`font-mono text-2xl font-medium tabular-nums ${
                       audit.openTaskCount === 0
                         ? "text-neutral-300"
                         : audit.clarityPct >= 70
@@ -548,7 +553,7 @@ export function GuideLabSection() {
 
               {/* Target Quest picker */}
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Assign to Quest">
-                {(quests ?? []).map((q) => {
+                {activeQuests.map((q) => {
                   const chosen = selectedQuestId === q.id;
                   return (
                     <button

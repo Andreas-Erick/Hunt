@@ -1002,4 +1002,111 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
     expect(check.last.context?.msg).toBe("Bearer [REDACTED]");
     expect(pageErrors(p)).toEqual([]);
   });
+
+  it("applies .just-completed animation class once on task completion and sets inert on background during sheets", () => {
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Core")],
+        tasks: [
+          task("tsk-1", "Animate me", { rank: 1000, scheduledDate: localKey(NOW) }),
+          task("tsk-2", "Keep queued", { rank: 2000, scheduledDate: localKey(NOW) }),
+        ],
+      }),
+    });
+
+    p.completeTaskDirect("tsk-1");
+    const completedCard = one(p, ".queue-item-card.completed");
+    expect(completedCard.classList.contains("just-completed")).toBe(true);
+
+    // Subsequent re-renders do not replay the one-shot arrival animation
+    p.renderApp();
+    const afterRerender = one(p, ".queue-item-card.completed");
+    expect(afterRerender.classList.contains("just-completed")).toBe(false);
+
+    // Opening a sheet marks background landmarks inert; closing restores them
+    p.openNewTaskSheet();
+    for (const id of ["topHeader", "mainContainer", "fabBtn", "bottomNav"]) {
+      expect(p.document.getElementById(id)?.hasAttribute("inert")).toBe(true);
+    }
+    p.closeSheet();
+    for (const id of ["topHeader", "mainContainer", "fabBtn", "bottomNav"]) {
+      expect(p.document.getElementById(id)?.hasAttribute("inert")).toBe(false);
+    }
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("completes, undoes, and reopens quests on mobile while preserving logged hours and completed tasks", () => {
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Ship v1", "emerald"), quest("quest-2", "Write", "cyan")],
+        tasks: [
+          task("tsk-open", "Open task", { questId: "quest-1", status: "queued", rank: 1000 }),
+          task("tsk-done", "Finished task", {
+            questId: "quest-1",
+            status: "completed",
+            completedAt: NOW,
+            rank: 2000,
+          }),
+        ],
+        habits: [
+          {
+            id: "hab-1",
+            title: "Daily ship check",
+            notes: "",
+            questId: "quest-1",
+            rank: 1000,
+            createdAt: NOW,
+            updatedAt: NOW,
+          },
+        ],
+        timeLogs: [
+          {
+            id: "log-1",
+            taskId: "tsk-done",
+            taskTitleSnapshot: "Finished task",
+            questId: "quest-1",
+            questCodeSnapshot: "SHIP V1",
+            accentColorSnapshot: "emerald",
+            startTime: NOW - 7200_000,
+            endTime: NOW,
+            durationSeconds: 7200,
+            dateKey: localKey(NOW),
+          },
+        ],
+      }),
+    });
+
+    p.switchView("quests");
+    p.openQuestEditorSheet("quest-1");
+    expect(p.document.getElementById("sheetContainer")?.textContent).toContain("Complete Quest");
+
+    click(p, sheetButton(p, "✓ Complete Quest"));
+    let s = readState(p);
+    expect(s.quests.find((q) => q.id === "quest-1")?.archived).toBe(true);
+    expect(s.tasks.find((t) => t.id === "tsk-open")?.questId).toBeNull();
+    expect(s.tasks.find((t) => t.id === "tsk-done")?.questId).toBe("quest-1");
+    expect(p.eval(`state.habits.find(h => h.id === "hab-1")?.questId`)).toBeNull();
+
+    const questsText = p.document.getElementById("mainContainer")?.textContent ?? "";
+    expect(questsText).toContain("Completed Quests (1)");
+    expect(questsText).toContain("2.0h logged");
+
+    // Undo toast restores active quest and re-links unassigned open tasks & habits
+    click(p, liveToasts(p)[0].querySelector(".toast-action"));
+    s = readState(p);
+    expect(s.quests.find((q) => q.id === "quest-1")?.archived).toBe(false);
+    expect(s.tasks.find((t) => t.id === "tsk-open")?.questId).toBe("quest-1");
+    expect(p.eval(`state.habits.find(h => h.id === "hab-1")?.questId`)).toBe("quest-1");
+
+    // Complete again and reopen via Completed Quests Reopen button
+    p.openQuestEditorSheet("quest-1");
+    click(p, sheetButton(p, "✓ Complete Quest"));
+    expect(readState(p).quests.find((q) => q.id === "quest-1")?.archived).toBe(true);
+    click(p, one(p, 'button[aria-label="Reopen quest Ship v1"]'));
+    expect(readState(p).quests.find((q) => q.id === "quest-1")?.archived).toBe(false);
+    expect(p.document.getElementById("mainContainer")?.textContent).not.toContain(
+      "Completed Quests"
+    );
+    expect(pageErrors(p)).toEqual([]);
+  });
 });

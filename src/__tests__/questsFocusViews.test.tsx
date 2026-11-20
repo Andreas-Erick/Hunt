@@ -1487,5 +1487,79 @@ describe("QuestMatrixPanel", () => {
       expect(taskTitle).toHaveClass("truncate");
       expect(taskTitle).toHaveAttribute("title", "T".repeat(200));
     });
+
+    it("completes a quest with two-step confirmation into Completed Quests with logged hours, and reopens it", async () => {
+      const today = toLocalDateKey();
+      // seedTwoQuests already seeded quest-0 ("Launch" with tsk-a, tsk-b) and quest-1 ("Write" with tsk-c).
+      await seed({
+        quests: [makeQuest("quest-2", "Empty Quest", 2)],
+        tasks: [
+          makeTask("tsk-done-1", "Already done", "quest-0", 3000, {
+            status: "completed",
+            completedAt: Date.now(),
+          }),
+        ],
+        logs: [makeLog("log-q0", today, "quest-0", 5400)], // 1.5h
+      });
+
+      render(<QuestMatrixPanel />);
+      await screen.findByRole("heading", { level: 2, name: "Launch" });
+
+      // Empty quest shows "Complete quest?" without open-task suffix when armed
+      const emptyComplete = screen.getByRole("button", {
+        name: "Complete quest Empty Quest",
+      });
+      fireEvent.click(emptyComplete);
+      expect(emptyComplete).toHaveAttribute("data-state", "armed");
+      expect(emptyComplete).toHaveAccessibleName("Complete quest?");
+
+      // Quest with 2 open tasks announces how many open tasks move to Other work
+      const launchComplete = screen.getByRole("button", {
+        name: "Complete quest Launch",
+      });
+      fireEvent.click(launchComplete);
+      expect(launchComplete).toHaveAttribute("data-state", "armed");
+      expect(launchComplete).toHaveAccessibleName(
+        "Complete quest? 2 open tasks move to Other work"
+      );
+
+      // Rapid double-click second event (detail=2) is ignored while armed
+      fireEvent.click(launchComplete, { detail: 2 });
+      expect((await inAct(() => db.quests.get("quest-0")))?.archived).toBe(false);
+
+      // Deliberate second click completes the quest
+      fireEvent.click(launchComplete);
+      await waitFor(async () =>
+        expect((await db.quests.get("quest-0"))?.archived).toBe(true)
+      );
+
+      // Open tasks moved to Other work (null); completed task keeps quest-0
+      expect((await inAct(() => db.tasks.get("tsk-a")))?.questId).toBeNull();
+      expect((await inAct(() => db.tasks.get("tsk-b")))?.questId).toBeNull();
+      expect((await inAct(() => db.tasks.get("tsk-done-1")))?.questId).toBe("quest-0");
+
+      // Renders in Completed Quests section with 1.5h logged and Reopen button
+      const completedSection = await screen.findByRole("region", {
+        name: "Completed Quests",
+      });
+      expect(
+        within(completedSection).getByRole("heading", { level: 3, name: "Launch" })
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(within(completedSection).getByText("1.5h logged")).toBeInTheDocument()
+      );
+
+      // Reopen moves it back to Active Quests
+      fireEvent.click(
+        within(completedSection).getByRole("button", { name: "Reopen quest Launch" })
+      );
+      await waitFor(async () =>
+        expect((await db.quests.get("quest-0"))?.archived).toBe(false)
+      );
+      expect(
+        await screen.findByRole("heading", { level: 2, name: "Launch" })
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Completed Quests" })).toBeNull();
+    });
   });
 });

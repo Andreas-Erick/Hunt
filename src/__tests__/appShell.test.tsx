@@ -1223,4 +1223,67 @@ describe("desktop launcher, taskbar favicon & audio persistence", () => {
     ).toBeInTheDocument();
     window.localStorage.removeItem(AUDIO_MUTED_STORAGE_KEY);
   });
+
+  it("MobileSyncModal sets inert on background siblings while open and restores on close", () => {
+    const appMain = document.createElement("main");
+    document.body.appendChild(appMain);
+    const opener = document.createElement("button");
+    appMain.appendChild(opener);
+    opener.focus();
+
+    try {
+      const { rerender } = render(<MobileSyncModal isOpen onClose={() => undefined} />);
+      expect(appMain.hasAttribute("inert")).toBe(true);
+
+      rerender(<MobileSyncModal isOpen={false} onClose={() => undefined} />);
+      expect(appMain.hasAttribute("inert")).toBe(false);
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      appMain.remove();
+    }
+  });
+
+  it("hudAudio.dispose() deterministically closes an open AudioContext and is idempotent", async () => {
+    const { hudAudio } = await import("@/lib/hudAudio");
+    const closeSpy = vi.fn(async () => undefined);
+    const OriginalAudioContext = window.AudioContext;
+    class MockAudioContext {
+      state = "running";
+      currentTime = 0;
+      destination = {};
+      close = closeSpy;
+      resume = vi.fn(async () => undefined);
+      createOscillator = vi.fn(() => ({
+        type: "sine",
+        frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+        connect: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      }));
+      createGain = vi.fn(() => ({
+        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+        connect: vi.fn(),
+      }));
+    }
+    Object.defineProperty(window, "AudioContext", {
+      value: MockAudioContext,
+      configurable: true,
+      writable: true,
+    });
+    try {
+      hudAudio.muted = false;
+      hudAudio.playClick();
+      await hudAudio.dispose();
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+      // Second call is an idempotent no-op
+      await hudAudio.dispose();
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(window, "AudioContext", {
+        value: OriginalAudioContext,
+        configurable: true,
+        writable: true,
+      });
+    }
+  });
 });

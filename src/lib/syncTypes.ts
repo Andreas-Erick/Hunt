@@ -293,7 +293,7 @@ const TASK_STATUSES: Record<TaskStatus, true> = {
 
 const QUEST_FIELDS: ReadonlySet<string> = new Set([
   "id", "slotIndex", "title", "description", "accentColor", "targetWeeklyHours",
-  "createdAt", "updatedAt",
+  "archived", "createdAt", "updatedAt", "completedAt",
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
@@ -315,9 +315,11 @@ const LOG_FIELDS: ReadonlySet<string> = new Set([
  * +Infinity in R2). Every field that is present has been checked; a quest's
  * code/archived and a log's questCodeSnapshot come from copyScalarExtras.
  */
-type QuestRow = Omit<Quest, "description" | "createdAt" | "code" | "archived"> & {
+type QuestRow = Omit<Quest, "description" | "createdAt" | "code" | "archived" | "completedAt"> & {
   description?: string;
+  archived?: boolean;
   createdAt?: number;
+  completedAt?: number | null;
 };
 type HabitRow = Omit<Habit, "notes" | "rank" | "createdAt"> & {
   notes?: string;
@@ -430,8 +432,12 @@ export function sanitizeQuest(raw: unknown): Quest | null {
   if (typeof raw.description === "string") {
     quest.description = clampText(raw.description, MAX_LONG_TEXT_LENGTH);
   }
+  if (typeof raw.archived === "boolean") quest.archived = raw.archived;
   if (isStamp(raw.createdAt)) quest.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) quest.updatedAt = raw.updatedAt;
+  if (raw.completedAt === null || isStamp(raw.completedAt)) {
+    quest.completedAt = raw.completedAt;
+  }
   copyScalarExtras(quest, raw, QUEST_FIELDS);
   return quest as Quest;
 }

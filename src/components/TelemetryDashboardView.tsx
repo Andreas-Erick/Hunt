@@ -92,15 +92,34 @@ export function TelemetryDashboardView() {
 
   const weekLogs = React.useMemo(() => loggedThisWeek ?? [], [loggedThisWeek]);
 
+  // Single-pass O(L) aggregation by day and by quest (eliminates nested O(Q * L) scans).
+  const { byDay, byQuest } = React.useMemo(() => {
+    const dayTotals = new Map<string, { questSec: number; otherSec: number }>();
+    const questTotals = new Map<string, number>();
+    for (const log of weekLogs) {
+      let bucket = dayTotals.get(log.dateKey);
+      if (!bucket) {
+        bucket = { questSec: 0, otherSec: 0 };
+        dayTotals.set(log.dateKey, bucket);
+      }
+      if (log.questId !== null) {
+        bucket.questSec += log.durationSeconds;
+        questTotals.set(
+          log.questId,
+          (questTotals.get(log.questId) ?? 0) + log.durationSeconds
+        );
+      } else {
+        bucket.otherSec += log.durationSeconds;
+      }
+    }
+    return { byDay: dayTotals, byQuest: questTotals };
+  }, [weekLogs]);
+
   const dailyData = React.useMemo(() => {
     return weekDays.map((day) => {
-      const dayLogs = weekLogs.filter((l) => l.dateKey === day.dateKey);
-      const questSec = dayLogs
-        .filter((l) => l.questId !== null)
-        .reduce((acc, l) => acc + l.durationSeconds, 0);
-      const otherSec = dayLogs
-        .filter((l) => l.questId === null)
-        .reduce((acc, l) => acc + l.durationSeconds, 0);
+      const bucket = byDay.get(day.dateKey);
+      const questSec = bucket?.questSec ?? 0;
+      const otherSec = bucket?.otherSec ?? 0;
 
       return {
         ...day,
@@ -108,15 +127,23 @@ export function TelemetryDashboardView() {
         otherHours: Number((otherSec / 3600).toFixed(1)),
       };
     });
-  }, [weekDays, weekLogs]);
+  }, [weekDays, byDay]);
 
   const totalQuestHours = dailyData.reduce((acc, d) => acc + d.questHours, 0);
   const totalOtherHours = dailyData.reduce((acc, d) => acc + d.otherHours, 0);
   const grandTotalHours = totalQuestHours + totalOtherHours;
 
+  const activeQuests = React.useMemo(
+    () => (quests ?? []).filter((q) => !q.archived),
+    [quests]
+  );
+
   const totalWeeklyTargetHours = React.useMemo(() => {
-    return (quests ?? []).reduce((acc, q) => acc + (Number(q.targetWeeklyHours) || 0), 0);
-  }, [quests]);
+    return activeQuests.reduce(
+      (acc, q) => acc + (Number(q.targetWeeklyHours) || 0),
+      0
+    );
+  }, [activeQuests]);
 
   const targetPct =
     totalWeeklyTargetHours > 0
@@ -140,16 +167,16 @@ export function TelemetryDashboardView() {
   );
 
   const hoursByQuest = React.useMemo(() => {
-    return (quests ?? []).map((q) => {
-      const sec = weekLogs
-        .filter((l) => l.questId === q.id)
-        .reduce((acc, l) => acc + l.durationSeconds, 0);
-      return {
-        quest: q,
-        hours: Number((sec / 3600).toFixed(1)),
-      };
-    });
-  }, [quests, weekLogs]);
+    return (quests ?? [])
+      .map((q) => {
+        const sec = byQuest.get(q.id) ?? 0;
+        return {
+          quest: q,
+          hours: Number((sec / 3600).toFixed(1)),
+        };
+      })
+      .filter(({ quest, hours }) => !quest.archived || hours > 0);
+  }, [quests, byQuest]);
 
   const maxQuestHours = Math.max(
     4,
@@ -335,7 +362,7 @@ export function TelemetryDashboardView() {
             </div>
 
             <div className="space-y-5">
-              {quests !== undefined && quests.length === 0 && (
+              {quests !== undefined && hoursByQuest.length === 0 && (
                 <p className="text-sm text-hud-muted">
                   No quests yet. Create one in Quests.
                 </p>
@@ -357,6 +384,11 @@ export function TelemetryDashboardView() {
                         <span className="truncate text-neutral-200" title={quest.title}>
                           {quest.title}
                         </span>
+                        {quest.archived && (
+                          <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-hud-muted">
+                            Completed
+                          </span>
+                        )}
                       </div>
                       <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-300">
                         {hours}h
