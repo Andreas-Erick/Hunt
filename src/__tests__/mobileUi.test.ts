@@ -763,9 +763,9 @@ describe("WCAG AA contrast (MUI-06)", () => {
 });
 
 describe("narrow header (MUI-11)", () => {
-  it("the mute button and the live timer never shrink; at <= 340 px the bar and the sync chip give way", () => {
+  it("the review button and the live timer never shrink; at <= 340 px the bar and the sync chip give way", () => {
     const p = load({ seedState: baseState() });
-    expect(p.getComputedStyle(one(p, "#muteBtn")).flexShrink).toBe("0");
+    expect(p.getComputedStyle(one(p, "#reviewBtn")).flexShrink).toBe("0");
     expect(p.getComputedStyle(one(p, "#activeHeaderPill")).flexShrink).toBe("0");
     const narrow = block(cssText(p), "@media (max-width: 340px)");
     expect(block(narrow, ".app-bar")).toContain("padding-left: calc(12px + var(--safe-left))");
@@ -1122,5 +1122,407 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
       "Completed Quests"
     );
     expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("keeps a clean 5-tab bottom bar and routes to Review via top-bar button and Today's hours pill", () => {
+    const p = load({ seedState: baseState() });
+    const navButtons = Array.from(p.document.querySelectorAll("#bottomNav .nav-tab"));
+    expect(navButtons.map((b) => b.textContent?.trim())).toEqual([
+      "Today",
+      "Plan",
+      "Focus",
+      "Quests",
+      "Habits",
+    ]);
+    expect(p.document.getElementById("nav-telemetry")).toBeNull();
+
+    // Tapping Today's hours summary pill opens Weekly Review and highlights #reviewBtn
+    const statsPill = one(p, ".hero-stats-pill");
+    expect(statsPill.tagName).toBe("BUTTON");
+    expect(px(p.getComputedStyle(statsPill).minHeight)).toBeGreaterThanOrEqual(48);
+    click(p, statsPill);
+    expect(p.document.body.getAttribute("data-view")).toBe("telemetry");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Weekly review");
+    const reviewBtn = one(p, "#reviewBtn");
+    expect(reviewBtn.classList.contains("active")).toBe(true);
+    expect(reviewBtn.getAttribute("aria-current")).toBe("page");
+    expect(navButtons.every((b) => !b.classList.contains("active"))).toBe(true);
+
+    // Switch back to Today, then open Review via the top-bar #reviewBtn
+    click(p, p.document.getElementById("nav-command"));
+    expect(reviewBtn.classList.contains("active")).toBe(false);
+    expect(reviewBtn.hasAttribute("aria-current")).toBe(false);
+    click(p, reviewBtn);
+    expect(p.document.body.getAttribute("data-view")).toBe("telemetry");
+    expect(reviewBtn.classList.contains("active")).toBe(true);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("anchors compact confirmation pills near the bottom bar and never floats them mid-screen while the keyboard closes", () => {
+    const p = load({ seedState: baseState() });
+    const css = cssText(p);
+    // Removed interactive-widget=resizes-content from static viewport; native IME sets overlays-content
+    const initialVp = p.document.getElementById("viewportMeta")?.getAttribute("content") ?? "";
+    expect(initialVp).not.toContain("resizes-content");
+
+    // Simulate opening New Task with Android 11+ IME up (320dp)
+    p.openNewTaskSheet();
+    p.eval("window.__huntSetIme(320)");
+    expect(p.document.getElementById("viewportMeta")?.getAttribute("content")).toContain(
+      "interactive-widget=overlays-content"
+    );
+    expect(p.document.body.classList.contains("native-ime")).toBe(true);
+    expect(p.document.body.classList.contains("keyboard-open")).toBe(true);
+    expect(p.document.body.classList.contains("keyboard-typing")).toBe(true);
+    expect(p.document.querySelector("#sheetContainer .sheet-kb-lift")).not.toBeNull();
+    // slideUp keyframe no longer embeds var(--kb) (compositor-only, separated onto .sheet-kb-lift)
+    expect(block(css, "@keyframes slideUp")).not.toContain("--kb");
+
+    // Submit while the OS keyboard is still at 320dp (beginning its dismiss slide):
+    // blur clears keyboard-typing immediately so the toast pill stays anchored at the bottom bar!
+    field(p, "sheetTaskTitle").value = "Ship smooth keyboard";
+    click(p, sheetButton(p, "↑ Add to Top (#1)"));
+    expect(sheetKind(p)).toBeNull();
+    expect(p.document.body.classList.contains("keyboard-typing")).toBe(false);
+    expect(p.document.body.classList.contains("has-toast")).toBe(true);
+
+    const [pill] = liveToasts(p);
+    expect(pill.querySelector(".toast-icon")).not.toBeNull();
+    expect(pill.querySelector(".toast-msg")?.textContent).toBe("Task added · #1 Today");
+    expect(block(css, ".toast")).toContain("border-radius: 999px");
+    expect(block(css, ".toast-host")).toContain("bottom: calc(78px + var(--safe-bottom))");
+
+    // Once the plain confirmation expires (2.4s), body.has-toast clears so the FAB settles back
+    vi.advanceTimersByTime(2500);
+    expect(liveToasts(p)).toHaveLength(0);
+    expect(p.document.body.classList.contains("has-toast")).toBe(false);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("locks interactive-widget=overlays-content synchronously at boot when HuntSmoothIme/1 is in User-Agent", () => {
+    const p = load({
+      seedState: baseState(),
+      beforeBoot(win) {
+        Object.defineProperty(win.navigator, "userAgent", {
+          value: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 Mobile Safari/537.36 HuntSmoothIme/1",
+          configurable: true,
+        });
+      },
+    });
+    expect(p.document.getElementById("viewportMeta")?.getAttribute("content")).toContain(
+      "interactive-widget=overlays-content"
+    );
+    expect(p.document.body.classList.contains("native-ime")).toBe(true);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("allows deleting completed tasks from Today, Plan, and Quests with 48px touch target and full Undo restore", () => {
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Core", "cyan")],
+        tasks: [
+          task("tsk-done-1", "Finished report", {
+            status: "completed",
+            completedAt: NOW,
+            accumulatedSeconds: 1800,
+            scheduledDate: localKey(NOW),
+          }),
+          task("tsk-done-2", "Archived chore", {
+            status: "completed",
+            completedAt: NOW - 1000,
+            accumulatedSeconds: 600,
+            scheduledDate: localKey(NOW),
+          }),
+        ],
+      }),
+    });
+
+    const css = cssText(p);
+    expect(30 - 2 * declPx(css, ".completed-delete-btn::after", "top")).toBeGreaterThanOrEqual(48);
+    expect(
+      30 - declPx(css, ".completed-delete-btn::after", "left") - declPx(css, ".completed-delete-btn::after", "right")
+    ).toBeGreaterThanOrEqual(48);
+
+    const delBtn = one(p, 'button[aria-label="Delete completed task Finished report"]');
+    expect(p.getComputedStyle(delBtn).flexShrink).toBe("0");
+    click(p, delBtn);
+
+    let s = readState(p);
+    expect(s.tasks.map((t) => t.id)).toEqual(["tsk-done-2"]);
+    expect(s.deletedTaskIds).toContain("tsk-done-1");
+    expect(toastTexts(p)).toEqual(["Deleted · Finished report"]);
+    const undoBtn = must(liveToasts(p)[0].querySelector(".toast-action"), "Undo action button");
+    expect(p.getComputedStyle(undoBtn).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+
+    // Undo restores the completed task with its completed status, timestamp, and logged seconds intact
+    click(p, liveToasts(p)[0].querySelector(".toast-action"));
+    s = readState(p);
+    const restored = s.tasks.find((t) => t.id === "tsk-done-1");
+    expect(restored).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        completedAt: NOW,
+        accumulatedSeconds: 1800,
+      })
+    );
+    expect(s.deletedTaskIds).toEqual([]);
+
+    // Also present in Plan and Quests completed sections
+    p.switchView("plan");
+    expect(p.document.querySelector('button[aria-label="Delete completed task Finished report"]')).not.toBeNull();
+    p.switchView("quests");
+    expect(p.document.querySelector('button[aria-label="Delete completed task Finished report"]')).not.toBeNull();
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("holds sync during a completed-task delete Undo window, flushes on expiry or Sync Now, and never resurrects from stale remote sync", async () => {
+    function sentTaskTombstone(calls: Call[], taskId: string): boolean {
+      return calls.some((c) => {
+        const body: unknown = JSON.parse(c.body);
+        const ids = body && typeof body === "object" && "deletedTaskIds" in body ? body.deletedTaskIds : null;
+        return Array.isArray(ids) && ids.includes(taskId);
+      });
+    }
+
+    // Laptop still holds the old completed task copy (updatedAt ahead of NOW)
+    const staleLaptopTask = task("tsk-done-sync", "Shipped feature", {
+      status: "completed",
+      completedAt: NOW + 5000,
+      updatedAt: NOW + 5000,
+      accumulatedSeconds: 2400,
+      scheduledDate: localKey(NOW),
+    });
+
+    const net = recorder((call) => {
+      const sent = JSON.parse(call.body) as { deletedTaskIds?: string[] };
+      const delSet = new Set(sent.deletedTaskIds ?? []);
+      return jsonResponse(200, {
+        payload: {
+          quests: [quest("quest-1", "Core", "cyan")],
+          tasks: delSet.has("tsk-done-sync") ? [] : [staleLaptopTask],
+          timeLogs: [],
+          deletedQuestIds: [],
+          deletedTaskIds: Array.from(delSet),
+          deletedLogIds: [],
+        },
+      });
+    });
+
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Core", "cyan")],
+        tasks: [staleLaptopTask],
+        timeLogs: [],
+      }),
+      fetchImpl: net.impl,
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(net.calls).toHaveLength(1);
+
+    // 1) Delete completed task, wait 3s (inside 5s hold), verify tombstone NOT sent yet, then Undo
+    click(p, one(p, 'button[aria-label="Delete completed task Shipped feature"]'));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sentTaskTombstone(net.calls, "tsk-done-sync")).toBe(false);
+    click(p, liveToasts(p)[0].querySelector(".toast-action"));
+    expect(readState(p).tasks.find((t) => t.id === "tsk-done-sync")?.status).toBe("completed");
+    expect(readState(p).deletedTaskIds).toEqual([]);
+
+    // 2) Delete again and let the 5s Undo window expire -> tombstone syncs out and wins over stale remote copy
+    click(p, one(p, 'button[aria-label="Delete completed task Shipped feature"]'));
+    await vi.advanceTimersByTimeAsync(4500);
+    expect(sentTaskTombstone(net.calls, "tsk-done-sync")).toBe(false);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sentTaskTombstone(net.calls, "tsk-done-sync")).toBe(true);
+
+    // Even if a stale remote payload arrives still containing tsk-done-sync, local tombstone suppresses resurrection
+    p.applyRemotePayload({
+      quests: [quest("quest-1", "Core", "cyan")],
+      tasks: [staleLaptopTask],
+      timeLogs: [],
+      deletedQuestIds: [],
+      deletedTaskIds: [],
+      deletedLogIds: [],
+    });
+    expect(readState(p).tasks.find((t) => t.id === "tsk-done-sync")).toBeUndefined();
+    expect(readState(p).deletedTaskIds).toContain("tsk-done-sync");
+
+    // 3) Explicit Sync Now during an active delete Undo window settles the hold immediately and pushes the delete
+    p.openNewTaskSheet();
+    field(p, "sheetTaskTitle").value = "Quick check";
+    click(p, sheetButton(p, "↑ Add to Top (#1)"));
+    const addedId = must(
+      readState(p).tasks.find((t) => t.title === "Quick check")?.id,
+      "added task id"
+    );
+    p.completeTaskDirect(addedId);
+    click(p, one(p, 'button[aria-label="Delete completed task Quick check"]'));
+    expect(sentTaskTombstone(net.calls, addedId)).toBe(false);
+    await p.syncNow();
+    expect(sentTaskTombstone(net.calls, addedId)).toBe(true);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("deleting today's completed daily-habit task suppresses same-day resurrection while still materializing tomorrow", () => {
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Core", "cyan")],
+        tasks: [],
+        habits: [
+          {
+            id: "hab-read",
+            title: "Read 20 pages",
+            notes: "",
+            questId: "quest-1",
+            rank: 1000,
+            createdAt: NOW - 10_000,
+            updatedAt: NOW - 10_000,
+          },
+        ],
+      }),
+    });
+
+    const todayKey = localKey(NOW);
+    const tomorrowKey = p.dayKeyOffset(1);
+    const todayTid = `habtsk-${todayKey}-hab-read`;
+    const tomorrowTid = `habtsk-${tomorrowKey}-hab-read`;
+
+    // Boot materialized today's habit task; complete it, then delete the completed copy
+    expect(readState(p).tasks.map((t) => t.id)).toEqual([todayTid]);
+    p.completeTaskDirect(todayTid);
+    click(p, one(p, 'button[aria-label="Delete completed task Read 20 pages"]'));
+    expect(readState(p).tasks).toEqual([]);
+    expect(readState(p).deletedTaskIds).toContain(todayTid);
+
+    // Same-day materialization and remote sync must NOT resurrect today's deleted habit task
+    expect(p.eval(`materializeDailyHabits(${JSON.stringify(todayKey)})`)).toBe(0);
+    p.applyRemotePayload({
+      quests: [quest("quest-1", "Core", "cyan")],
+      habits: [
+        {
+          id: "hab-read",
+          title: "Read 20 pages",
+          notes: "",
+          questId: "quest-1",
+          rank: 1000,
+          createdAt: NOW - 10_000,
+          updatedAt: NOW - 10_000,
+        },
+      ],
+      tasks: [
+        task(todayTid, "Read 20 pages", {
+          habitId: "hab-read",
+          scheduledDate: todayKey,
+          status: "completed",
+          completedAt: NOW,
+        }),
+      ],
+      timeLogs: [],
+      deletedQuestIds: [],
+      deletedTaskIds: [],
+      deletedLogIds: [],
+    });
+    expect(readState(p).tasks).toEqual([]);
+
+    // Next calendar day still materializes a fresh daily instance
+    expect(p.eval(`materializeDailyHabits(${JSON.stringify(tomorrowKey)})`)).toBe(1);
+    expect(readState(p).tasks.map((t) => t.id)).toEqual([tomorrowTid]);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("seeded chaos fuzz (150 steps): rapid deletes, Undos, reopens, completions and remote sync merges preserve all tombstone invariants", () => {
+    const seed = 20261120;
+    const rnd = seededRandom(seed);
+    const pick = (n: number) => Math.floor(rnd() * n);
+
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Alpha", "cyan"), quest("quest-2", "Beta", "emerald")],
+        tasks: [
+          task("tsk-1", "One", { rank: 1000, scheduledDate: localKey(NOW) }),
+          task("tsk-2", "Two", { rank: 2000, questId: "quest-2", scheduledDate: localKey(NOW) }),
+          task("tsk-3", "Three", {
+            rank: 3000,
+            status: "completed",
+            completedAt: NOW - 500,
+            scheduledDate: localKey(NOW),
+          }),
+        ],
+        habits: [
+          { id: "hab-1", title: "Stretch", notes: "", questId: "quest-1", rank: 1000, createdAt: 10, updatedAt: 10 },
+        ],
+      }),
+    });
+
+    for (let step = 0; step < 150; step++) {
+      const at = `seed ${seed} step ${step}`;
+      const cur = readState(p);
+      const action = pick(9);
+
+      if (action === 0) {
+        p.openNewTaskSheet();
+        field(p, "sheetTaskTitle").value = "Task " + step;
+        click(p, sheetButton(p, pick(2) === 0 ? "↑ Add to Top (#1)" : "↓ Add to Bottom"));
+      } else if (action === 1 && cur.tasks.length > 0) {
+        const target = cur.tasks[pick(cur.tasks.length)];
+        if (target.status === "completed") p.reopenTaskDirect(target.id);
+        else p.completeTaskDirect(target.id);
+      } else if (action === 2) {
+        const delBtns = Array.from(p.document.querySelectorAll(".completed-delete-btn"));
+        if (delBtns.length > 0) click(p, delBtns[pick(delBtns.length)]);
+      } else if (action === 3 && cur.tasks.length > 0) {
+        p.deleteTaskItem(cur.tasks[pick(cur.tasks.length)].id);
+      } else if (action === 4) {
+        const undoBtns = Array.from(p.document.querySelectorAll("#toastHost .toast:not(.leaving) .toast-action"));
+        if (undoBtns.length > 0) {
+          const target = undoBtns[pick(undoBtns.length)];
+          for (let k = 0; k < 1 + pick(4); k++) click(p, target);
+        }
+      } else if (action === 5 && cur.quests.length > 0 && pick(3) === 0) {
+        p.deleteQuestItem(cur.quests[pick(cur.quests.length)].id);
+      } else if (action === 6) {
+        const views = ["command", "plan", "quests", "habits", "telemetry"];
+        p.switchView(views[pick(views.length)]);
+      } else if (action === 7) {
+        p.applyRemotePayload({
+          quests: [quest("quest-remote", "Remote Quest", "amber", { updatedAt: NOW + step })],
+          tasks: [
+            task("tsk-remote-" + (step % 4), "Remote " + step, {
+              questId: "quest-remote",
+              status: step % 2 === 0 ? "completed" : "queued",
+              completedAt: step % 2 === 0 ? NOW + step : undefined,
+              updatedAt: NOW + step,
+              scheduledDate: localKey(NOW),
+            }),
+          ],
+          timeLogs: [],
+          deletedQuestIds: [],
+          deletedTaskIds: [],
+          deletedLogIds: [],
+        });
+      } else {
+        vi.advanceTimersByTime(pick(3500));
+      }
+
+      const after = readState(p) as ReturnType<typeof readState> & {
+        habits?: Array<{ id: string; questId?: string | null }>;
+        deletedHabitIds?: string[];
+      };
+      const taskIds = after.tasks.map((t) => t.id);
+      expect(new Set(taskIds).size, at).toBe(taskIds.length);
+      const delTaskSet = new Set(after.deletedTaskIds);
+      expect(taskIds.some((id) => delTaskSet.has(id)), at).toBe(false);
+
+      const questIds = new Set(after.quests.map((q) => q.id));
+      const delQuestSet = new Set(after.deletedQuestIds);
+      expect(after.quests.some((q) => delQuestSet.has(q.id)), at).toBe(false);
+      for (const t of after.tasks) {
+        if (t.questId !== null && t.questId !== undefined) {
+          expect(delQuestSet.has(String(t.questId)), at).toBe(false);
+          expect(questIds.has(String(t.questId)) || !delQuestSet.has(String(t.questId)), at).toBe(true);
+        }
+      }
+      expect(pageErrors(p), at).toEqual([]);
+    }
   });
 });

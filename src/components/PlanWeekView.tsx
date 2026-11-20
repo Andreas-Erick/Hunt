@@ -674,58 +674,68 @@ export function PlanWeekView() {
                       <div className="break-words text-sm text-hud-muted line-through">
                         {task.title}
                       </div>
-                      <div className="mt-3 flex min-w-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => reopenTaskById(task.id)}
-                          title="Reopen task"
-                          aria-label="Reopen task"
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
-                        >
-                          {isJustCompleted ? (
-                            <motion.span
-                              initial={{ scale: 0.72 }}
-                              animate={{ scale: [0.72, 1.16, 1] }}
-                              transition={{
-                                duration: 0.24,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                              className="flex items-center justify-center"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                                className="h-2.5 w-2.5"
+                      <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => reopenTaskById(task.id)}
+                            title="Reopen task"
+                            aria-label="Reopen task"
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
+                          >
+                            {isJustCompleted ? (
+                              <motion.span
+                                initial={{ scale: 0.72 }}
+                                animate={{ scale: [0.72, 1.16, 1] }}
+                                transition={{
+                                  duration: 0.24,
+                                  ease: [0.22, 1, 0.36, 1],
+                                }}
+                                className="flex items-center justify-center"
                               >
-                                <motion.path
-                                  d="M20 6 9 17l-5-5"
-                                  strokeDasharray={24}
-                                  initial={{ strokeDashoffset: 24 }}
-                                  animate={{ strokeDashoffset: 0 }}
-                                  transition={{
-                                    duration: 0.2,
-                                    ease: [0.22, 1, 0.36, 1],
-                                  }}
-                                />
-                              </svg>
-                            </motion.span>
-                          ) : (
-                            <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                          )}
-                        </button>
-                        <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-neutral-400">
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bg}`}
-                          />
-                          <span className="max-w-[115px] truncate" title={questLabel}>
-                            {questLabel}
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                  className="h-2.5 w-2.5"
+                                >
+                                  <motion.path
+                                    d="M20 6 9 17l-5-5"
+                                    strokeDasharray={24}
+                                    initial={{ strokeDashoffset: 24 }}
+                                    animate={{ strokeDashoffset: 0 }}
+                                    transition={{
+                                      duration: 0.2,
+                                      ease: [0.22, 1, 0.36, 1],
+                                    }}
+                                  />
+                                </svg>
+                              </motion.span>
+                            ) : (
+                              <Check className="h-2.5 w-2.5 stroke-[2.5]" />
+                            )}
+                          </button>
+                          <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-neutral-400">
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bg}`}
+                            />
+                            <span className="max-w-[115px] truncate" title={questLabel}>
+                              {questLabel}
+                            </span>
                           </span>
-                        </span>
+                        </div>
+
+                        <ConfirmDeleteButton
+                          label="Delete task"
+                          onConfirm={() => deleteTask(task.id)}
+                          className="shrink-0 text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </ConfirmDeleteButton>
                       </div>
                     </div>
                   );

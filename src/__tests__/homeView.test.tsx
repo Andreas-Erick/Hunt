@@ -28,7 +28,8 @@ import {
   type Task,
   type TimeLog,
 } from "@/lib/db";
-import { compareRank } from "@/lib/syncTypes";
+import { compareRank, createEmptySyncPayload, mergeSyncPayloads } from "@/lib/syncTypes";
+import { applyMergedPayloadToLocalDB, buildLocalSyncPayload } from "@/lib/syncEngine";
 import { useCommandStore } from "@/store/useCommandStore";
 import { CommandCenterView } from "@/components/CommandCenterView";
 
@@ -1254,6 +1255,58 @@ describe("CommandCenterView (Home)", () => {
       await waitFor(async () =>
         expect((await db.tasks.get("tsk-n"))?.notes).toBe("Saved with shortcut")
       );
+    });
+
+    it("deletes a completed task via two-step confirm, writes its sync tombstone, and prevents remote resurrection", async () => {
+      const doneTask: Task = {
+        ...makeTask("tsk-done-del", "Completed milestone", "quest-0", 1000),
+        status: "completed",
+        completedAt: Date.now() - 1000,
+        updatedAt: Date.now() - 1000,
+      };
+      await seed({
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [makeTask("tsk-open", "Still open", "quest-0", 2000), doneTask],
+      });
+
+      render(<CommandCenterView />);
+      await screen.findByRole("button", { name: "Still open" });
+      const completedRow = screen.getByTestId("completed-task-row");
+      const del = within(completedRow).getByRole("button", { name: "Delete task" });
+
+      // Step 1 arms without deleting; rapid double-click (detail: 2) does not bypass confirmation
+      fireEvent.click(del);
+      expect(del).toHaveAttribute("data-state", "armed");
+      expect(del).toHaveAccessibleName("Confirm delete?");
+      fireEvent.click(del, { detail: 2 });
+      expect(await db.tasks.get("tsk-done-del")).toBeDefined();
+
+      // Step 2 confirms deletion and records the tombstone for cross-device sync
+      fireEvent.click(del);
+      await waitFor(async () => expect(await db.tasks.get("tsk-done-del")).toBeUndefined());
+      expect(screen.queryByTestId("completed-task-row")).toBeNull();
+
+      const tombstones = JSON.parse(window.localStorage.getItem(TOMBSTONE_KEY) ?? "{}") as {
+        deletedTaskIds?: string[];
+      };
+      expect(tombstones.deletedTaskIds).toContain("tsk-done-del");
+
+      // Merging against a remote peer that still holds the completed task never resurrects it
+      const localPayload = await buildLocalSyncPayload({
+        activeTaskId: null,
+        isRunning: false,
+        sessionStartedAt: null,
+        updatedAt: 0,
+      });
+      const remotePayload = {
+        ...createEmptySyncPayload(),
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [{ ...doneTask, updatedAt: Date.now() + 60_000 }],
+      };
+      const merged = mergeSyncPayloads(localPayload, remotePayload);
+      await applyMergedPayloadToLocalDB(merged);
+      expect(await db.tasks.get("tsk-done-del")).toBeUndefined();
+      expect(await db.tasks.get("tsk-open")).toBeDefined();
     });
   });
 });

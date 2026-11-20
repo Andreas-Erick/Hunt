@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="viewport" id="viewportMeta" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#08090c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -39,8 +39,9 @@
       --safe-left: env(safe-area-inset-left, 0px);   /* landscape cutouts / rounded corners */
       --safe-right: env(safe-area-inset-right, 0px);
       --touch-min: 48px; /* Android minimum touch target (48 dp) */
-      --sheet-pad-bottom: 28px; /* bottom sheets' bottom padding (the sticky .sheet-actions bar covers it) */
-      --kb: 0px; /* native Android 11+ IME height driven frame-by-frame by WindowInsetsAnimation */
+      --sheet-pad-bottom: 18px; /* bottom sheets' bottom padding (the sticky .sheet-actions bar covers it) */
+      --kb: 0px; /* native Android 11+ IME height driven frame-by-frame by WindowInsetsAnimation (compositor only) */
+      --kb-settled: 0px; /* settled IME height updated once after animation (zero per-frame layout reflow) */
     }
 
     * {
@@ -55,7 +56,7 @@
       color: var(--text);
       font-family: var(--font-sans);
       min-height: 100vh;
-      min-height: 100dvh;
+      min-height: 100svh;
       /* clip (not hidden): hidden turned <body> into a scroll container and broke the sticky app bar */
       overflow-x: clip;
       user-select: none;
@@ -269,6 +270,12 @@
       flex-shrink: 0;
       padding: 0;
       cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .icon-circle-btn.active {
+      background: rgba(0, 240, 255, 0.14);
+      border-color: rgba(0, 240, 255, 0.36);
+      color: var(--cyan);
     }
 
     .dot-indicator {
@@ -308,7 +315,10 @@
       position: relative;
       max-width: 560px;
       margin: 0 auto;
-      padding: 18px 16px calc(24px + var(--kb, 0px));
+      padding: 18px 16px 24px;
+    }
+    body.keyboard-open:not(.sheet-open) .screen-body {
+      padding-bottom: calc(24px + var(--kb-settled, 0px));
     }
 
     /* Hero Header Row */
@@ -343,11 +353,17 @@
       display: flex;
       flex-direction: column;
       align-items: flex-end;
+      justify-content: center;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 8px 12px;
       min-width: 118px;
+      min-height: var(--touch-min);
+      color: inherit;
+      text-align: right;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s cubic-bezier(0.2, 0, 0, 1);
     }
 
     /* Segmented Pill Bar */
@@ -650,7 +666,8 @@
     /* Asymmetric 48 px hit areas so neighbouring targets never overlap (8 px gap between them; the
        dots reach into the card's 14 px right padding, the play button into the 12 px gap to the title). */
     .mini-play-btn,
-    .more-dots-btn {
+    .more-dots-btn,
+    .completed-delete-btn {
       position: relative;
     }
     .mini-play-btn::after {
@@ -668,6 +685,35 @@
       bottom: -9px;
       left: -4px;
       right: -14px;
+    }
+    .completed-delete-btn::after {
+      content: "";
+      position: absolute;
+      top: -9px;
+      bottom: -9px;
+      left: -10px;
+      right: -14px;
+    }
+
+    .completed-delete-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      padding: 0;
+      margin-top: -2px;
+      cursor: pointer;
+      transition: color 0.14s ease, background-color 0.14s ease;
+    }
+    .completed-delete-btn:active {
+      color: var(--rose);
+      background: rgba(255, 42, 95, 0.12);
     }
 
     .mini-play-btn {
@@ -729,9 +775,13 @@
       gap: 8px;
       box-shadow: 0 8px 24px rgba(0, 240, 255, 0.32);
       cursor: pointer;
+      transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
+    }
+    body.has-toast .fab-add {
+      transform: translate3d(0, -48px, 0);
     }
 
-    /* Bottom Navigation Bar */
+    /* Bottom Navigation Bar (5 Primary Destinations) */
     .bottom-nav-bar {
       position: fixed;
       bottom: 0;
@@ -740,7 +790,7 @@
       z-index: 35;
       height: calc(68px + var(--safe-bottom));
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       background: #0b0d12;
       border-top: 1px solid rgba(255, 255, 255, 0.07);
       padding: 6px calc(6px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(6px + var(--safe-left));
@@ -781,36 +831,44 @@
       color: var(--cyan);
     }
 
-    /* Slide-Up Native Bottom Sheet */
+    /* Top-Anchored Floating Modal Sheet: sits cleanly in the upper visible viewport above the
+       keyboard zone from frame 0, so focused inputs are never occluded by the rising IME and
+       Chromium never pans or shifts the background app. */
     .sheet-backdrop {
       position: fixed;
       inset: 0;
       z-index: 60;
-      background: rgba(5, 7, 11, 0.74);
+      background: rgba(5, 7, 11, 0.76);
       display: flex;
-      align-items: flex-end;
+      align-items: flex-start;
       justify-content: center;
+      padding: calc(var(--safe-top) + 14px) calc(12px + var(--safe-right)) 14px calc(12px + var(--safe-left));
       animation: fadeIn 0.16s ease-out;
     }
 
-    .bottom-sheet {
+    .sheet-kb-lift {
       width: 100%;
-      max-width: 560px;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .bottom-sheet {
+      pointer-events: auto;
+      width: 100%;
+      max-width: 540px;
       background: #13161f;
-      border-top: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 24px 24px 0 0;
-      padding: 12px 20px calc(var(--sheet-pad-bottom) + var(--safe-bottom));
-      max-height: calc(88vh - var(--kb, 0px));
-      max-height: calc(88dvh - var(--kb, 0px));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 22px;
+      padding: 16px 18px var(--sheet-pad-bottom);
+      max-height: calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px);
       overflow-y: auto;
       overscroll-behavior: contain;
-      transform: translate3d(0, calc(-1 * var(--kb, 0px)), 0);
-      will-change: transform;
+      box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.78);
+      will-change: transform, opacity;
     }
-    body.keyboard-open .bottom-sheet {
-      padding-bottom: 14px;
-      max-height: calc(100vh - var(--kb, 0px) - 16px);
-      max-height: calc(100dvh - var(--kb, 0px) - 16px);
+    body.sheet-typing .bottom-sheet {
+      max-height: min(54vh, calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px));
     }
     /* Only a freshly opened sheet glides in; in-place updates never replay the animation. */
     .bottom-sheet.entering {
@@ -891,11 +949,7 @@
     }
 
     .sheet-handle {
-      width: 36px;
-      height: 4px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.2);
-      margin: 0 auto 16px;
+      display: none;
     }
 
     .sheet-input {
@@ -973,11 +1027,11 @@
     @keyframes slideUp {
       from {
         opacity: 0;
-        transform: translate3d(0, calc(24px - var(--kb, 0px)), 0);
+        transform: translate3d(0, -8px, 0) scale(0.985);
       }
       to {
         opacity: 1;
-        transform: translate3d(0, calc(-1 * var(--kb, 0px)), 0);
+        transform: translate3d(0, 0, 0) scale(1);
       }
     }
 
@@ -1204,12 +1258,12 @@
       cursor: pointer;
     }
 
-    /* Toasts: one host, never blocking (showToast decides how many stay up) */
+    /* Toasts: sleek compact floating capsules anchored just above the bottom tab bar */
     .toast-host {
       position: fixed;
       left: calc(12px + var(--safe-left));
       right: calc(12px + var(--safe-right));
-      bottom: calc(80px + var(--safe-bottom));
+      bottom: calc(78px + var(--safe-bottom));
       z-index: 70;
       display: flex;
       flex-direction: column;
@@ -1217,56 +1271,93 @@
       gap: 8px;
       pointer-events: none;
     }
-    body[data-view="command"] .toast-host,
-    body[data-view="plan"] .toast-host {
-      bottom: calc(146px + var(--safe-bottom));
-    }
     .toast {
       pointer-events: auto;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 10px;
-      width: 100%;
-      max-width: 520px;
-      min-height: var(--touch-min);
-      padding: 6px 6px 6px 16px;
-      border-radius: 14px;
-      background: var(--surface-3);
-      border: 1px solid var(--border-strong);
+      gap: 9px;
+      width: auto;
+      max-width: min(calc(100vw - 28px), 400px);
+      min-height: 38px;
+      padding: 7px 16px 7px 11px;
+      border-radius: 999px;
+      background: rgba(20, 24, 34, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.13);
       color: var(--text);
       font-size: 13px;
-      box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.65);
-      animation: toastIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(0, 240, 255, 0.05);
+      animation: toastIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .toast.has-action {
+      height: 40px;
+      min-height: 40px;
+      padding: 0 4px 0 14px;
+      gap: 0;
     }
     .toast.leaving {
       opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 0.14s ease, transform 0.14s ease;
+      transform: translate3d(0, 8px, 0) scale(0.97);
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+    .toast-icon {
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: rgba(0, 255, 157, 0.15);
+      color: var(--emerald);
+    }
+    .toast-icon.undo {
+      display: none;
     }
     .toast-msg {
-      flex: 1;
+      flex: 0 1 auto;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      padding: 8px 0;
+      padding: 2px 0;
+    }
+    .toast.has-action .toast-msg {
+      padding-right: 12px;
     }
     .toast-action {
+      position: relative;
       flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-height: var(--touch-min);
-      padding: 0 14px;
+      margin: -4px 0;
+      padding: 0 13px 0 12px;
       border: none;
-      border-radius: 10px;
-      background: rgba(0, 240, 255, 0.1);
+      border-radius: 0 999px 999px 0;
+      background: transparent;
       color: var(--cyan);
       font-family: var(--font-display);
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       cursor: pointer;
     }
+    .toast-action::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 1px;
+      height: 14px;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.14);
+    }
     @keyframes toastIn {
-      from { transform: translateY(12px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
+      from { transform: translate3d(0, 10px, 0) scale(0.96); opacity: 0; }
+      to { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
     }
 
     /* Sync sheet */
@@ -1422,14 +1513,13 @@
        padding, so nothing shows through below the buttons. */
     .sheet-actions {
       position: sticky;
-      bottom: calc(0px - var(--sheet-pad-bottom) - var(--safe-bottom));
+      bottom: calc(0px - var(--sheet-pad-bottom));
       z-index: 2;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      /* top: -8px collapses with the pill group's 16px margin; + 10px padding = the old 18px gap */
-      margin: -8px -20px calc(0px - var(--sheet-pad-bottom) - var(--safe-bottom));
-      padding: 10px 20px calc(var(--sheet-pad-bottom) + var(--safe-bottom));
+      margin: -8px -18px calc(0px - var(--sheet-pad-bottom));
+      padding: 10px 18px var(--sheet-pad-bottom);
       background: #13161f;
     }
     .sheet-actions.single {
@@ -1437,7 +1527,7 @@
     }
     /* a field focused inside such a sheet is scrolled to above the sticky bar, not under it */
     .bottom-sheet:has(> .sheet-actions) {
-      scroll-padding-bottom: calc(68px + var(--sheet-pad-bottom) + var(--safe-bottom));
+      scroll-padding-bottom: calc(68px + var(--sheet-pad-bottom));
     }
     /* Landscape with the keyboard up (~170 px): a sticky bar would cover the field being typed in.
        The sheet then simply scrolls (Enter in the title submits, as before). */
@@ -1547,10 +1637,6 @@
       .toast-host {
         bottom: calc(60px + var(--safe-bottom));
       }
-      body[data-view="command"] .toast-host,
-      body[data-view="plan"] .toast-host {
-        bottom: calc(118px + var(--safe-bottom));
-      }
       .focus-stage {
         min-height: 0;
         padding: 0;
@@ -1580,12 +1666,66 @@
         margin-top: 12px;
       }
       .bottom-sheet {
-        max-height: 94vh;
-        max-height: 94dvh;
-        padding-top: 8px;
+        max-height: calc(100vh - var(--safe-top) - 20px);
+        padding-top: 12px;
       }
       .sheet-handle {
         margin-bottom: 8px;
+      }
+    }
+
+    /* Portrait phone with on-screen keyboard open: WebView's adjustResize shrinks innerHeight
+       below 480 px (e.g. 744 dp - 300 dp keyboard = 444 dp on Galaxy S), which would otherwise
+       trigger the landscape compact rules above and shift the entire background app up and down!
+       Portrait phones always have width <= 520 px, whereas landscape phones have width >= 560 px. */
+    @media (max-height: 480px) and (max-width: 520px) {
+      :root {
+        --sheet-pad-bottom: 18px;
+      }
+      body {
+        padding-bottom: calc(104px + var(--safe-bottom));
+      }
+      .app-bar {
+        height: calc(58px + var(--safe-top));
+      }
+      .screen-body {
+        padding: 18px 16px 24px;
+      }
+      .hero-bar {
+        margin-bottom: 18px;
+      }
+      .hero-eyebrow {
+        margin-bottom: 3px;
+      }
+      .hero-title {
+        font-size: 28px;
+      }
+      .hero-stats-pill {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0;
+        padding: 8px 12px;
+      }
+      .hero-stats-pill > div:nth-child(2) {
+        width: 100% !important;
+        margin: 5px 0 4px !important;
+      }
+      .segmented-control {
+        margin-bottom: 14px;
+      }
+      .chip-strip {
+        margin-bottom: 11px;
+      }
+      .seg-option {
+        min-height: var(--touch-min);
+        padding: 8px 10px;
+      }
+      .spotlight-card {
+        padding: 18px;
+        margin-bottom: 18px;
+      }
+      .section-header-label {
+        margin: 20px 0 10px 2px;
       }
     }
 
@@ -1812,8 +1952,10 @@
 
     /* Lock background scroll while a bottom sheet is open and quietly fade fixed nav/FAB so
        nothing flashes or shifts behind the dark backdrop when the keyboard opens or closes. */
+    html:has(> body.sheet-open),
     body.sheet-open {
       overflow: hidden;
+      overscroll-behavior: none;
     }
     body.sheet-open .bottom-nav-bar,
     body.sheet-open .fab-add {
@@ -1823,12 +1965,14 @@
     }
 
     /* On-screen keyboard up while a field has focus (updateKeyboardClass): the fixed nav and FAB
-       would sit on top of the keyboard and squeeze the field. After the media query on purpose. */
+       would sit on top of the keyboard and squeeze the field. After the media query on purpose.
+       Note: .toast-host only lifts while an input STILL has active focus (keyboard-typing), never
+       after submitting/closing a sheet when the keyboard is sliding away. */
     body.keyboard-open .bottom-nav-bar,
     body.keyboard-open .fab-add {
       display: none !important;
     }
-    body.keyboard-open .toast-host {
+    body.keyboard-typing .toast-host {
       bottom: calc(12px + var(--kb, 0px) + var(--safe-bottom));
     }
 
@@ -1866,7 +2010,9 @@
         <span id="headerSyncText">Connecting…</span>
       </button>
 
-      <button class="icon-circle-btn pressable" id="muteBtn" onclick="toggleAudioMute()" aria-label="Mute sounds" aria-pressed="false"></button>
+      <button class="icon-circle-btn pressable" id="reviewBtn" onclick="switchView('telemetry')" aria-label="Weekly review">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      </button>
     </div>
   </header>
 
@@ -1911,12 +2057,6 @@
       </div>
       <span>Habits</span>
     </button>
-    <button class="nav-tab" id="nav-telemetry" onclick="switchView('telemetry')">
-      <div class="nav-tab-pill">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-      </div>
-      <span>Review</span>
-    </button>
   </nav>
 
   <!-- Slide-Up Sheet Container -->
@@ -1926,6 +2066,17 @@
   <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="false"></div>
 
   <script>
+    // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
+    // "Android 10; K" UA reduction) and drives --kb frame-by-frame via WindowInsetsAnimation. Lock
+    // interactive-widget=overlays-content synchronously at boot so Chromium never pans visualViewport.
+    try {
+      if (/HuntSmoothIme\/1/.test(navigator.userAgent || "")) {
+        const vpMeta = document.getElementById("viewportMeta");
+        if (vpMeta) vpMeta.setAttribute("content", "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content");
+        window.__huntNativeImeBoot = true;
+      }
+    } catch (e) {}
+
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -1947,6 +2098,7 @@
     const SVG_PAUSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
     const SVG_CHECK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
     const SVG_MORE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>`;
+    const SVG_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
     const SVG_BACK = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`;
 
     let audioMuted = false;
@@ -3548,8 +3700,9 @@
     }
 
     function setActiveView(view) {
+      if (view === "review") view = "telemetry";
       activeView = view;
-      ["command", "plan", "focus", "quests", "habits", "telemetry"].forEach(id => {
+      ["command", "plan", "focus", "quests", "habits"].forEach(id => {
         const btn = document.getElementById("nav-" + id);
         if (!btn) return;
         const cls = id === view ? "nav-tab active" : "nav-tab";
@@ -3557,6 +3710,13 @@
         if (id === view) setAttrIfChanged(btn, "aria-current", "page");
         else if (btn.hasAttribute("aria-current")) btn.removeAttribute("aria-current");
       });
+      const reviewBtn = document.getElementById("reviewBtn");
+      if (reviewBtn) {
+        const rCls = view === "telemetry" ? "icon-circle-btn pressable active" : "icon-circle-btn pressable";
+        if (reviewBtn.className !== rCls) reviewBtn.className = rCls;
+        if (view === "telemetry") setAttrIfChanged(reviewBtn, "aria-current", "page");
+        else if (reviewBtn.hasAttribute("aria-current")) reviewBtn.removeAttribute("aria-current");
+      }
       if (document.body) setAttrIfChanged(document.body, "data-view", view);
     }
 
@@ -3638,24 +3798,60 @@
     // this width, or once no field has focus. Android may report the full height first and the reduced
     // one right after (or the other way round), both orders must work.
     const viewportHeights = {};
-    let nativeImeActive = false;
+    let nativeImeActive = !!window.__huntNativeImeBoot;
     let lastNativeImeDp = 0;
+    let basePortraitInnerH = window.innerHeight || 0;
+    let kbSettleTimer = 0;
+    if (nativeImeActive && document.body) document.body.classList.add("native-ime");
+
+    function updateEffectiveKb(dp) {
+      const curH = window.innerHeight || 0;
+      if (dp <= 20 && curH > 0) basePortraitInnerH = Math.max(basePortraitInnerH, curH);
+      const shrunkByWebView = basePortraitInnerH > curH && curH > 0 ? (basePortraitInnerH - curH) : 0;
+      const eff = Math.max(0, dp - shrunkByWebView);
+      document.documentElement.style.setProperty("--eff-kb", eff + "px");
+    }
+
+    function scheduleSettledKb(dp) {
+      clearTimeout(kbSettleTimer);
+      if (dp <= 20) {
+        document.documentElement.style.setProperty("--kb-settled", "0px");
+        updateEffectiveKb(0);
+        return;
+      }
+      kbSettleTimer = setTimeout(() => {
+        document.documentElement.style.setProperty("--kb-settled", dp + "px");
+        updateEffectiveKb(dp);
+      }, 140);
+    }
 
     // Called frame-by-frame by MainActivity's WindowInsetsAnimation.Callback on Android 11+.
     window.__huntSetIme = function (rawDp) {
-      nativeImeActive = true;
+      if (!nativeImeActive) {
+        nativeImeActive = true;
+        if (document.body) document.body.classList.add("native-ime");
+        const m = document.getElementById("viewportMeta");
+        if (m && !(m.getAttribute("content") || "").includes("interactive-widget")) {
+          m.setAttribute("content", "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content");
+        }
+      }
       const dp = typeof rawDp === "number" && Number.isFinite(rawDp)
         ? Math.max(0, Math.min(1200, Math.round(rawDp)))
         : 0;
       if (dp !== lastNativeImeDp) {
         lastNativeImeDp = dp;
         document.documentElement.style.setProperty("--kb", dp + "px");
+        scheduleSettledKb(dp);
       }
       const body = document.body;
       if (!body) return;
       const open = dp > 20;
+      const typing = open && isTextEntry(document.activeElement);
       if (body.classList.contains("keyboard-open") !== open) {
         body.classList.toggle("keyboard-open", open);
+      }
+      if (body.classList.contains("keyboard-typing") !== typing) {
+        body.classList.toggle("keyboard-typing", typing);
       }
     };
 
@@ -3670,7 +3866,10 @@
       const body = document.body;
       if (!body) return;
       if (nativeImeActive) {
-        body.classList.toggle("keyboard-open", lastNativeImeDp > 20);
+        const open = lastNativeImeDp > 20;
+        const typing = open && isTextEntry(document.activeElement);
+        body.classList.toggle("keyboard-open", open);
+        body.classList.toggle("keyboard-typing", typing);
         return;
       }
       const vv = window.visualViewport;
@@ -3687,7 +3886,13 @@
       if (vh && vh.suspect && (!typing || vh.max >= vh.min / 0.85)) vh.suspect = false;
       const full = vh ? vh.max : 0;
       const shrunk = !h || !full || (vh && vh.suspect) || h < full * 0.85;
-      const open = isTextEntry(document.activeElement) && shrunk;
+      const open = typing && shrunk;
+      const vvKb = open && vv && window.innerHeight
+        ? Math.max(0, Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0)))
+        : 0;
+      document.documentElement.style.setProperty("--kb", vvKb + "px");
+      document.documentElement.style.setProperty("--kb-settled", vvKb + "px");
+      body.classList.toggle("keyboard-typing", open);
       if (body.classList.contains("keyboard-open") === open) return;
       body.classList.toggle("keyboard-open", open);
       // Only scroll a sheet field if it is actually clipped below the sheet's visible area;
@@ -3709,13 +3914,30 @@
       }
     }
 
+    function syncSheetTypingClass() {
+      if (!document.body) return;
+      const sc = document.getElementById("sheetContainer");
+      const active = document.activeElement;
+      const inSheet = !!(sc && isSheetOpen() && active && sc.contains(active) && isTextEntry(active));
+      document.body.classList.toggle("sheet-typing", inSheet);
+    }
+
     function installKeyboardHooks() {
       updateKeyboardClass(); // records the full height at boot (keyboard closed)
-      document.addEventListener("focusin", updateKeyboardClass);
+      document.addEventListener("focusin", () => {
+        syncSheetTypingClass();
+        updateKeyboardClass();
+      });
       // focus moving between two fields: focusout then focusin in the same task, so no flash
-      document.addEventListener("focusout", () => setTimeout(updateKeyboardClass, 0));
+      document.addEventListener("focusout", () => setTimeout(() => {
+        syncSheetTypingClass();
+        updateKeyboardClass();
+      }, 0));
       window.addEventListener("resize", updateKeyboardClass);
-      if (window.visualViewport) window.visualViewport.addEventListener("resize", updateKeyboardClass);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", updateKeyboardClass);
+        window.visualViewport.addEventListener("scroll", updateKeyboardClass);
+      }
     }
 
     // UI-only listeners: keep the keyboard open while choosing a pill in a sheet, Escape closes a sheet
@@ -3765,10 +3987,16 @@
     // nothing, and a new toast replaces the oldest plain one. At most two are visible, unless several
     // Undo windows are open at once (e.g. three quick deletes): those stack until they end.
     // =========================================================================
-    const TOAST_MS = 4000;
+    const TOAST_MS = 2400;
     const UNDO_TOAST_MS = 5000;
     const MAX_TOASTS = 2;
     const toasts = []; // { el, timer, expiresAt, undo, holdSync, done }
+    const SVG_TOAST_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const SVG_TOAST_UNDO = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`;
+
+    function syncToastBodyClass() {
+      if (document.body) document.body.classList.toggle("has-toast", toasts.length > 0);
+    }
 
     function showToast(message, opts) {
       opts = opts || {};
@@ -3780,10 +4008,12 @@
         finishToast(victim, false);
       }
       const ms = opts.ms || (opts.undo ? UNDO_TOAST_MS : TOAST_MS);
+      const hasAction = !!opts.undo;
       const el = document.createElement("div");
-      el.className = "toast";
-      el.innerHTML = `<span class="toast-msg">${escapeHtml(message)}</span>` +
-        (opts.undo ? `<button class="toast-action" type="button">${escapeHtml(opts.actionLabel || "Undo")}</button>` : "");
+      el.className = hasAction ? "toast has-action" : "toast";
+      el.innerHTML = `<span class="toast-icon${hasAction ? " undo" : ""}" aria-hidden="true">${hasAction ? SVG_TOAST_UNDO : SVG_TOAST_CHECK}</span>` +
+        `<span class="toast-msg">${escapeHtml(message)}</span>` +
+        (hasAction ? `<button class="toast-action" type="button">${escapeHtml(opts.actionLabel || "Undo")}</button>` : "");
       const toast = { el, timer: 0, expiresAt: Date.now() + ms, undo: opts.undo || null, holdSync: !!(opts.undo && opts.holdSync), done: false };
       toast.timer = setTimeout(() => finishToast(toast, false), ms);
       el.addEventListener("click", e => {
@@ -3793,6 +4023,7 @@
       });
       host.appendChild(el);
       toasts.push(toast);
+      syncToastBodyClass();
       // the commit already armed a debounced sync: push it behind the Undo window
       if (toast.holdSync && syncRun.dueAt) scheduleSync(Math.max(0, syncRun.dueAt - Date.now()));
       return toast;
@@ -3803,6 +4034,7 @@
       toast.done = true;
       const i = toasts.indexOf(toast);
       if (i >= 0) toasts.splice(i, 1);
+      syncToastBodyClass();
       clearTimeout(toast.timer);
       const el = toast.el;
       el.classList.add("leaving");
@@ -4446,12 +4678,107 @@
     // Typed text is never dropped silently: New Quest / Edit Quest dismissed with changes (Back,
     // backdrop, Escape, ×) and New Task closed with × while it has text show a toast whose Restore
     // brings the sheet back as it was. Saving, creating or deleting clears the form first (no toast).
+    let sheetLockedScrollY = 0;
+    let sheetScrollIsLocked = false;
+
+    function lockBackgroundScroll() {
+      if (sheetScrollIsLocked || !document.body) return;
+      sheetLockedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+      sheetScrollIsLocked = true;
+      document.body.style.position = "fixed";
+      document.body.style.top = (-sheetLockedScrollY) + "px";
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
+    }
+
+    function unlockBackgroundScroll() {
+      if (!sheetScrollIsLocked || !document.body) return;
+      const restoreY = sheetLockedScrollY;
+      sheetScrollIsLocked = false;
+      sheetLockedScrollY = 0;
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.width = "";
+      if (restoreY > 0) {
+        try { window.scrollTo(0, restoreY); } catch (e) {}
+      }
+    }
+
+    function clearSheetExitLayer() {
+      const prev = document.getElementById("sheetExitLayer");
+      if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    }
+
+    // Plays a non-blocking GPU fade-out so closing/submitting a floating sheet dissolves smoothly
+    // in place without racing the dismissing keyboard, while keeping #sheetContainer cleanup 100 % synchronous.
+    function playSheetExitGlide(sc) {
+      if (!sc || !isSheetOpen() || typeof sc.animate !== "function" || prefersReducedMotionMobile()) return;
+      const sheet = sc.querySelector(".bottom-sheet");
+      if (!sheet) return;
+      clearSheetExitLayer();
+      const layer = document.createElement("div");
+      layer.id = "sheetExitLayer";
+      layer.setAttribute("aria-hidden", "true");
+      layer.style.cssText = "position:fixed;inset:0;z-index:59;pointer-events:none;background:rgba(5,7,11,0.76);display:flex;align-items:flex-start;justify-content:center;padding:calc(var(--safe-top) + 14px) calc(12px + var(--safe-right)) 14px calc(12px + var(--safe-left));";
+      const lift = document.createElement("div");
+      lift.className = "sheet-kb-lift";
+      const clone = sheet.cloneNode(true);
+      clone.classList.remove("entering");
+      clone.removeAttribute("role");
+      clone.removeAttribute("aria-modal");
+      clone.removeAttribute("aria-labelledby");
+      clone.querySelectorAll("[id],[onclick],[oninput],[onchange],[onkeydown]").forEach(node => {
+        node.removeAttribute("id");
+        node.removeAttribute("onclick");
+        node.removeAttribute("oninput");
+        node.removeAttribute("onchange");
+        node.removeAttribute("onkeydown");
+      });
+      clone.style.pointerEvents = "none";
+      lift.appendChild(clone);
+      layer.appendChild(lift);
+      document.body.appendChild(layer);
+
+      let done = false;
+      const cleanup = () => {
+        if (done) return;
+        done = true;
+        if (layer.parentNode) layer.parentNode.removeChild(layer);
+      };
+      const bgAnim = layer.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: 150,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        fill: "forwards"
+      });
+      if (typeof clone.animate === "function") {
+        clone.animate(
+          [
+            { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+            { opacity: 0, transform: "translate3d(0, -6px, 0) scale(0.985)" }
+          ],
+          { duration: 150, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" }
+        );
+      }
+      if (bgAnim && typeof bgAnim.addEventListener === "function") {
+        bgAnim.addEventListener("finish", cleanup);
+        bgAnim.addEventListener("cancel", cleanup);
+      }
+      setTimeout(cleanup, 190);
+    }
+
     function closeSheet(discardDraft) {
       const sc = document.getElementById("sheetContainer");
       if (!sc) return;
       // Blur first so a pending onchange (Task Options title / notes) commits before the sheet goes away.
       const el = document.activeElement;
       if (el && el !== document.body && sc.contains(el) && typeof el.blur === "function") el.blur();
+      if (document.body) {
+        document.body.classList.remove("keyboard-typing");
+        document.body.classList.remove("sheet-typing");
+      }
       let restore = discardedQuestForm();
       if (sc.dataset.sheet === "newTask") {
         captureComposerDraft();
@@ -4461,6 +4788,7 @@
         }
         storeComposerDraft();
       }
+      playSheetExitGlide(sc);
       sc.style.display = "none";
       sc.innerHTML = "";
       delete sc.dataset.sheet;
@@ -4469,6 +4797,7 @@
         if (bgEl) bgEl.removeAttribute("inert");
       });
       if (document.body) document.body.classList.remove("sheet-open");
+      unlockBackgroundScroll();
       if (restore) showToast(restore.message, { actionLabel: "Restore", undo: restore.undo });
     }
 
@@ -4477,14 +4806,20 @@
     function showSheet(kind, innerHtml) {
       const sc = document.getElementById("sheetContainer");
       if (!sc) return null;
+      clearSheetExitLayer();
       const wasOpen = isSheetOpen();
       if (wasOpen && sc.dataset.sheet === "newTask" && kind !== "newTask") {
         captureComposerDraft();
         storeComposerDraft();
       }
+      lockBackgroundScroll();
       sc.dataset.sheet = kind;
       sc.style.display = "flex";
-      sc.innerHTML = `<div class="bottom-sheet${wasOpen ? "" : " entering"}" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${innerHtml}</div>`;
+      sc.innerHTML = `<div class="sheet-kb-lift"><div class="bottom-sheet${wasOpen ? "" : " entering"}" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${innerHtml}</div></div>`;
+      const sheetEl = sc.querySelector(".bottom-sheet.entering");
+      if (sheetEl) {
+        sheetEl.addEventListener("animationend", () => sheetEl.classList.remove("entering"), { once: true });
+      }
       ["topHeader", "mainContainer", "fabBtn", "bottomNav"].forEach(id => {
         const bgEl = document.getElementById(id);
         if (bgEl) bgEl.setAttribute("inert", "");
@@ -4688,8 +5023,10 @@
         rank = promoteToTop ? (Number(pending[0].rank) || 0) - 1000 : pending[pending.length - 1].rank + 1000;
       }
       const scheduledDate = composerDateKey || toLocalDateKey(now);
+      const newTaskId = "tsk-" + now + "-" + Math.random().toString(36).slice(2, 6);
+      const firstRects = captureTaskFlipRects();
       state.tasks.push({
-        id: "tsk-" + now + "-" + Math.random().toString(36).slice(2, 6),
+        id: newTaskId,
         title: titleEl.value.trim(),
         notes: notesEl ? notesEl.value.trim() : "",
         questId: resolveComposerQuestId(composerQuestId),
@@ -4704,9 +5041,10 @@
       composerDraft = null; // submitted: the next New Task starts empty
       storeComposerDraft();
       commitLocalChange();
+      playTaskFlipGlide(firstRects, newTaskId);
       const todayKey = toLocalDateKey(now);
       const tomorrowKey = dayKeyOffset(1, now);
-      if (scheduledDate === todayKey) showToast(promoteToTop ? "Added to the top of today's queue" : "Added to today's queue");
+      if (scheduledDate === todayKey) showToast(promoteToTop ? "Task added · #1 Today" : "Task added · Today");
       else if (scheduledDate === tomorrowKey) showToast("Added for tomorrow");
       else showToast("Added for " + dateKeyLabel(scheduledDate));
     }
@@ -4836,19 +5174,22 @@
       showSheet("newQuest", `
           ${sheetHeaderHtml("New Quest")}
 
-          <label class="sheet-label" for="newQuestTitleInput">Quest Title</label>
-          <input id="newQuestTitleInput" class="sheet-input" placeholder="e.g. Launch my idea" value="" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" />
+          <input id="newQuestTitleInput" class="sheet-input" placeholder="Quest title (e.g. Launch my idea)" aria-label="Quest Title" value="" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" />
 
-          <label class="sheet-label" for="newQuestDescInput">Description</label>
-          <textarea id="newQuestDescInput" class="sheet-input" rows="2" placeholder="What moves this quest forward?" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
+          <textarea id="newQuestDescInput" class="sheet-input" rows="2" placeholder="Why does this quest matter & what moves it forward?" aria-label="Description" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
 
-          <div class="sheet-label">Accent Color</div>
-          <div class="sheet-pill-group" role="group" aria-label="Accent color">
-            ${questColorPillsHtml()}
+          <div style="display:grid;grid-template-columns:1fr 96px;gap:12px;align-items:start;">
+            <div>
+              <div class="sheet-label">Accent Color</div>
+              <div class="sheet-pill-group" role="group" aria-label="Accent color">
+                ${questColorPillsHtml()}
+              </div>
+            </div>
+            <div>
+              <label class="sheet-label" for="newQuestTargetInput">h / wk</label>
+              <input id="newQuestTargetInput" type="number" inputmode="numeric" min="1" max="100" class="sheet-input" value="10" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" style="text-align:center;padding:10px 8px;" />
+            </div>
           </div>
-
-          <label class="sheet-label" for="newQuestTargetInput">Weekly Target Hours</label>
-          <input id="newQuestTargetInput" type="number" inputmode="numeric" min="1" max="100" class="sheet-input" value="10" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" />
 
           <div class="sheet-actions single" style="margin-top:-4px;">
             <button class="pressable" onclick="createNewQuestFromSheet()" style="width:100%;height:var(--touch-min);border-radius:13px;border:none;background:var(--cyan);color:#05070a;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
@@ -4909,13 +5250,18 @@
           <label class="sheet-label" for="sheetQuestDesc">Description</label>
           <textarea id="sheetQuestDesc" class="sheet-input" rows="2" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})">${escapeHtml(q.description || "")}</textarea>
 
-          <div class="sheet-label">Accent Color</div>
-          <div class="sheet-pill-group" role="group" aria-label="Accent color">
-            ${questColorPillsHtml()}
+          <div style="display:grid;grid-template-columns:1fr 96px;gap:12px;align-items:start;">
+            <div>
+              <div class="sheet-label">Accent Color</div>
+              <div class="sheet-pill-group" role="group" aria-label="Accent color">
+                ${questColorPillsHtml()}
+              </div>
+            </div>
+            <div>
+              <label class="sheet-label" for="sheetQuestTarget">h / wk</label>
+              <input id="sheetQuestTarget" type="number" inputmode="numeric" min="1" max="100" class="sheet-input" value="${escapeHtml(q.targetWeeklyHours)}" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})" style="text-align:center;padding:10px 8px;" />
+            </div>
           </div>
-
-          <label class="sheet-label" for="sheetQuestTarget">Weekly Target Hours</label>
-          <input id="sheetQuestTarget" type="number" inputmode="numeric" min="1" max="100" class="sheet-input" value="${escapeHtml(q.targetWeeklyHours)}" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})" />
 
           ${!q.archived ? `
             <button class="pressable" onclick="completeQuestItem(${jsArg(q.id)})" style="width:100%;height:var(--touch-min);margin-bottom:10px;border-radius:13px;border:1px solid rgba(0,255,157,0.35);background:rgba(0,255,157,0.08);color:var(--emerald);font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
@@ -5492,12 +5838,15 @@
         createdAt: now,
         updatedAt: now
       };
+      const firstRects = captureTaskFlipRects();
       if (!state.habits) state.habits = [];
       state.habits.push(habit);
-      materializeDailyHabitsInto(state, toLocalDateKey(now));
+      const todayKey = toLocalDateKey(now);
+      materializeDailyHabitsInto(state, todayKey);
       closeSheet();
       commitLocalChange();
-      showToast("Daily habit added · " + shortTitle(title));
+      playTaskFlipGlide(firstRects, habitTaskId(habit.id, todayKey));
+      showToast("Habit added · " + shortTitle(title));
     }
 
     function openHabitEditorSheet(habitId) {
@@ -5690,17 +6039,19 @@
       const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
       const fresh = justCompletedTaskId === t.id;
       if (fresh) justCompletedTaskId = null;
+      const title = escapeHtml(t.title);
       return `
         <div class="queue-item-card completed${fresh ? " just-completed" : ""}" data-flip-task-id="${escapeHtml(t.id)}">
           <div class="card-edge-bar" style="background:${hex};"></div>
-          <button class="task-check-ring done" style="background:${hex};" onclick="reopenTaskDirect(${jsArg(t.id)})" aria-label="Reopen ${escapeHtml(t.title)}">${SVG_CHECK}</button>
+          <button class="task-check-ring done" style="background:${hex};" onclick="reopenTaskDirect(${jsArg(t.id)})" aria-label="Reopen ${title}">${SVG_CHECK}</button>
           <div class="queue-item-body">
-            <div class="queue-item-title" style="text-decoration:line-through;color:var(--muted);">${escapeHtml(t.title)}</div>
+            <div class="queue-item-title" style="text-decoration:line-through;color:var(--muted);">${title}</div>
             <div class="queue-item-sub">
               <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
               ${showTime && t.accumulatedSeconds > 0 ? `<span style="font-family:var(--font-mono);flex-shrink:0;font-variant-numeric:tabular-nums;">· ${formatChrono(t.accumulatedSeconds)}</span>` : ""}
             </div>
           </div>
+          <button class="completed-delete-btn" onclick="deleteTaskItem(${jsArg(t.id)})" aria-label="Delete completed task ${title}">${SVG_TRASH}</button>
         </div>
       `;
     }
@@ -6467,7 +6818,7 @@
               <h1 class="hero-title">Today</h1>
             </div>
 
-            <div class="hero-stats-pill">
+            <button type="button" class="hero-stats-pill pressable" onclick="switchView('telemetry')" aria-label="Open weekly review: ${(todayQuestSec / 3600).toFixed(1)} hours today, ${(weekQuestSec / 3600).toFixed(1)} of ${totalTargetHrs} weekly hours">
               <div style="display:flex;align-items:baseline;gap:4px;">
                 <span style="font-family:var(--font-display);font-size:20px;font-weight:700;color:white;font-variant-numeric:tabular-nums;">${(todayQuestSec / 3600).toFixed(1)}h</span>
                 <span style="font-size:11px;color:var(--muted);">today</span>
@@ -6475,8 +6826,8 @@
               <div style="height:4px;width:100%;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;margin:5px 0 4px;">
                 <div style="height:100%;width:${weekPct}%;background:var(--cyan);border-radius:999px;"></div>
               </div>
-              <div style="font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;">${(weekQuestSec / 3600).toFixed(1)}h / ${totalTargetHrs}h wk</div>
-            </div>
+              <div style="font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;">${(weekQuestSec / 3600).toFixed(1)}h / ${totalTargetHrs}h wk <span aria-hidden="true" style="color:var(--cyan);font-weight:700;">›</span></div>
+            </button>
           </div>
 
           <!-- Segmented Control -->

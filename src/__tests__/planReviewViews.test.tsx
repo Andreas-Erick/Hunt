@@ -1344,4 +1344,32 @@ describe("long unbroken text", () => {
         .parentElement
     ).toHaveClass("shrink-0");
   });
+
+  it("Plan allows two-step deletion of completed tasks and records sync tombstones", async () => {
+    await seed({
+      quests: [makeQuest("quest-0", "Launch", 0, 10)],
+      tasks: [
+        makeTask("tsk-plan-done", "Finished Tuesday spec", "quest-0", 1000, "2026-03-30", {
+          status: "completed",
+          completedAt: T0,
+        }),
+      ],
+    });
+    render(<PlanWeekView />);
+    const doneRow = await screen.findByText("Finished Tuesday spec");
+    const card = doneRow.closest('[data-completed-row="true"]') as HTMLElement;
+    expect(card).not.toBeNull();
+
+    const del = within(card).getByRole("button", { name: "Delete task" });
+    fireEvent.click(del);
+    expect(del).toHaveAttribute("data-state", "armed");
+    expect(await db.tasks.get("tsk-plan-done")).toBeDefined();
+
+    fireEvent.click(del);
+    await waitFor(async () => expect(await db.tasks.get("tsk-plan-done")).toBeUndefined());
+    const tombstones = JSON.parse(
+      window.localStorage.getItem("hunt-sync-tombstones-v1") ?? "{}"
+    ) as { deletedTaskIds?: string[] };
+    expect(tombstones.deletedTaskIds).toContain("tsk-plan-done");
+  });
 });

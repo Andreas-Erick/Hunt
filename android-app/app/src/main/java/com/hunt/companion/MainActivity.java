@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Rect;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -262,6 +263,8 @@ public class MainActivity extends Activity {
     private boolean backPending;
     private int backSeq;
     private int lastImeDp = -1;
+    private int imeAnimationDepth = 0;
+    private boolean containerPaddingInitialized = false;
 
     // =======================================================================================
     // Lifecycle
@@ -289,21 +292,40 @@ public class MainActivity extends Activity {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        webView = new WebView(this);
+        webView = new WebView(this) {
+            @Override
+            public void getFocusedRect(Rect r) {
+                // Report (0,0)-(0,0) at the top of WebView so ViewRootImpl.scrollToRectOrFocus
+                // never pans DecorView up and back down when an HTML input near the bottom focuses.
+                if (r != null) r.set(0, 0, 0, 0);
+            }
+
+            @Override
+            public boolean requestRectangleOnScreen(Rect rectangle, boolean immediate) {
+                return false;
+            }
+        };
         webView.setBackgroundColor(Color.parseColor("#0B0C0E"));
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         // Wrap WebView in a FrameLayout: Android's WebView ignores View.setPadding() for its
         // Chromium viewport surface, whereas FrameLayout padding constrains the WebView bounds
         // strictly inside the status bar, Samsung bottom/side navigation bar, and display cutout.
-        FrameLayout container = new FrameLayout(this);
+        FrameLayout container = new FrameLayout(this) {
+            @Override
+            public boolean requestChildRectangleOnScreen(View child, Rect rectangle, boolean immediate) {
+                return false;
+            }
+        };
         container.setBackgroundColor(Color.parseColor("#0B0C0E"));
         container.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && window != null) {
-            // Android 11+: keep the WebView layout height stable (container padded for system bars
-            // and cutouts only, NOT IME) and drive the page's --kb CSS variable in lockstep with
-            // every IME animation frame so sheets glide smoothly without shifting the background app.
+            // Android 11+: SOFT_INPUT_ADJUST_NOTHING + setDecorFitsSystemWindows(false) prevents
+            // WindowManager, ViewRootImpl, and Chromium AwContents from ever resizing or panning
+            // the WebView surface when the keyboard opens or closes.
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
             window.setDecorFitsSystemWindows(false);
             webView.setFitsSystemWindows(false);
             installSmoothImeInsets(container);
@@ -314,6 +336,14 @@ public class MainActivity extends Activity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true); // localStorage, origin file:// (PAGE_URL never moves)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Explicit capability token (immune to Chromium User-Agent Reduction "Android 10; K")
+            // so hunt-mobile.html locks interactive-widget=overlays-content before first paint.
+            String ua = settings.getUserAgentString();
+            if (ua != null && !ua.contains("HuntSmoothIme/1")) {
+                settings.setUserAgentString(ua + " HuntSmoothIme/1");
+            }
+        }
         // Least privilege: file:///android_asset stays readable regardless of these, and sync
         // runs natively, so the page needs no file:// / content:// access and no mixed content.
         settings.setAllowFileAccess(false);
@@ -347,36 +377,63 @@ public class MainActivity extends Activity {
         container.setOnApplyWindowInsetsListener((v, insets) -> {
             Insets bars = insets.getInsets(
                     WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            if (v.getPaddingLeft() != bars.left
+            Insets ime = insets.getInsets(WindowInsets.Type.ime());
+            // Do NOT change container bottom padding while the IME is visible or animating:
+            // on Samsung One UI, navigationBars().bottom jumps from ~15dp (gesture pill) to ~48dp
+            // (IME switcher bar) when the keyboard opens, which would resize WebView and shift the
+            // whole app up and down! Lock bottom padding to its resting (IME-closed) height.
+            int bottomPad = (!containerPaddingInitialized || (ime.bottom == 0 && imeAnimationDepth == 0))
+                    ? bars.bottom
+                    : v.getPaddingBottom();
+            if (!containerPaddingInitialized
+                    || v.getPaddingLeft() != bars.left
                     || v.getPaddingTop() != bars.top
                     || v.getPaddingRight() != bars.right
-                    || v.getPaddingBottom() != bars.bottom) {
-                v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                    || v.getPaddingBottom() != bottomPad) {
+                containerPaddingInitialized = true;
+                v.setPadding(bars.left, bars.top, bars.right, bottomPad);
             }
-            Insets ime = insets.getInsets(WindowInsets.Type.ime());
-            pushImeInset(Math.max(0, ime.bottom - bars.bottom));
+            // Android dispatches onApplyWindowInsets with the END target IME height right between
+            // onPrepare and onStart (before frame 1 of onProgress). Ignore it while animating so
+            // --kb never jumps to 100% and back down to frame 1!
+            if (imeAnimationDepth == 0) {
+                pushImeInset(Math.max(0, ime.bottom - v.getPaddingBottom()));
+            }
             return WindowInsets.CONSUMED;
         });
         container.setWindowInsetsAnimationCallback(
                 new WindowInsetsAnimation.Callback(WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP) {
                     @Override
+                    public void onPrepare(WindowInsetsAnimation animation) {
+                        if ((animation.getTypeMask() & WindowInsets.Type.ime()) != 0) {
+                            imeAnimationDepth++;
+                        }
+                    }
+
+                    @Override
                     public WindowInsets onProgress(
                             WindowInsets insets, List<WindowInsetsAnimation> runningAnimations) {
-                        Insets bars = insets.getInsets(
-                                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                         Insets ime = insets.getInsets(WindowInsets.Type.ime());
-                        pushImeInset(Math.max(0, ime.bottom - bars.bottom));
-                        return insets;
+                        pushImeInset(Math.max(0, ime.bottom - container.getPaddingBottom()));
+                        return WindowInsets.CONSUMED;
                     }
 
                     @Override
                     public void onEnd(WindowInsetsAnimation animation) {
-                        WindowInsets root = container.getRootWindowInsets();
-                        if (root != null) {
-                            Insets bars = root.getInsets(
-                                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                            Insets ime = root.getInsets(WindowInsets.Type.ime());
-                            pushImeInset(Math.max(0, ime.bottom - bars.bottom));
+                        if ((animation.getTypeMask() & WindowInsets.Type.ime()) != 0) {
+                            imeAnimationDepth = Math.max(0, imeAnimationDepth - 1);
+                        }
+                        if (imeAnimationDepth == 0) {
+                            WindowInsets root = container.getRootWindowInsets();
+                            if (root != null) {
+                                Insets bars = root.getInsets(
+                                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                                Insets ime = root.getInsets(WindowInsets.Type.ime());
+                                if (ime.bottom == 0 && container.getPaddingBottom() != bars.bottom) {
+                                    container.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                                }
+                                pushImeInset(Math.max(0, ime.bottom - container.getPaddingBottom()));
+                            }
                         }
                     }
                 });

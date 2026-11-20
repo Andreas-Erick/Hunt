@@ -1165,6 +1165,14 @@ export function CommandCenterView() {
                           </span>
                         )}
                       </div>
+
+                      <ConfirmDeleteButton
+                        label="Delete task"
+                        onConfirm={() => deleteTask(task.id)}
+                        className="shrink-0 text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </ConfirmDeleteButton>
                     </div>
                   </div>
                 );

@@ -299,17 +299,21 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 11 (1.6.2) so it installs over the shipped 1.6.1 (10)", () => {
+  it("is versionCode >= 14 (1.6.5) so it installs over the shipped 1.6.4 (13)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(11);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.6.2");
+    expect(code).toBeGreaterThanOrEqual(14);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.6.5");
   });
 
-  it("handles API 30+ system bars & IME via a padded FrameLayout container (never webView.setPadding)", () => {
+  it("handles API 30+ system bars & IME via a padded FrameLayout container without panning WebView or jumping on Samsung IME bars", () => {
     expect(javaCode).toContain("FrameLayout container = new FrameLayout(this)");
     expect(javaCode).toContain("installSmoothImeInsets(container)");
     expect(javaCode).toContain("setDecorFitsSystemWindows(false)");
     expect(javaCode).toContain("WindowInsetsAnimation.Callback");
+    expect(javaCode).toContain("onPrepare(WindowInsetsAnimation");
+    expect(javaCode).toContain("imeAnimationDepth");
+    expect(javaCode).toContain("HuntSmoothIme/1");
+    expect(javaCode).toContain("getFocusedRect(Rect");
     expect(javaCode).toContain("WindowInsets.CONSUMED");
     expect(javaCode).toContain("__huntSetIme");
   });
