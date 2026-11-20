@@ -81,7 +81,7 @@
     button:not(:disabled):active,
     .queue-item-body:active,
     [role="button"]:active {
-      opacity: 0.72;
+      opacity: 0.85;
     }
     button:disabled {
       cursor: default;
@@ -96,7 +96,7 @@
       transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
     }
     .pressable:active {
-      transform: scale(0.97);
+      transform: scale(0.985);
     }
 
     /* Invisible 48 px touch target around small controls (the visual size does not change). */
@@ -305,6 +305,7 @@
 
     /* Main Content Container */
     .screen-body {
+      position: relative;
       max-width: 560px;
       margin: 0 auto;
       padding: 18px 16px calc(24px + var(--kb, 0px));
@@ -541,16 +542,18 @@
       background: rgba(17, 19, 25, 0.5);
     }
     .queue-item-card.completed.just-completed {
-      animation: taskCompleteSettle 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      opacity: 1;
+      background: var(--surface);
       border-color: rgba(0, 255, 157, 0.36);
+      box-shadow: 0 10px 26px -10px rgba(0, 255, 157, 0.32);
     }
     .queue-item-card.completed.just-completed .task-check-ring.done {
-      animation: taskCheckPop 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+      animation: taskCheckPop 0.26s cubic-bezier(0.22, 1, 0.36, 1) 0.24s backwards;
     }
     .queue-item-card.completed.just-completed .task-check-ring.done polyline {
       stroke-dasharray: 24;
       stroke-dashoffset: 0;
-      animation: taskCheckDraw 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+      animation: taskCheckDraw 0.22s cubic-bezier(0.22, 1, 0.36, 1) 0.24s backwards;
     }
     @keyframes taskCompleteSettle {
       from {
@@ -1949,44 +1952,12 @@
     let audioMuted = false;
     let audioCtx = null;
 
-    function haptic() {
-      try {
-        if (window.AndroidBridge && window.AndroidBridge.vibrateClick) {
-          window.AndroidBridge.vibrateClick();
-        }
-      } catch (e) {}
-    }
-
-    function playTone(freq, dur, type = "sine", gainVal = 0.04) {
-      haptic();
-      if (audioMuted) return;
-      try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        if (!audioCtx) audioCtx = new Ctx();
-        if (audioCtx.state === "suspended") audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + dur);
-      } catch (e) {}
-    }
-
-    function playClickSound() { playTone(880, 0.035, "triangle", 0.035); }
-    function playLockSound() {
-      playTone(520, 0.07, "sine", 0.045);
-      setTimeout(() => playTone(780, 0.11, "sine", 0.045), 55);
-    }
-    function playCompleteSound() {
-      playTone(587.33, 0.09, "sine", 0.05);
-      setTimeout(() => playTone(880, 0.16, "sine", 0.05), 80);
-    }
+    // Silent, clean tap interactions: vibrations and synthetic oscillator clicks/chimes are disabled.
+    function haptic() {}
+    function playTone() {}
+    function playClickSound() {}
+    function playLockSound() {}
+    function playCompleteSound() {}
 
     let shownMuteState = null;
     function updateMuteIcon() {
@@ -1998,15 +1969,7 @@
       btn.setAttribute("aria-label", audioMuted ? "Unmute sounds" : "Mute sounds");
     }
 
-    // The first tap should not pay for opening the audio device: create the (suspended) context once
-    // the first frame is on screen; playTone() resumes it inside the tap.
-    function prewarmAudio() {
-      if (audioCtx || audioMuted) return;
-      try {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (Ctx) audioCtx = new Ctx();
-      } catch (e) {}
-    }
+    function prewarmAudio() {}
 
     function toggleAudioMute() {
       audioMuted = !audioMuted;
@@ -4054,6 +4017,7 @@
       playCompleteSound();
       const af = state.activeFocus;
       if (!af || !af.activeTaskId) return;
+      const twoBeatScene = activeView !== "focus" ? captureTwoBeatTaskScene(af.activeTaskId) : null;
       const now = Date.now();
       const currentTask = state.tasks.find(t => t.id === af.activeTaskId);
       if (!currentTask) return;
@@ -4082,7 +4046,253 @@
         setActiveView("command");
       }
       commitLocalChange();
+      if (twoBeatScene) playTwoBeatTaskCompletion(twoBeatScene, currentTask.id);
       showToast(nextTask ? "Completed · " + shortTitle(currentTask.title) : "Completed · queue clear for today");
+    }
+
+    function prefersReducedMotionMobile() {
+      try {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Captures pre-completion card geometry and builds an in-place visual ghost so Beat 1
+    // (check fill + stroke draw + title strikethrough) runs calmly in place for 230ms before
+    // Beat 2 smoothly collapses the queue and glides the completed card into Completed.
+    function captureTwoBeatTaskScene(taskId) {
+      const root = document.getElementById("mainContainer");
+      if (!root || typeof root.animate !== "function" || prefersReducedMotionMobile()) return null;
+      const allCards = Array.from(root.querySelectorAll("[data-flip-task-id]"));
+      const sourceEl = allCards.find(el => el.getAttribute("data-flip-task-id") === taskId && !el.classList.contains("completed"));
+      if (!sourceEl) return null;
+      const rootRect = root.getBoundingClientRect();
+      const sourceRect = sourceEl.getBoundingClientRect();
+      if (sourceRect.width <= 0 || sourceRect.height <= 0) return null;
+
+      const itemRects = new Map();
+      const hadEmptyCard = !!root.querySelector(".empty-card");
+      allCards.forEach(el => {
+        const id = el.getAttribute("data-flip-task-id");
+        if (!id || id === taskId) return;
+        const prefix = el.classList.contains("completed") ? "done:" : "open:";
+        itemRects.set(prefix + id, el.getBoundingClientRect());
+      });
+      root.querySelectorAll("[data-flip-key]").forEach(el => {
+        const key = el.getAttribute("data-flip-key");
+        if (key) itemRects.set("flow:" + key, el.getBoundingClientRect());
+      });
+
+      const taskObj = state.tasks.find(x => x.id === taskId);
+      const q = taskObj ? state.quests.find(x => x.id === taskObj.questId) : null;
+      const hex = ACCENT_HEX[q ? q.accentColor : "emerald"] || ACCENT_HEX.emerald;
+
+      const ghost = sourceEl.cloneNode(true);
+      ghost.removeAttribute("id");
+      ghost.removeAttribute("data-flip-task-id");
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.querySelectorAll("[id],[data-flip-task-id],[onclick]").forEach(node => {
+        node.removeAttribute("id");
+        node.removeAttribute("data-flip-task-id");
+        node.removeAttribute("onclick");
+      });
+      ghost.style.position = "absolute";
+      ghost.style.top = (sourceRect.top - rootRect.top) + "px";
+      ghost.style.left = (sourceRect.left - rootRect.left) + "px";
+      ghost.style.width = sourceRect.width + "px";
+      ghost.style.margin = "0";
+      ghost.style.pointerEvents = "none";
+      ghost.style.zIndex = "20";
+
+      const checkBtn = ghost.querySelector(".task-check-ring, .btn-complete-circle");
+      if (checkBtn) {
+        checkBtn.style.background = hex;
+        checkBtn.style.borderColor = "transparent";
+        checkBtn.style.color = "#05070a";
+        checkBtn.style.boxShadow = "0 0 14px -2px " + hex;
+        checkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#05070a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline data-ghost-check="1" points="20 6 9 17 4 12" style="stroke-dasharray:24;stroke-dashoffset:0;"/></svg>`;
+      }
+      const titleEl = ghost.querySelector(".queue-item-title, .spotlight-title");
+      if (titleEl) {
+        titleEl.style.color = "var(--muted)";
+        titleEl.style.textDecoration = "line-through";
+        titleEl.style.textDecorationColor = "rgba(163, 171, 188, 0.85)";
+      }
+      const focusBtn = ghost.querySelector(".btn-primary-focus");
+      if (focusBtn) {
+        focusBtn.style.opacity = "0.4";
+      }
+
+      return { ghost, itemRects, hadEmptyCard };
+    }
+
+    function playTwoBeatTaskCompletion(scene, taskId) {
+      if (!scene || !scene.ghost || prefersReducedMotionMobile()) return;
+      const root = document.getElementById("mainContainer");
+      if (!root || typeof root.animate !== "function") return;
+
+      const BEAT1_MS = 230;
+      const FLOW_MS = 320;
+      const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+      const ghost = scene.ghost;
+      root.appendChild(ghost);
+
+      let cleaned = false;
+      const removeGhost = () => {
+        if (cleaned) return;
+        cleaned = true;
+        if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      };
+
+      const checkBtn = ghost.querySelector(".task-check-ring, .btn-complete-circle");
+      if (checkBtn && typeof checkBtn.animate === "function") {
+        checkBtn.animate(
+          [
+            { transform: "scale(0.78)" },
+            { transform: "scale(1.14)", offset: 0.6 },
+            { transform: "scale(1)" }
+          ],
+          { duration: 210, easing: EASE }
+        );
+      }
+      const checkPoly = ghost.querySelector("[data-ghost-check]");
+      if (checkPoly && typeof checkPoly.animate === "function") {
+        checkPoly.animate(
+          [{ strokeDashoffset: "24" }, { strokeDashoffset: "0" }],
+          { duration: 185, easing: EASE }
+        );
+      }
+
+      const ghostAnim = ghost.animate(
+        [
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
+          { opacity: 0, transform: "translate3d(0, 12px, 0) scale(0.98)", offset: 1 }
+        ],
+        { duration: 480, easing: EASE, fill: "forwards" }
+      );
+      if (ghostAnim && typeof ghostAnim.addEventListener === "function") {
+        ghostAnim.addEventListener("finish", removeGhost);
+        ghostAnim.addEventListener("cancel", removeGhost);
+      }
+      setTimeout(removeGhost, 540);
+
+      if (!scene.hadEmptyCard) {
+        const emptyEl = root.querySelector(".empty-card");
+        if (emptyEl && typeof emptyEl.animate === "function") {
+          emptyEl.animate(
+            [
+              { opacity: 0, transform: "translate3d(0, 8px, 0)" },
+              { opacity: 1, transform: "translate3d(0, 0, 0)" }
+            ],
+            { delay: BEAT1_MS + 10, duration: 280, easing: EASE, fill: "backwards" }
+          );
+        }
+      }
+
+      root.querySelectorAll("[data-flip-task-id]").forEach(el => {
+        if (typeof el.animate !== "function") return;
+        const id = el.getAttribute("data-flip-task-id");
+        if (!id) return;
+        const isDone = el.classList.contains("completed");
+        if (id === taskId && isDone) {
+          el.animate(
+            [
+              { opacity: 0, transform: "translate3d(0, -16px, 0) scale(0.985)" },
+              { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
+            ],
+            { delay: BEAT1_MS + 15, duration: FLOW_MS, easing: EASE, fill: "backwards" }
+          );
+          return;
+        }
+        const first = scene.itemRects.get((isDone ? "done:" : "open:") + id);
+        if (!first) return;
+        const last = el.getBoundingClientRect();
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5) return;
+        el.animate(
+          [
+            { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+            { transform: "translate3d(0, 0, 0)" }
+          ],
+          { delay: BEAT1_MS, duration: FLOW_MS, easing: EASE, fill: "backwards" }
+        );
+      });
+
+      root.querySelectorAll("[data-flip-key]").forEach(el => {
+        if (typeof el.animate !== "function") return;
+        const key = el.getAttribute("data-flip-key");
+        if (!key) return;
+        const first = scene.itemRects.get("flow:" + key);
+        if (!first) {
+          el.animate(
+            [
+              { opacity: 0, transform: "translate3d(0, 6px, 0)" },
+              { opacity: 1, transform: "translate3d(0, 0, 0)" }
+            ],
+            { delay: BEAT1_MS + 10, duration: 260, easing: EASE, fill: "backwards" }
+          );
+          return;
+        }
+        const last = el.getBoundingClientRect();
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5) return;
+        el.animate(
+          [
+            { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+            { transform: "translate3d(0, 0, 0)" }
+          ],
+          { delay: BEAT1_MS, duration: FLOW_MS, easing: EASE, fill: "backwards" }
+        );
+      });
+    }
+
+    function captureTaskFlipRects() {
+      const rects = new Map();
+      const root = document.getElementById("mainContainer");
+      if (!root) return rects;
+      root.querySelectorAll("[data-flip-task-id]").forEach(el => {
+        const id = el.getAttribute("data-flip-task-id");
+        if (id) rects.set(id, el.getBoundingClientRect());
+      });
+      return rects;
+    }
+
+    function playTaskFlipGlide(firstRects, movedTaskId) {
+      if (!firstRects || !firstRects.size || prefersReducedMotionMobile()) return;
+      const root = document.getElementById("mainContainer");
+      if (!root) return;
+      root.querySelectorAll("[data-flip-task-id]").forEach(el => {
+        if (typeof el.animate !== "function") return;
+        const id = el.getAttribute("data-flip-task-id");
+        const isMoved = id === movedTaskId;
+        if (isMoved) {
+          el.animate(
+            [
+              { opacity: 0, transform: "translate3d(0, 12px, 0) scale(0.985)" },
+              { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
+            ],
+            { duration: 280, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+          );
+          return;
+        }
+        const first = id ? firstRects.get(id) : null;
+        if (!first) return;
+        const last = el.getBoundingClientRect();
+        const dx = first.left - last.left;
+        const dy = first.top - last.top;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 2) return;
+        el.animate(
+          [
+            { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+            { transform: "translate3d(0, 0, 0)" }
+          ],
+          { duration: 280, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+        );
+      });
     }
 
     function completeTaskDirect(taskId) {
@@ -4092,6 +4302,7 @@
         return;
       }
       playCompleteSound();
+      const twoBeatScene = captureTwoBeatTaskScene(taskId);
       const now = Date.now();
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
@@ -4101,6 +4312,7 @@
       t.updatedAt = nextStamp(t, now);
       justCompletedTaskId = taskId;
       commitLocalChange();
+      if (twoBeatScene) playTwoBeatTaskCompletion(twoBeatScene, taskId);
       // Undo is a new edit (newer updatedAt), so it also wins if the completion already synced.
       showToast("Completed · " + shortTitle(t.title), { undo: () => undoCompleteTask(taskId, now, prev) });
     }
@@ -4108,15 +4320,18 @@
     function undoCompleteTask(taskId, completedAt, prev) {
       const t = state.tasks.find(x => x.id === taskId);
       if (!t || t.status !== "completed" || t.completedAt !== completedAt) return; // changed since
+      const firstRects = captureTaskFlipRects();
       t.status = prev.status && prev.status !== "completed" ? prev.status : "queued";
       if (prev.completedAt === undefined || prev.completedAt === null) delete t.completedAt;
       else t.completedAt = prev.completedAt;
       t.updatedAt = nextStamp(t);
       commitLocalChange();
+      playTaskFlipGlide(firstRects, taskId);
     }
 
     function reopenTaskDirect(taskId) {
       playClickSound();
+      const firstRects = captureTaskFlipRects();
       const now = Date.now();
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
@@ -4124,6 +4339,7 @@
       t.completedAt = undefined;
       t.updatedAt = nextStamp(t, now);
       commitLocalChange();
+      playTaskFlipGlide(firstRects, taskId);
     }
 
     // Only the moved task changes (rank above the current top): a reorder never overrides edits or
@@ -5438,7 +5654,7 @@
       const title = escapeHtml(task.title);
 
       return `
-        <div class="queue-item-card">
+        <div class="queue-item-card" data-flip-task-id="${escapeHtml(task.id)}">
           <div class="card-edge-bar" style="background:${hex};"></div>
 
           <button class="task-check-ring" onclick="completeTaskDirect(${jsArg(task.id)})" aria-label="Complete ${title}">
@@ -5475,7 +5691,7 @@
       const fresh = justCompletedTaskId === t.id;
       if (fresh) justCompletedTaskId = null;
       return `
-        <div class="queue-item-card completed${fresh ? " just-completed" : ""}">
+        <div class="queue-item-card completed${fresh ? " just-completed" : ""}" data-flip-task-id="${escapeHtml(t.id)}">
           <div class="card-edge-bar" style="background:${hex};"></div>
           <button class="task-check-ring done" style="background:${hex};" onclick="reopenTaskDirect(${jsArg(t.id)})" aria-label="Reopen ${escapeHtml(t.title)}">${SVG_CHECK}</button>
           <div class="queue-item-body">
@@ -6214,7 +6430,7 @@
           const hSec = (heroTask.accumulatedSeconds || 0) + (isRunningHero ? liveDelta : 0);
 
           heroHtml = `
-            <div class="spotlight-card" style="border-color:${hHex}44;">
+            <div class="spotlight-card" data-flip-task-id="${escapeHtml(heroTask.id)}" style="border-color:${hHex}44;">
               <div class="spotlight-top">
                 <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                   <span class="next-badge" style="flex-shrink:0;">#01 NEXT UP</span>
@@ -6291,7 +6507,7 @@
             ${heroHtml}
 
             <!-- Up Next Queue -->
-            ${restQuestQueue.length > 0 ? `<div class="section-header-label">Up Next (${restQuestQueue.length})</div>` : ""}
+            ${restQuestQueue.length > 0 ? `<div class="section-header-label" data-flip-key="sec-upnext">Up Next (${restQuestQueue.length})</div>` : ""}
             ${restQuestQueue.map(t => renderCompactQueueCard(t)).join("")}
 
             ${questQueue.length === 0 ? (
@@ -6316,16 +6532,16 @@
 
             <!-- Other Work -->
             ${otherQueue.length > 0 ? `
-              <div class="section-header-label">Other Work</div>
+              <div class="section-header-label" data-flip-key="sec-other">Other Work</div>
               ${otherQueue.map(t => renderCompactQueueCard(t)).join("")}
             ` : ""}
 
             <!-- Completed Today -->
             ${completedToday.length > 0 ? `
-              <div class="section-header-label">Completed today (${completedToday.length})</div>
+              <div class="section-header-label" data-flip-key="sec-completed">Completed today (${completedToday.length})</div>
               ${completedList.map(t => renderCompletedCard(t, true)).join("")}
               ${completedToday.length > COMPLETED_PREVIEW ? `
-                <button class="show-more-btn" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
+                <button class="show-more-btn" data-flip-key="btn-showmore" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
                   ${showAllCompletedToday ? "Show less ↑" : `Show all ${completedToday.length} ↓`}
                 </button>
               ` : ""}
@@ -6399,7 +6615,7 @@
 
           ${pendingDay.map(t => renderCompactQueueCard(t)).join("")}
 
-          ${completedDay.length > 0 ? `<div class="section-header-label">Completed (${completedDay.length})</div>` : ""}
+          ${completedDay.length > 0 ? `<div class="section-header-label" data-flip-key="sec-plan-completed">Completed (${completedDay.length})</div>` : ""}
           ${completedDay.map(t => renderCompletedCard(t, false)).join("")}
         `;
       }
@@ -6554,6 +6770,10 @@
             const qTasks = state.tasks
               .filter(t => t.questId === quest.id && (t.status === "queued" || t.status === "active"))
               .sort(compareRank);
+            const qCompleted = state.tasks
+              .filter(t => t.questId === quest.id && t.status === "completed" && t.completedAt && toLocalDateKey(t.completedAt) === todayKey)
+              .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+              .slice(0, 3);
 
             return `
               <div class="review-card" style="padding:20px;">
@@ -6583,7 +6803,11 @@
                 </div>
 
                 ${qTasks.map(t => renderCompactQueueCard(t)).join("")}
-                ${qTasks.length === 0 ? `<div style="font-size:12px;color:var(--dim);padding:2px 2px 0;">No open steps yet.</div>` : ""}
+                ${qTasks.length === 0 ? `<div style="font-size:12px;color:var(--dim);padding:2px 2px 0;" data-flip-key="${escapeHtml("quest-empty:" + quest.id)}">No open steps yet.</div>` : ""}
+                ${qCompleted.length > 0 ? `
+                  <div data-flip-key="${escapeHtml("quest-done:" + quest.id)}" style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);margin:14px 0 8px;">Completed today (${qCompleted.length})</div>
+                  ${qCompleted.map(t => renderCompletedCard(t, true)).join("")}
+                ` : ""}
               </div>
             `;
           }).join("")}

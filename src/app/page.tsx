@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import { MotionConfig, motion } from "framer-motion";
 import { db, seedInitialDataIfNeeded } from "@/lib/db";
 import {
   installGlobalFaultTraps,
@@ -196,105 +196,96 @@ export default function HomePage() {
       )}
 
       <main>
-        <AnimatePresence mode="wait">
-          {activeView === "command" && (
-            <motion.div
-              key="view-command"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Home">
-                <CommandCenterView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {activeView === "command" && (
+          <motion.div
+            key="view-command"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Home">
+              <CommandCenterView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {activeView === "plan" && (
-            <motion.div
-              key="view-plan"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Plan">
-                <PlanWeekView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {activeView === "plan" && (
+          <motion.div
+            key="view-plan"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Plan">
+              <PlanWeekView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {activeView === "focus" && (
-            <motion.div
-              key="view-focus"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-            >
-              <RegionErrorBoundary region="Focus">
-                <FocusHudView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {activeView === "focus" && (
+          <motion.div
+            key="view-focus"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.18 }}
+          >
+            <RegionErrorBoundary region="Focus">
+              <FocusHudView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {activeView === "quests" && (
-            <motion.div
-              key="view-quests"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Quests">
-                <QuestMatrixPanel />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {activeView === "quests" && (
+          <motion.div
+            key="view-quests"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Quests">
+              <QuestMatrixPanel />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {activeView === "habits" && (
-            <motion.div
-              key="view-habits"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Habits">
-                <HabitsView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {activeView === "habits" && (
+          <motion.div
+            key="view-habits"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Habits">
+              <HabitsView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {(activeView === "telemetry" || activeView === "log") && (
-            <motion.div
-              key="view-telemetry"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Review">
-                <TelemetryDashboardView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
+        {(activeView === "telemetry" || activeView === "log") && (
+          <motion.div
+            key="view-telemetry"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Review">
+              <TelemetryDashboardView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
 
-          {activeView === "guide" && (
-            <motion.div
-              key="view-guide"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <RegionErrorBoundary region="Guide">
-                <GuideView />
-              </RegionErrorBoundary>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {activeView === "guide" && (
+          <motion.div
+            key="view-guide"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <RegionErrorBoundary region="Guide">
+              <GuideView />
+            </RegionErrorBoundary>
+          </motion.div>
+        )}
       </main>
     </div>
     </MotionConfig>

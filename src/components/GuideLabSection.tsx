@@ -12,7 +12,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { db, QUEST_ACCENT_STYLES, type QuestAccent } from "@/lib/db";
+import { db, QUEST_ACCENT_STYLES, loadSortedQuests, type QuestAccent } from "@/lib/db";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import {
@@ -87,7 +87,7 @@ export function GuideLabSection() {
     }))
   );
 
-  const quests = useLiveQuery(() => db.quests.orderBy("slotIndex").toArray(), []);
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
   const tasks = useLiveQuery(() => db.tasks.toArray(), []);
   const loadingAudit = quests === undefined || tasks === undefined;
 

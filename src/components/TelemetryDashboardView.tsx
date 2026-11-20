@@ -12,6 +12,7 @@ import {
   db,
   accentStyle,
   dateFromKey,
+  loadSortedQuests,
   toLocalDateKey,
   formatChronoMMSS,
 } from "@/lib/db";
@@ -23,10 +24,7 @@ const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 
 export function TelemetryDashboardView() {
   const deleteTimeLog = useCommandStore((s) => s.deleteTimeLog);
-  const quests = useLiveQuery(
-    () => db.quests.orderBy("slotIndex").toArray(),
-    []
-  );
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [showSessionHistory, setShowSessionHistory] = useState(false);

@@ -1149,10 +1149,13 @@ describe("CommandCenterView (Home)", () => {
           }
         });
 
+        const completedSection = screen.getByTestId("completed-tasks-section");
+        expect(within(completedSection).getByText("Completed")).toBeInTheDocument();
         const completedRow = screen.getByTestId("completed-task-row");
         expect(completedRow).toHaveTextContent("Ship smooth animation");
-        // Arrival highlight ring + animated SVG stroke-draw checkmark are active
+        // Arrival highlight ring + solid in-flight surface + animated SVG stroke-draw checkmark are active
         expect(completedRow.className).toContain("border-[#00ff9d]/35");
+        expect(completedRow.className).toContain("z-20");
         const reopenBtn = within(completedRow).getByRole("button", {
           name: "Reopen task",
         });

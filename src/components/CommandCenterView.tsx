@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   Play,
@@ -21,6 +21,7 @@ import {
   dateKeyFromOffset,
   formatChronoMMSS,
   isTaskVisibleToday,
+  loadSortedQuests,
   toLocalDateKey,
   type Task,
   type Quest,
@@ -28,6 +29,11 @@ import {
 import { orderAfterDrop, useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
+import {
+  captureTaskCompletionScene,
+  playTwoBeatTaskCompletion,
+  type TaskCompletionScene,
+} from "@/lib/taskCompletionMotion";
 import { TaskNotesField } from "./TaskNotesField";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 
@@ -39,9 +45,11 @@ const IDLE_TICK_MS = 60_000;
 const WEEK_DAYS = 7;
 /** Duration (ms) of the subtle arrival glow on a freshly completed task card. */
 const COMPLETION_HIGHLIGHT_MS = 650;
-/** Harmonized spatial FLIP transition for queue reorder & completion glide. */
-const TASK_FLOW_TRANSITION = {
-  layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
+const QUEST_ACCENT_HEX: Record<string, string> = {
+  cyan: "#00f0ff",
+  emerald: "#00ff9d",
+  amber: "#ffb800",
+  slate: "#94a3b8",
 };
 
 /** Elements where Alt+Arrow keys belong to text editing, not to reordering. */
@@ -90,10 +98,7 @@ export function CommandCenterView() {
     }))
   );
 
-  const quests = useLiveQuery(
-    () => db.quests.orderBy("slotIndex").toArray(),
-    []
-  );
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
 
   const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
 
@@ -252,19 +257,6 @@ export function CommandCenterView() {
       .slice(0, 4);
   }, [allTasks]);
 
-  // framer-motion `layout` rows measure the DOM on every render unless given a
-  // layoutDependency. Only visible list membership/order and the expanded drawer
-  // move rows, so clock ticks, sync updates and typing trigger zero measurements.
-  const taskFlowLayoutKey = React.useMemo(
-    () =>
-      `${questQueue.map((t) => t.id).join(",")}|${maintenanceQueue
-        .map((t) => t.id)
-        .join(",")}|${completedTasks.map((t) => t.id).join(",")}|${
-        expandedTaskId ?? ""
-      }`,
-    [questQueue, maintenanceQueue, completedTasks, expandedTaskId]
-  );
-
   // Today's & Weekly Quest Hours
   const activeTaskObj = React.useMemo(
     () => (allTasks ?? []).find((t) => t.id === activeTaskId),
@@ -323,10 +315,22 @@ export function CommandCenterView() {
     });
   }, [todayKey]);
 
+  const taskFlowRef = useRef<HTMLDivElement>(null);
+  const pendingSceneRef = useRef<TaskCompletionScene | null>(null);
+
   const handleCompleteTask = (taskId: string) => {
     if (completeHighlightTimerRef.current !== null) {
       clearTimeout(completeHighlightTimerRef.current);
     }
+    const task = allTasks?.find((t) => t.id === taskId);
+    const quest = task?.questId ? questMap.get(task.questId) : undefined;
+    const accentHex =
+      QUEST_ACCENT_HEX[quest?.accentColor ?? "emerald"] ?? "#00ff9d";
+    pendingSceneRef.current = captureTaskCompletionScene(
+      taskFlowRef.current,
+      taskId,
+      accentHex
+    );
     setExpandedTaskId((cur) => (cur === taskId ? null : cur));
     setJustCompletedId(taskId);
     completeHighlightTimerRef.current = setTimeout(() => {
@@ -336,6 +340,14 @@ export function CommandCenterView() {
     hudAudio.playComplete();
     void completeTaskById(taskId);
   };
+
+  useLayoutEffect(() => {
+    const scene = pendingSceneRef.current;
+    if (!scene) return;
+    if (!completedTasks.some((t) => t.id === scene.taskId)) return;
+    pendingSceneRef.current = null;
+    return playTwoBeatTaskCompletion(taskFlowRef.current, scene);
+  }, [completedTasks]);
 
   const handleAdd = async (promoteToTop: boolean) => {
     const title = newTitle.trim();
@@ -672,7 +684,7 @@ export function CommandCenterView() {
             </div>
           </div>
 
-          <LayoutGroup id="home-task-flow">
+          <div ref={taskFlowRef} className="relative space-y-6">
           {/* =============================================================== */}
           {/* QUEST WORK TASK CARDS                                           */}
           {/* =============================================================== */}
@@ -681,7 +693,10 @@ export function CommandCenterView() {
               // Nothing while the tasks are still loading: the empty copy
               // would be wrong for a populated queue.
               allTasks === undefined ? null : (
-                <div className="rounded-2xl border border-dashed border-white/[0.08] py-14 text-center text-sm text-hud-muted">
+                <div
+                  data-flow-key="empty-queue"
+                  className="rounded-2xl border border-dashed border-white/[0.08] py-14 text-center text-sm text-hud-muted"
+                >
                   No quest tasks queued. Add your most important work above.
                 </div>
               )
@@ -701,11 +716,7 @@ export function CommandCenterView() {
                   (isCurrentlyActive ? liveDelta : 0);
 
                 return (
-                  <motion.div
-                    layout="position"
-                    layoutId={`home-task-${task.id}`}
-                    layoutDependency={taskFlowLayoutKey}
-                    transition={TASK_FLOW_TRANSITION}
+                  <div
                     key={task.id}
                     data-testid="task-row"
                     data-task-id={task.id}
@@ -740,6 +751,7 @@ export function CommandCenterView() {
                       {/* Task Title */}
                       <button
                         type="button"
+                        data-task-title="true"
                         onClick={() => {
                           hudAudio.playLockOn();
                           initializeFocus(task.id);
@@ -923,12 +935,15 @@ export function CommandCenterView() {
                         </div>
                       </div>
                     )}
-                  </motion.div>
+                  </div>
                 );
               })
             )}
             {questQueue.length > 1 && (
-              <div className="text-center text-xs text-hud-muted">
+              <div
+                data-flow-key="reorder-hint"
+                className="text-center text-xs text-hud-muted"
+              >
                 Alt+↑/↓ to reorder
               </div>
             )}
@@ -939,7 +954,10 @@ export function CommandCenterView() {
           {/* =============================================================== */}
           {maintenanceQueue.length > 0 && (
             <div className="pt-6 space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted">
+              <div
+                data-flow-key="other-header"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted"
+              >
                 Other Work
               </div>
 
@@ -947,11 +965,7 @@ export function CommandCenterView() {
                 const taskTotalSec = task.accumulatedSeconds || 0;
                 const isCompleting = justCompletedId === task.id;
                 return (
-                  <motion.div
-                    layout="position"
-                    layoutId={`home-task-${task.id}`}
-                    layoutDependency={taskFlowLayoutKey}
-                    transition={TASK_FLOW_TRANSITION}
+                  <div
                     key={task.id}
                     data-testid="task-row"
                     data-task-id={task.id}
@@ -961,6 +975,7 @@ export function CommandCenterView() {
 
                     <button
                       type="button"
+                      data-task-title="true"
                       onClick={() => {
                         hudAudio.playLockOn();
                         initializeFocus(task.id);
@@ -1034,17 +1049,27 @@ export function CommandCenterView() {
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>
           )}
 
           {/* =============================================================== */}
-          {/* COMPLETED TASKS (Subtle Strikethrough Cards like Quest.app)     */}
+          {/* COMPLETED TASKS (Two-Beat Glide Destination)                    */}
           {/* =============================================================== */}
           {completedTasks.length > 0 && (
-            <div className="pt-4 space-y-3">
+            <div
+              data-testid="completed-tasks-section"
+              className="pt-6 space-y-3"
+            >
+              <div
+                data-flow-key="completed-header"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted"
+              >
+                Completed
+              </div>
+
               {completedTasks.map((task) => {
                 const linkedQuest = task.questId
                   ? questMap.get(task.questId)
@@ -1054,20 +1079,18 @@ export function CommandCenterView() {
                 const isJustCompleted = justCompletedId === task.id;
 
                 // Only the accent bar and the check are dimmed (the card used
-                // to be, which took the title below AA contrast).
+                // to be, which took the title below AA contrast). While settling
+                // in (`isJustCompleted`), the card uses a solid elevated surface
+                // (`z-20 bg-[#11141b]`) with a subtle emerald border highlight.
                 return (
-                  <motion.div
-                    layout="position"
-                    layoutId={`home-task-${task.id}`}
-                    layoutDependency={taskFlowLayoutKey}
-                    transition={TASK_FLOW_TRANSITION}
+                  <div
                     key={task.id}
                     data-testid="completed-task-row"
                     data-task-id={task.id}
-                    className={`group relative overflow-hidden rounded-2xl border bg-[#0e1014]/60 p-5 pl-6 transition-[border-color,box-shadow] duration-500 ease-out ${
+                    className={`group relative overflow-hidden rounded-2xl border p-5 pl-6 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
                       isJustCompleted
-                        ? "border-[#00ff9d]/35 shadow-[0_0_24px_-10px_rgba(0,255,157,0.32)]"
-                        : "border-white/[0.05]"
+                        ? "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]"
+                        : "border-white/[0.05] bg-[#0e1014]/60"
                     }`}
                   >
                     <div
@@ -1143,12 +1166,12 @@ export function CommandCenterView() {
                         )}
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>
           )}
-          </LayoutGroup>
+          </div>
         </div>
 
         {/* ================================================================= */}

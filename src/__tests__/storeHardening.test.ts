@@ -524,8 +524,12 @@ describe("DDL-06: persisted focus state is validated on rehydrate", () => {
     sessionStartedAt: 1_700_000_000_000,
     focusUpdatedAt: 1_700_000_000_500,
   };
+  const REHYDRATED_RUNNING = {
+    ...RUNNING,
+    activeView: "command",
+  };
 
-  it("a valid stored session (version 0, as written today) survives unchanged", async () => {
+  it("a valid stored session keeps its running focus state and always opens on Home ('command')", async () => {
     await rehydrateFrom(stored(RUNNING));
     const s = store();
     expect({
@@ -534,9 +538,24 @@ describe("DDL-06: persisted focus state is validated on rehydrate", () => {
       isRunning: s.isRunning,
       sessionStartedAt: s.sessionStartedAt,
       focusUpdatedAt: s.focusUpdatedAt,
-    }).toEqual(RUNNING);
+    }).toEqual(REHYDRATED_RUNNING);
     expect(actionNames(s)).toEqual(ACTIONS);
   });
+
+  it.each(["quests", "focus", "plan", "habits", "telemetry", "guide", "log"] as const)(
+    "rehydrating with stored activeView %j always lands on Home ('command') and partialize never persists activeView",
+    async (previousView) => {
+      useCommandStore.setState({ activeView: previousView });
+      const rawPersisted = window.localStorage.getItem(STORE_KEY);
+      expect(rawPersisted).not.toBeNull();
+      expect(JSON.parse(rawPersisted!).state).not.toHaveProperty("activeView");
+
+      await rehydrateFrom(stored({ ...RUNNING, activeView: previousView }));
+      expect(store().activeView).toBe("command");
+      expect(store().activeTaskId).toBe("tsk-1");
+      expect(store().isRunning).toBe(true);
+    }
+  );
 
   it.each([
     ["invalid JSON", "{not json"],
@@ -611,7 +630,7 @@ describe("DDL-06: persisted focus state is validated on rehydrate", () => {
   ])("%s falls back to a safe value", async (_label, raw, expected) => {
     await rehydrateFrom(raw);
     const s = store();
-    expect(s).toMatchObject({ ...RUNNING, ...expected });
+    expect(s).toMatchObject({ ...REHYDRATED_RUNNING, ...expected });
     if (s.isRunning) {
       expect(s.activeTaskId).not.toBeNull();
       expect(s.sessionStartedAt).not.toBeNull();

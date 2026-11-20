@@ -848,14 +848,35 @@ describe("QuestMatrixPanel", () => {
   }
 
   describe("loading vs. empty", () => {
-    it("renders the heading while quests load, and the empty state only after", async () => {
+    it("renders the heading and skeleton cards while quests load, and the empty state only after", async () => {
       render(<QuestMatrixPanel />);
       expect(
         screen.getByRole("heading", { level: 1, name: "Quests" })
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "New Quest" })).toBeInTheDocument();
+      expect(screen.getByTestId("quests-loading-skeleton")).toHaveAttribute(
+        "aria-busy",
+        "true"
+      );
       expect(screen.queryByText(/No active Quests/)).toBeNull();
       expect(await screen.findByText(/No active Quests/)).toBeInTheDocument();
+      expect(screen.queryByTestId("quests-loading-skeleton")).toBeNull();
+    });
+
+    it("loads quests even when a legacy/synced quest row lacks a finite slotIndex", async () => {
+      const legacyQuest = {
+        ...makeQuest("quest-legacy", "Legacy Quest Without Slot", 0),
+      } as Record<string, unknown>;
+      delete legacyQuest.slotIndex;
+      await db.quests.add(legacyQuest as unknown as Quest);
+
+      render(<QuestMatrixPanel />);
+      expect(
+        await screen.findByRole("heading", {
+          level: 2,
+          name: "Legacy Quest Without Slot",
+        })
+      ).toBeInTheDocument();
     });
 
     it("shows a dash, never 0.0h, until the week's logs have loaded", async () => {

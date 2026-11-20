@@ -6,6 +6,7 @@ import {
   db,
   habitTaskId,
   isTaskVisibleToday,
+  loadSortedQuests,
   toLocalDateKey,
   type Habit,
   type Quest,
@@ -749,23 +750,8 @@ type PersistedFocusState = Pick<
   "activeView" | "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
 >;
 
-const HUD_VIEWS: Readonly<Record<HudView, true>> = {
-  command: true,
-  plan: true,
-  focus: true,
-  quests: true,
-  habits: true,
-  telemetry: true,
-  guide: true,
-  log: true,
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isHudView(value: unknown): value is HudView {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(HUD_VIEWS, value);
 }
 
 /** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
@@ -774,18 +760,18 @@ function isStamp(value: unknown): value is number {
 }
 
 /**
- * Zero-trust rehydration: the five persisted fields of a stored state, each
- * validated (an invalid or missing one gets its default), with the invariant
- * isRunning ⇒ activeTaskId && sessionStartedAt. Nothing else is copied, so a
- * corrupted or tampered entry can neither replace an action nor feed NaN into
- * a flush.
+ * Zero-trust rehydration: validates the persisted focus fields (an invalid or
+ * missing one gets its default), enforces `isRunning ⇒ activeTaskId && sessionStartedAt`,
+ * and always lands on the Home screen (`activeView: "command"`) when opening the app.
+ * Nothing else is copied, so a corrupted or tampered entry can neither replace an
+ * action nor feed NaN into a flush.
  */
 function sanitizePersistedFocus(persisted: Record<string, unknown>): PersistedFocusState {
-  const { activeView, activeTaskId, isRunning, sessionStartedAt, focusUpdatedAt } = persisted;
+  const { activeTaskId, isRunning, sessionStartedAt, focusUpdatedAt } = persisted;
   const taskId = isSafeSyncId(activeTaskId, MAX_ENTITY_ID_LENGTH) ? activeTaskId : null;
   const startedAt = isStamp(sessionStartedAt) && sessionStartedAt > 0 ? sessionStartedAt : null;
   return {
-    activeView: isHudView(activeView) ? activeView : "command",
+    activeView: "command",
     activeTaskId: taskId,
     isRunning: isRunning === true && taskId !== null && startedAt !== null,
     sessionStartedAt: startedAt,
@@ -1156,7 +1142,7 @@ export const useCommandStore = create<CommandStoreState>()(
           const trimmed = clampTitle(title, MAX_QUEST_TITLE_LENGTH);
           if (!trimmed) return;
           const now = Date.now();
-          const existing = await db.quests.orderBy("slotIndex").toArray();
+          const existing = await loadSortedQuests();
           const activeCount = existing.filter((q) => !q.archived).length;
           const nextSlot = (activeCount % 3) as 0 | 1 | 2;
 
@@ -1412,7 +1398,6 @@ export const useCommandStore = create<CommandStoreState>()(
     {
       name: "journey-hud-command-store",
       partialize: (state) => ({
-        activeView: state.activeView,
         activeTaskId: state.activeTaskId,
         isRunning: state.isRunning,
         sessionStartedAt: state.sessionStartedAt,

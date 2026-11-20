@@ -1,8 +1,8 @@
 ; Hunt Desktop Windows Installer (Inno Setup 6)
-; Compiled in GitHub Actions via: iscc /DAppVersion=1.6.0 /DStageDir=... installer/hunt-desktop.iss
+; Compiled in GitHub Actions via: iscc /DAppVersion=1.6.2 /DStageDir=... installer/hunt-desktop.iss
 
 #ifndef AppVersion
-  #define AppVersion "1.6.0"
+  #define AppVersion "1.6.2"
 #endif
 
 #ifndef StageDir

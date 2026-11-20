@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { LayoutGroup, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   ArrowUpToLine,
@@ -19,6 +19,7 @@ import {
   dateFromKey,
   dateKeyFromOffset,
   formatChronoMMSS,
+  loadSortedQuests,
   toLocalDateKey,
   type Quest,
   type Task,
@@ -26,6 +27,11 @@ import {
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
+import {
+  captureTaskCompletionScene,
+  playTwoBeatTaskCompletion,
+  type TaskCompletionScene,
+} from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 
 interface DayColumn {
@@ -62,8 +68,11 @@ const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const ADD_BUTTON = `rounded border border-white/10 bg-white/[0.03] p-1 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
 const COMPLETION_HIGHLIGHT_MS = 650;
-const PLAN_FLOW_TRANSITION = {
-  layout: { duration: 0.26, ease: [0.22, 1, 0.36, 1] as const },
+const QUEST_ACCENT_HEX: Record<string, string> = {
+  cyan: "#00f0ff",
+  emerald: "#00ff9d",
+  amber: "#ffb800",
+  slate: "#94a3b8",
 };
 
 export function PlanWeekView() {
@@ -87,10 +96,7 @@ export function PlanWeekView() {
     }))
   );
 
-  const quests = useLiveQuery(
-    () => db.quests.orderBy("slotIndex").toArray(),
-    []
-  );
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
   const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
 
   // Day offset from Today (0 = centered on Today: [Today-2, Today-1, Today, Today+1, Today+2])
@@ -176,10 +182,26 @@ export function PlanWeekView() {
     card?.querySelector<HTMLElement>("[data-card-title]")?.focus();
   }, [allTasks, columns]);
 
-  const handleCompleteTask = (taskId: string) => {
+  const colFlowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingSceneRef = useRef<{
+    colDateKey: string;
+    scene: TaskCompletionScene;
+  } | null>(null);
+
+  const handleCompleteTask = (taskId: string, colDateKey: string) => {
     if (completeHighlightTimerRef.current !== null) {
       clearTimeout(completeHighlightTimerRef.current);
     }
+    const task = allTasks?.find((t) => t.id === taskId);
+    const quest = task?.questId ? questMap.get(task.questId) : undefined;
+    const accentHex =
+      QUEST_ACCENT_HEX[quest?.accentColor ?? "emerald"] ?? "#00ff9d";
+    const scene = captureTaskCompletionScene(
+      colFlowRefs.current[colDateKey] ?? null,
+      taskId,
+      accentHex
+    );
+    pendingSceneRef.current = scene ? { colDateKey, scene } : null;
     setJustCompletedId(taskId);
     completeHighlightTimerRef.current = setTimeout(() => {
       setJustCompletedId((cur) => (cur === taskId ? null : cur));
@@ -188,6 +210,20 @@ export function PlanWeekView() {
     hudAudio.playComplete();
     void completeTaskById(taskId);
   };
+
+  useLayoutEffect(() => {
+    const pending = pendingSceneRef.current;
+    if (!pending) return;
+    const done = (allTasks ?? []).some(
+      (t) => t.id === pending.scene.taskId && t.status === "completed"
+    );
+    if (!done) return;
+    pendingSceneRef.current = null;
+    return playTwoBeatTaskCompletion(
+      colFlowRefs.current[pending.colDateKey] ?? null,
+      pending.scene
+    );
+  }, [allTasks]);
 
   const handleAddForDay = async (dateKey: string, promoteToTop: boolean) => {
     const title = (inputsByDay[dateKey] ?? "").trim();
@@ -380,9 +416,6 @@ export function PlanWeekView() {
           const completedDayTasks = dayTasks.filter(
             (t) => t.status === "completed"
           );
-          const colLayoutKey = `${pendingDayTasks
-            .map((t) => t.id)
-            .join(",")}|${completedDayTasks.map((t) => t.id).join(",")}`;
           const isDragTarget = dragOverDateKey === col.dateKey;
           const dayInput = inputsByDay[col.dateKey] ?? "";
 
@@ -485,9 +518,13 @@ export function PlanWeekView() {
                 <div className="text-xs text-hud-muted">Nothing planned</div>
               )}
 
-              {/* Pending Tasks in this Day Column */}
-              <LayoutGroup id={`plan-col-${col.dateKey}`}>
-              <div className="space-y-3">
+              {/* Pending & Completed Tasks in this Day Column */}
+              <div
+                ref={(el) => {
+                  colFlowRefs.current[col.dateKey] = el;
+                }}
+                className="relative space-y-3"
+              >
                 {pendingDayTasks.map((task, idx) => {
                   const linkedQuest = task.questId
                     ? questMap.get(task.questId)
@@ -499,11 +536,7 @@ export function PlanWeekView() {
                   const isCompleting = justCompletedId === task.id;
 
                   return (
-                    <motion.div
-                      layout="position"
-                      layoutId={`plan-task-${task.id}`}
-                      layoutDependency={colLayoutKey}
-                      transition={PLAN_FLOW_TRANSITION}
+                    <div
                       key={task.id}
                       data-testid="task-row"
                       data-task-id={task.id}
@@ -528,6 +561,7 @@ export function PlanWeekView() {
                       <button
                         type="button"
                         data-card-title
+                        data-task-title="true"
                         onClick={() => {
                           hudAudio.playLockOn();
                           initializeFocus(task.id);
@@ -546,7 +580,7 @@ export function PlanWeekView() {
                               // The second click of a double-click would hit
                               // the next card, which slides up under the cursor.
                               if (e.detail > 1) return;
-                              handleCompleteTask(task.id);
+                              handleCompleteTask(task.id, col.dateKey);
                             }}
                             title="Mark complete"
                             aria-label="Mark complete"
@@ -599,12 +633,20 @@ export function PlanWeekView() {
                           </ConfirmDeleteButton>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
 
                 {/* Completed Tasks in this Day Column. Only the accent bar and
                     the check are dimmed, so the title keeps AA contrast. */}
+                {completedDayTasks.length > 0 && (
+                  <div
+                    data-flow-key="completed-header"
+                    className="pt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-hud-muted"
+                  >
+                    Completed
+                  </div>
+                )}
                 {completedDayTasks.map((task) => {
                   const linkedQuest = task.questId
                     ? questMap.get(task.questId)
@@ -614,19 +656,16 @@ export function PlanWeekView() {
                   const isJustCompleted = justCompletedId === task.id;
 
                   return (
-                    <motion.div
-                      layout="position"
-                      layoutId={`plan-task-${task.id}`}
-                      layoutDependency={colLayoutKey}
-                      transition={PLAN_FLOW_TRANSITION}
+                    <div
                       key={task.id}
                       data-testid="task-row"
                       data-task-id={task.id}
+                      data-completed-row="true"
                       data-date-key={col.dateKey}
-                      className={`group relative overflow-hidden rounded-xl border bg-[#101217]/50 p-4 pl-5 transition-[border-color,box-shadow] duration-500 ease-out ${
+                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
                         isJustCompleted
-                          ? "border-[#00ff9d]/35 shadow-[0_0_20px_-8px_rgba(0,255,157,0.3)]"
-                          : "border-white/[0.05]"
+                          ? "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_10px_24px_-10px_rgba(0,255,157,0.3)]"
+                          : "border-white/[0.05] bg-[#101217]/50"
                       }`}
                     >
                       <div
@@ -688,11 +727,10 @@ export function PlanWeekView() {
                           </span>
                         </span>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </div>
-              </LayoutGroup>
             </div>
           );
         })}

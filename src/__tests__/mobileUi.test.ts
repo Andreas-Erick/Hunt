@@ -1022,6 +1022,20 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
     p.renderApp();
     const afterRerender = one(p, ".queue-item-card.completed");
     expect(afterRerender.classList.contains("just-completed")).toBe(false);
+    expect(afterRerender.getAttribute("data-flip-task-id")).toBe("tsk-1");
+    expect(one(p, ".spotlight-card").getAttribute("data-flip-task-id")).toBe("tsk-2");
+
+    // Silent taps: neither switchView nor task completion triggers native vibration
+    let vibrateCount = 0;
+    const pSilent = load({
+      seedState: baseState(),
+      bridge: { vibrateClick: () => { vibrateCount++; } },
+    });
+    pSilent.switchView("quests");
+    pSilent.switchView("command");
+    pSilent.completeTaskDirect("tsk-1");
+    expect(vibrateCount).toBe(0);
+    pSilent.close();
 
     // Opening a sheet marks background landmarks inert; closing restores them
     p.openNewTaskSheet();

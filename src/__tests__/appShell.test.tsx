@@ -390,6 +390,43 @@ describe("HomePage shell", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("always opens on the Home screen on launch even if localStorage previously stored another view, and switches to Quests immediately", async () => {
+    window.localStorage.setItem(
+      "journey-hud-command-store",
+      JSON.stringify({
+        state: {
+          activeView: "quests",
+          activeTaskId: null,
+          isRunning: false,
+          sessionStartedAt: null,
+          focusUpdatedAt: 100,
+        },
+        version: 0,
+      })
+    );
+    await useCommandStore.persist.rehydrate();
+    expect(useCommandStore.getState().activeView).toBe("command");
+
+    render(<HomePage />);
+    const nav = within(await screen.findByRole("navigation"));
+    expect(nav.getByRole("button", { name: "Home" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(await screen.findByText("Quest Work")).toBeInTheDocument();
+
+    // Rapid view switches mount Quests immediately without AnimatePresence wedging
+    fireEvent.click(nav.getByRole("button", { name: "Quests" }));
+    fireEvent.click(nav.getByRole("button", { name: "Plan" }));
+    fireEvent.click(nav.getByRole("button", { name: "Quests" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Quests" })
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Launch my idea" })
+    ).toBeInTheDocument();
+  });
+
   it("the 5 s interval calls autoSync (only while visible); resume and focus call syncNow", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
     const { unmount } = render(<HomePage />);

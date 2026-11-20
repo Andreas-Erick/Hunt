@@ -17,6 +17,7 @@ import {
   accentStyle,
   dateKeyFromOffset,
   habitTaskId,
+  loadSortedQuests,
   toLocalDateKey,
   type Habit,
   type Quest,
@@ -72,10 +73,7 @@ export function HabitsView() {
     }))
   );
 
-  const quests = useLiveQuery(
-    () => db.quests.orderBy("slotIndex").toArray(),
-    []
-  );
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
   const habits = useLiveQuery(
     async () => (await db.habits.toArray()).sort(compareRank),
     []

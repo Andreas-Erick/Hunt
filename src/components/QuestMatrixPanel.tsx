@@ -1,8 +1,15 @@
 "use client";
 
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { LayoutGroup, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   BookOpen,
@@ -19,6 +26,7 @@ import {
   QUEST_ACCENT_STYLES,
   accentStyle,
   dateKeyFromOffset,
+  loadSortedQuests,
   toLocalDateKey,
   formatChronoMMSS,
   type Quest,
@@ -28,7 +36,18 @@ import {
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
+import {
+  captureTaskCompletionScene,
+  playTwoBeatTaskCompletion,
+  type TaskCompletionScene,
+} from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+
+const QUEST_ACCENT_HEX: Record<string, string> = {
+  cyan: "#00f0ff",
+  emerald: "#00ff9d",
+  amber: "#ffb800",
+};
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
@@ -159,10 +178,7 @@ export function QuestMatrixPanel() {
     }))
   );
 
-  const quests = useLiveQuery(
-    () => db.quests.orderBy("slotIndex").toArray(),
-    []
-  );
+  const quests = useLiveQuery(() => loadSortedQuests(), []);
   const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
 
   const activeQuests = useMemo(
@@ -327,6 +343,41 @@ export function QuestMatrixPanel() {
     }
   };
 
+  const questFlowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingTaskSceneRef = useRef<{
+    questId: string;
+    scene: TaskCompletionScene;
+  } | null>(null);
+
+  const handleCompleteQuestStep = (
+    taskId: string,
+    questId: string,
+    accent: QuestAccent
+  ) => {
+    const scene = captureTaskCompletionScene(
+      questFlowRefs.current[questId] ?? null,
+      taskId,
+      QUEST_ACCENT_HEX[accent] ?? "#00ff9d"
+    );
+    pendingTaskSceneRef.current = scene ? { questId, scene } : null;
+    hudAudio.playComplete();
+    void completeTaskById(taskId);
+  };
+
+  useLayoutEffect(() => {
+    const pending = pendingTaskSceneRef.current;
+    if (!pending) return;
+    const done = (allTasks ?? []).some(
+      (t) => t.id === pending.scene.taskId && t.status === "completed"
+    );
+    if (!done) return;
+    pendingTaskSceneRef.current = null;
+    return playTwoBeatTaskCompletion(
+      questFlowRefs.current[pending.questId] ?? null,
+      pending.scene
+    );
+  }, [allTasks]);
+
   const [justCompletedQuestId, setJustCompletedQuestId] = useState<string | null>(
     null
   );
@@ -341,14 +392,6 @@ export function QuestMatrixPanel() {
       }
     };
   }, []);
-
-  const questsLayoutKey = useMemo(
-    () =>
-      `${activeQuests.map((q) => q.id).join(",")}|${completedQuests
-        .map((q) => q.id)
-        .join(",")}|${editingQuest?.id ?? ""}`,
-    [activeQuests, completedQuests, editingQuest]
-  );
 
   const handleCompleteQuest = async (questId: string) => {
     if (questHighlightTimerRef.current !== null) {
@@ -581,8 +624,26 @@ export function QuestMatrixPanel() {
       <LayoutGroup id="quests-matrix">
       {/* 3-Column Spacious Quest Grid */}
       {quests === undefined ? (
-        // Still loading: keep the grid's place without claiming it is empty.
-        <div aria-busy="true" className="grid grid-cols-1 gap-8 lg:grid-cols-3" />
+        // Layout-matching skeleton cards while IndexedDB resolves (no empty-state flash or CLS).
+        <div
+          aria-busy="true"
+          data-testid="quests-loading-skeleton"
+          className="grid grid-cols-1 gap-8 lg:grid-cols-3"
+        >
+          {[0, 1, 2].map((slot) => (
+            <div
+              key={slot}
+              className="flex min-h-[320px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-7"
+            >
+              <div className="space-y-4">
+                <div className="h-6 w-2/3 animate-pulse rounded-lg bg-white/[0.06]" />
+                <div className="h-4 w-full animate-pulse rounded-lg bg-white/[0.04]" />
+                <div className="mt-6 h-20 w-full animate-pulse rounded-xl bg-white/[0.03]" />
+              </div>
+              <div className="mt-6 h-10 w-full animate-pulse rounded-xl bg-white/[0.03]" />
+            </div>
+          ))}
+        </div>
       ) : activeQuests.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/10 py-16 text-center text-sm text-hud-muted">
           No active Quests. Click <strong>+ New Quest</strong> above to create
@@ -615,8 +676,14 @@ export function QuestMatrixPanel() {
               <motion.div
                 layout="position"
                 layoutId={`quest-card-${quest.id}`}
-                layoutDependency={questsLayoutKey}
-                transition={{ layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
+                transition={{
+                  layout: {
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 30,
+                    mass: 0.9,
+                  },
+                }}
                 key={quest.id}
                 data-testid="quest-card"
                 data-quest-id={quest.id}
@@ -787,64 +854,69 @@ export function QuestMatrixPanel() {
                   </div>
 
                   {/* Linked Open Tasks */}
-                  <div className="mt-6 space-y-2.5">
+                  <div
+                    ref={(el) => {
+                      questFlowRefs.current[quest.id] = el;
+                    }}
+                    className="relative mt-6 space-y-2.5"
+                  >
                     <div className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
                       Next Steps
                       {allTasks === undefined ? "" : ` (${questTasks.length})`}
                     </div>
 
-                    <AnimatePresence initial={false}>
-                      {questTasks.map((t) => (
-                        <motion.div
-                          layout="position"
-                          exit={{ opacity: 0, scale: 0.97 }}
-                          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                          key={t.id}
-                          className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                // The second click of a double-click would hit
-                                // the next row, which slides up under the cursor.
-                                if (e.detail > 1) return;
-                                hudAudio.playComplete();
-                                completeTaskById(t.id);
-                              }}
-                              title="Mark complete"
-                              aria-label="Mark complete"
-                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
-                            >
-                              <Check className="h-2.5 w-2.5" />
-                            </button>
-                            <span
-                              className="truncate text-neutral-200"
-                              title={t.title}
-                            >
-                              {t.title}
-                            </span>
-                          </div>
-
+                    {questTasks.map((t) => (
+                      <div
+                        key={t.id}
+                        data-task-id={t.id}
+                        className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => {
-                              hudAudio.playLockOn();
-                              initializeFocus(t.id);
+                            onClick={(e) => {
+                              // The second click of a double-click would hit
+                              // the next row, which slides up under the cursor.
+                              if (e.detail > 1) return;
+                              handleCompleteQuestStep(
+                                t.id,
+                                quest.id,
+                                quest.accentColor
+                              );
                             }}
-                            aria-label={`Start focus: ${t.title}`}
-                            className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
+                            title="Mark complete"
+                            aria-label="Mark complete"
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
                           >
-                            {t.accumulatedSeconds > 0 && (
-                              <span className="font-mono tabular-nums">
-                                {formatChronoMMSS(t.accumulatedSeconds).formatted}
-                              </span>
-                            )}
-                            <Play className="h-3.5 w-3.5 fill-current" />
+                            <Check className="h-2.5 w-2.5" />
                           </button>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
+                          <span
+                            data-task-title="true"
+                            className="truncate text-neutral-200"
+                            title={t.title}
+                          >
+                            {t.title}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            hudAudio.playLockOn();
+                            initializeFocus(t.id);
+                          }}
+                          aria-label={`Start focus: ${t.title}`}
+                          className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
+                        >
+                          {t.accumulatedSeconds > 0 && (
+                            <span className="font-mono tabular-nums">
+                              {formatChronoMMSS(t.accumulatedSeconds).formatted}
+                            </span>
+                          )}
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -907,9 +979,13 @@ export function QuestMatrixPanel() {
                 <motion.div
                   layout="position"
                   layoutId={`quest-card-${quest.id}`}
-                  layoutDependency={questsLayoutKey}
                   transition={{
-                    layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+                    layout: {
+                      type: "spring",
+                      stiffness: 300,
+                      damping: 30,
+                      mass: 0.9,
+                    },
                   }}
                   key={quest.id}
                   data-testid="completed-quest-card"

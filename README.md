@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="brand/logo/hunt-mark.svg" alt="Hunt mark" width="72" height="72" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo/hunt-readme-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="brand/logo/hunt-readme-light.svg" />
+    <img src="brand/logo/hunt-readme-dark.svg" alt="Hunt logo" width="96" height="96" />
+  </picture>
 </p>
 
 <h1 align="center">Hunt</h1>
@@ -80,7 +84,7 @@ flowchart LR
 - **Deterministic Offline Daily Habits:** Daily habits materialize into per-day tasks using deterministic IDs (`habtsk-<YYYY-MM-DD>-<habitId>`), allowing laptop and phone to materialize identical tasks independently offline and converge without duplicate rows upon reconnect.
 - **Zero-Gradle Direct Android Build & Hardened WebView Shell:** [`android-app/build-apk.sh`](android-app/build-apk.sh) compiles and signs the Android companion directly with `aapt2`, `javac`, `d8`, `zipalign`, and `apksigner` (verifying the pinned signing certificate and scanning for leaked secrets). [`MainActivity.java`](android-app/app/src/main/java/com/hunt/companion/MainActivity.java) stores pairing tokens exclusively in AndroidKeyStore AES-256-GCM envelopes, locks WebView navigation to an explicit origin allowlist, and drives smooth Android 11+ IME bottom-sheet motion via `WindowInsetsAnimation.Callback` inside a safe-area-padded `FrameLayout`.
 - **Structured Observability & Root-Cause Diagnostics:** [`src/lib/diagnostics.ts`](src/lib/diagnostics.ts) propagates `X-Hunt-Correlation-Id` end-to-end across desktop, `/api/sync`, and mobile, records `durationMs` I/O telemetry, maintains bounded circular breadcrumb flight recorders, wires global unhandled fault traps (`error` / `unhandledrejection`), and recursively redacts bearer tokens and 64-hex keys (`[REDACTED]`).
-- **Adversarial Security & Chaos Test Suite:** 28 Vitest suites (991 tests) exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, Europe/Berlin DST rollover fuzzing, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
+- **Adversarial Security & Chaos Test Suite:** 28 Vitest suites (1,000 tests) exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, Europe/Berlin DST rollover fuzzing, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
 
 ---
 
@@ -97,11 +101,12 @@ flowchart LR
 │   ├── lib/
 │   │   ├── db.ts                   # Dexie IndexedDB v3 schema, DST-safe dates & formatters
 │   │   ├── diagnostics.ts          # Structured logging, redaction, breadcrumbs & fault traps
-│   │   ├── hudAudio.ts             # Persisted-mute Web Audio feedback chimes
+│   │   ├── hudAudio.ts             # Silent-by-default audio state & context lifecycle
 │   │   ├── syncEngine.ts           # Client diff-apply, AbortController timeout & tombstones
-│   │   └── syncTypes.ts            # Strict runtime schema validators & LWW CRDT merge
+│   │   ├── syncTypes.ts            # Strict runtime schema validators & LWW CRDT merge
+│   │   └── taskCompletionMotion.ts # Two-beat Things 3 / Linear task completion choreography
 │   ├── store/useCommandStore.ts    # Zustand state machine, focus sessions & habit engine
-│   └── __tests__/                  # 28 test suites (991 unit, property, fuzz & security tests)
+│   └── __tests__/                  # 28 test suites (1,000 unit, property, fuzz & security tests)
 ├── public/
 │   └── hunt-mobile.html            # Self-contained mobile web & Android WebView UI
 ├── android-app/
@@ -164,7 +169,7 @@ npm test
 npx tsc --noEmit
 ```
 
-All 28 test suites (991 tests) are deterministic and hermetic (virtual clocks, seeded PRNGs, `fake-indexeddb`, and isolated temp directories).
+All 28 test suites (1,000 tests) are deterministic and hermetic (virtual clocks, seeded PRNGs, `fake-indexeddb`, and isolated temp directories).
 
 ### Building & Installing the Android Companion APK
 
@@ -187,7 +192,7 @@ Pair the phone once by opening **Phone & Sync** on desktop and scanning/entering
 
 ## Releases & Automated Installers
 
-Pushing a version tag (e.g., `git tag v1.6.0 && git push origin v1.6.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 991 tests + TypeScript and publishes a GitHub Release containing:
+Pushing a version tag (e.g., `git tag v1.6.2 && git push origin v1.6.2`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,000 tests + TypeScript and publishes a GitHub Release containing:
 
 - **`Hunt-Desktop-Setup-<version>.exe`** — Windows Inno Setup installer (bundles Node.js + standalone Next.js server + Desktop/Start Menu shortcuts with `HUNT.ico`; no Node.js install required).
 - **`Hunt-Desktop-Windows-<version>.zip`** — Self-contained portable Windows bundle.

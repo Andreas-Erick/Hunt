@@ -84,10 +84,40 @@ class CommandCenterDB extends Dexie {
       timeLogs: "id, dateKey, questId, taskId, startTime, [dateKey+questId]",
       habits: "id, rank, questId",
     });
+
+    // Yield stale connections on schema upgrades so a background Hunt window
+    // never blocks a newly opened window from reading IndexedDB.
+    this.on("versionchange", () => {
+      this.close();
+    });
   }
 }
 
 export const db = new CommandCenterDB();
+
+/**
+ * Deterministic Quest sort by slotIndex (0..2), breaking ties by createdAt then id.
+ * Coerces missing/non-finite slotIndex values to 0 so a malformed or legacy synced
+ * quest row is never dropped (unlike `db.quests.orderBy("slotIndex")`, whose IDB
+ * index cursor omits any record with a missing or non-indexable key).
+ */
+export function compareQuestSlot(
+  a: Pick<Quest, "id"> & { slotIndex?: unknown; createdAt?: unknown },
+  b: Pick<Quest, "id"> & { slotIndex?: unknown; createdAt?: unknown }
+): number {
+  const sa = Number.isFinite(Number(a.slotIndex)) ? Number(a.slotIndex) : 0;
+  const sb = Number.isFinite(Number(b.slotIndex)) ? Number(b.slotIndex) : 0;
+  if (sa !== sb) return sa - sb;
+  const ca = Number.isFinite(Number(a.createdAt)) ? Number(a.createdAt) : 0;
+  const cb = Number.isFinite(Number(b.createdAt)) ? Number(b.createdAt) : 0;
+  if (ca !== cb) return ca - cb;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/** Reads all quests from the primary store and sorts safely in memory. */
+export async function loadSortedQuests(): Promise<Quest[]> {
+  return (await db.quests.toArray()).sort(compareQuestSlot);
+}
 
 /**
  * Deterministic daily task id for a Habit materialized on `dateKey`.

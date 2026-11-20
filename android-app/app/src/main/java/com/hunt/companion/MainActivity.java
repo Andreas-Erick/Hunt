@@ -14,8 +14,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.system.ErrnoException;
@@ -257,8 +255,6 @@ public class MainActivity extends Activity {
 
     // UI thread only.
     private WebView webView;
-    private Vibrator vibrator;
-    private VibrationEffect clickEffect;
     private ConnectivityManager.NetworkCallback networkCallback;
     private Network lastNetwork;
     private boolean lastOnline;
@@ -279,12 +275,6 @@ public class MainActivity extends Activity {
         filesDir = getFilesDir();
         connectivity = getSystemService(ConnectivityManager.class);
         appVersion = readAppVersion();
-        try {
-            vibrator = getSystemService(Vibrator.class);
-            clickEffect = VibrationEffect.createOneShot(18, VibrationEffect.DEFAULT_AMPLITUDE);
-        } catch (RuntimeException e) {
-            vibrator = null;
-        }
 
         // Pre-warm the caches so the page's first loadState()/getLaptopUrl() are memory reads.
         executeQuietly(ioExec, this::warmCaches);
@@ -1800,19 +1790,10 @@ public class MainActivity extends Activity {
             });
         }
 
-        /** Short click vibration; the Vibrator binder call runs on the UI thread, never in JS's way. */
+        /** Kept on the bridge contract as a silent no-op (no motor buzz on taps). */
         @JavascriptInterface
         public void vibrateClick() {
-            main.post(() -> {
-                Vibrator v = vibrator;
-                VibrationEffect effect = clickEffect;
-                if (destroyed || v == null || effect == null) return;
-                try {
-                    v.vibrate(effect);
-                } catch (RuntimeException ignored) {
-                    // no vibrator / permission: haptics are optional
-                }
-            });
+            // Intentionally silent: haptics disabled for clean, distraction-free taps.
         }
 
         /** e.g. "1.2.0 (3)". */
