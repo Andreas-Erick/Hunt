@@ -1,11 +1,10 @@
 import {
+  compareQuestSlot,
   dateFromKey,
   dateKeyFromOffset,
   toLocalDateKey,
-  type Quest,
-  type Task,
-  type TimeLog,
-} from "./db";
+} from "./dateUtils";
+import type { Quest, Task, TimeLog } from "./domainTypes";
 
 export type ReviewHorizon = "day" | "week" | "month" | "quarter" | "year";
 export type ReviewScope = "ALL" | "OTHER" | string;
@@ -36,7 +35,9 @@ export interface PeriodBucket {
   compactLabel: string;
   detailLabel: string;
   hours: number;
+  seconds: number;
   otherHours: number;
+  otherSeconds: number;
   completedTasks: number;
   sessions: number;
   isCurrent: boolean;
@@ -56,11 +57,15 @@ export interface PeriodReport {
   focusHours: number;
   focusSeconds: number;
   questHours: number;
+  questSeconds: number;
   otherHours: number;
+  otherSeconds: number;
   grandTotalHours: number;
+  grandTotalSeconds: number;
   targetHours: number;
   targetPct: number;
   dailyAverageHours: number;
+  dailyAverageSeconds: number;
   activeDaysCount: number;
   consistencyPct: number;
   focusSharePct: number;
@@ -82,6 +87,7 @@ export interface HeatmapCell {
   shortLabel: string;
   weekdayShort: string;
   hours: number;
+  seconds: number;
   completedTasks: number;
   sessions: number;
   level: 0 | 1 | 2 | 3 | 4;
@@ -105,9 +111,147 @@ export interface ActivityHeatmapReport {
   currentStreak: number;
   longestStreak: number;
   totalHours: number;
+  totalSeconds: number;
   totalCompletedTasks: number;
   bestWeekday: { label: string; avgHours: number; totalTasks: number } | null;
-  peakDay: { dateKey: string; label: string; hours: number; completedTasks: number } | null;
+  peakDay: { dateKey: string; label: string; hours: number; seconds: number; completedTasks: number } | null;
+}
+
+export interface TimelineBlockInput {
+  id: string;
+  startTime: number;
+  durationSeconds: number;
+}
+
+export interface TimelineBlockPlacement {
+  id: string;
+  startHour: number;
+  endHour: number;
+  colIndex: number;
+  totalCols: number;
+}
+
+export interface DayTimelineLayout {
+  windowStartHour: number;
+  windowEndHour: number;
+  hours: number[];
+  placements: Map<string, TimelineBlockPlacement>;
+}
+
+/**
+ * Formats logged duration cleanly across both tiny (<6m) and huge (100h–10,000h+)
+ * datasets without ever showing misleading "0.0h" for active micro-sessions or
+ * overflowing narrow chart columns on multi-hundred-hour horizons.
+ */
+export function formatTelemetryDuration(
+  seconds: number,
+  options?: { zeroAs?: string; compactLarge?: boolean }
+): string {
+  const sec = safeSeconds(seconds);
+  if (sec <= 0) return options?.zeroAs ?? "0.0h";
+  if (sec < 60) return `${Math.max(1, Math.round(sec))}s`;
+  if (sec < 360) return `${Math.max(1, Math.round(sec / 60))}m`;
+  const hours = sec / 3600;
+  if (options?.compactLarge) {
+    if (hours >= 10_000) return `${Math.round(hours / 1000)}kh`;
+    if (hours >= 1000) return `${(hours / 1000).toFixed(1)}kh`;
+    if (hours >= 100) return `${Math.round(hours)}h`;
+  }
+  return `${hours.toFixed(1)}h`;
+}
+
+/**
+ * Computes dynamic hour bounds (expanding beyond 08:00–22:00 for early/late
+ * sessions) and non-overlapping column lanes (capped at 4 columns) so dense or
+ * concurrent sessions on Today's Timeline remain distinct and readable.
+ */
+export function layoutTimelineBlocks(
+  items: readonly TimelineBlockInput[],
+  defaultStartHour = 8,
+  defaultEndHour = 22
+): DayTimelineLayout {
+  let minStart = defaultStartHour;
+  let maxEnd = defaultEndHour;
+
+  const raw = items.map((item) => {
+    const d = new Date(item.startTime);
+    const rawStart = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    const safeStart = Number.isFinite(rawStart) ? Math.max(0, Math.min(23.75, rawStart)) : defaultStartHour;
+    const durHr = Math.max(0.42, safeSeconds(item.durationSeconds) / 3600);
+    const safeEnd = Math.min(24, safeStart + durHr);
+    if (safeStart < minStart) minStart = Math.max(0, Math.floor(safeStart));
+    if (safeEnd > maxEnd) maxEnd = Math.min(24, Math.ceil(safeEnd));
+    return { id: item.id, startHour: safeStart, endHour: safeEnd };
+  });
+
+  raw.sort((a, b) => a.startHour - b.startHour || b.endHour - a.endHour);
+
+  const MAX_COLS = 4;
+  const placements = new Map<string, TimelineBlockPlacement>();
+  let cluster: Array<{ id: string; startHour: number; endHour: number; col: number }> = [];
+  let clusterEnd = -1;
+  let laneEnds: number[] = [];
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+    const usedCols = Math.min(
+      MAX_COLS,
+      Math.max(1, ...cluster.map((c) => c.col + 1))
+    );
+    for (const c of cluster) {
+      placements.set(c.id, {
+        id: c.id,
+        startHour: c.startHour,
+        endHour: c.endHour,
+        colIndex: c.col % usedCols,
+        totalCols: usedCols,
+      });
+    }
+    cluster = [];
+    clusterEnd = -1;
+    laneEnds = [];
+  };
+
+  for (const item of raw) {
+    if (cluster.length > 0 && item.startHour >= clusterEnd - 0.01) {
+      flushCluster();
+    }
+    let assigned = -1;
+    for (let i = 0; i < laneEnds.length; i++) {
+      if (laneEnds[i] <= item.startHour + 0.01) {
+        assigned = i;
+        laneEnds[i] = item.endHour;
+        break;
+      }
+    }
+    if (assigned === -1) {
+      if (laneEnds.length < MAX_COLS) {
+        assigned = laneEnds.length;
+        laneEnds.push(item.endHour);
+      } else {
+        // Pick lane finishing earliest so >4 simultaneous bursts never vanish
+        let earliestIdx = 0;
+        for (let i = 1; i < laneEnds.length; i++) {
+          if (laneEnds[i] < laneEnds[earliestIdx]) earliestIdx = i;
+        }
+        assigned = earliestIdx;
+        laneEnds[earliestIdx] = Math.max(laneEnds[earliestIdx], item.endHour);
+      }
+    }
+    cluster.push({ ...item, col: assigned });
+    if (item.endHour > clusterEnd) clusterEnd = item.endHour;
+  }
+  flushCluster();
+
+  const hours: number[] = [];
+  for (let h = minStart; h <= maxEnd; h++) hours.push(h);
+
+  return {
+    windowStartHour: minStart,
+    windowEndHour: maxEnd,
+    hours,
+    placements,
+  };
 }
 
 function safeSeconds(value: unknown): number {
@@ -473,6 +617,7 @@ export function computePeriodReport(params: {
   const questSessionsById = new Map<string, number>();
   const questTasksById = new Map<string, number>();
   const activeDaysSet = new Set<string>();
+  const focusActiveDaysSet = new Set<string>();
 
   let questSec = 0;
   let otherSec = 0;
@@ -497,10 +642,6 @@ export function computePeriodReport(params: {
       otherSec += dur;
     }
 
-    if (scope === "ALL" && dur > 0) {
-      activeDaysSet.add(log.dateKey);
-    }
-
     const inScope = matchesScope(qId, scope);
     const idx = bucketIndexForRecord(window, log.dateKey, log.startTime);
     const bucket = rawBuckets[idx];
@@ -510,7 +651,8 @@ export function computePeriodReport(params: {
       if (dur > 0) {
         sessionsCount++;
         if (dur > longestSessionSec) longestSessionSec = dur;
-        if (scope !== "ALL") activeDaysSet.add(log.dateKey);
+        activeDaysSet.add(log.dateKey);
+        focusActiveDaysSet.add(log.dateKey);
       }
       if (bucket && dur > 0) {
         bucket.scopeSec += dur;
@@ -551,7 +693,7 @@ export function computePeriodReport(params: {
     if (task.habitId) habitTasksCompleted++;
     else stepTasksCompleted++;
 
-    if (scope !== "ALL") {
+    if (matchesScope(qId, scope)) {
       activeDaysSet.add(dk);
     }
 
@@ -567,17 +709,16 @@ export function computePeriodReport(params: {
     compactLabel: b.compactLabel,
     detailLabel: b.detailLabel,
     hours: Number((b.scopeSec / 3600).toFixed(1)),
+    seconds: b.scopeSec,
     otherHours: Number((b.otherSec / 3600).toFixed(1)),
+    otherSeconds: b.otherSec,
     completedTasks: b.completedTasks,
     sessions: b.sessions,
     isCurrent: b.isCurrent,
   }));
 
   const grandSec = questSec + otherSec;
-  const focusHours =
-    window.horizon === "week"
-      ? Number(buckets.reduce((acc, b) => acc + b.hours, 0).toFixed(1))
-      : Number((scopeSec / 3600).toFixed(1));
+  const focusHours = Number((scopeSec / 3600).toFixed(1));
   const questHours = Number((questSec / 3600).toFixed(1));
   const otherHours = Number((otherSec / 3600).toFixed(1));
   const grandTotalHours = Number((grandSec / 3600).toFixed(1));
@@ -586,8 +727,12 @@ export function computePeriodReport(params: {
   const targetPct = targetHours > 0 ? Math.round(((scopeSec / 3600) / targetHours) * 100) : 0;
 
   const activeDaysCount = activeDaysSet.size;
-  const denomDays = Math.max(1, activeDaysCount);
-  const dailyAverageHours = focusHours / denomDays;
+  const focusDenomDays = Math.max(
+    1,
+    focusActiveDaysSet.size > 0 ? focusActiveDaysSet.size : activeDaysCount
+  );
+  const dailyAverageSeconds = scopeSec / focusDenomDays;
+  const dailyAverageHours = focusHours / focusDenomDays;
   const consistencyPct = Math.min(
     100,
     Math.round((activeDaysCount / Math.max(1, window.elapsedDays)) * 100)
@@ -597,16 +742,19 @@ export function computePeriodReport(params: {
     grandSec > 0 ? Math.round((scopeSec / grandSec) * 100) : 0;
 
   const avgSessionMinutes =
-    sessionsCount > 0 ? Math.round(scopeSec / sessionsCount / 60) : 0;
-  const longestSessionMinutes = Math.round(longestSessionSec / 60);
+    sessionsCount > 0 && scopeSec > 0
+      ? Math.max(1, Math.round(scopeSec / sessionsCount / 60))
+      : 0;
+  const longestSessionMinutes =
+    longestSessionSec > 0 ? Math.max(1, Math.round(longestSessionSec / 60)) : 0;
 
   let peakBucket: PeriodBucket | null = null;
   for (const b of buckets) {
-    if (b.hours <= 0 && b.completedTasks <= 0) continue;
+    if (b.seconds <= 0 && b.completedTasks <= 0) continue;
     if (
       !peakBucket ||
-      b.hours > peakBucket.hours ||
-      (b.hours === peakBucket.hours && b.completedTasks > peakBucket.completedTasks)
+      b.seconds > peakBucket.seconds ||
+      (b.seconds === peakBucket.seconds && b.completedTasks > peakBucket.completedTasks)
     ) {
       peakBucket = b;
     }
@@ -626,18 +774,28 @@ export function computePeriodReport(params: {
         sharePct: grandSec > 0 ? Math.round((sec / grandSec) * 100) : 0,
       };
     })
-    .filter((item) => !item.quest.archived || item.hours > 0 || item.completedTasks > 0);
+    .filter((item) => !item.quest.archived || item.seconds > 0 || item.completedTasks > 0)
+    .sort(
+      (a, b) =>
+        b.seconds - a.seconds ||
+        b.completedTasks - a.completedTasks ||
+        compareQuestSlot(a.quest, b.quest)
+    );
 
   return {
     scope,
     focusHours,
     focusSeconds: scopeSec,
     questHours,
+    questSeconds: questSec,
     otherHours,
+    otherSeconds: otherSec,
     grandTotalHours,
+    grandTotalSeconds: grandSec,
     targetHours,
     targetPct,
     dailyAverageHours,
+    dailyAverageSeconds,
     activeDaysCount,
     consistencyPct,
     focusSharePct,
@@ -655,9 +813,12 @@ export function computePeriodReport(params: {
   };
 }
 
-function heatmapLevel(hours: number, completedTasks: number): 0 | 1 | 2 | 3 | 4 {
-  if (hours <= 0 && completedTasks <= 0) return 0;
-  const score = hours + completedTasks * 0.35;
+function heatmapLevel(
+  sec: number,
+  completedTasks: number
+): 0 | 1 | 2 | 3 | 4 {
+  if (sec <= 0 && completedTasks <= 0) return 0;
+  const score = sec / 3600 + completedTasks * 0.35;
   if (score < 1.0) return 1;
   if (score < 2.5) return 2;
   if (score < 4.5) return 3;
@@ -759,7 +920,7 @@ export function computeActivityHeatmap(params: {
       const comp = rec?.tasks ?? 0;
       const sessions = rec?.sessions ?? 0;
       const hours = Number((sec / 3600).toFixed(1));
-      const level = isFuture ? 0 : heatmapLevel(hours, comp);
+      const level = isFuture ? 0 : heatmapLevel(sec, comp);
 
       const shortLabel = d.toLocaleDateString("en-US", {
         weekday: "short",
@@ -782,10 +943,10 @@ export function computeActivityHeatmap(params: {
           if (runningStreak > longestStreak) longestStreak = runningStreak;
           if (
             !peakDay ||
-            hours > peakDay.hours ||
-            (hours === peakDay.hours && comp > peakDay.completedTasks)
+            sec > peakDay.seconds ||
+            (sec === peakDay.seconds && comp > peakDay.completedTasks)
           ) {
-            peakDay = { dateKey: dk, label: shortLabel, hours, completedTasks: comp };
+            peakDay = { dateKey: dk, label: shortLabel, hours, seconds: sec, completedTasks: comp };
           }
         } else {
           runningStreak = 0;
@@ -797,6 +958,7 @@ export function computeActivityHeatmap(params: {
         shortLabel,
         weekdayShort: weekdayNames[dow],
         hours,
+        seconds: sec,
         completedTasks: comp,
         sessions,
         level,
@@ -849,6 +1011,7 @@ export function computeActivityHeatmap(params: {
     currentStreak,
     longestStreak,
     totalHours: Number((totalSec / 3600).toFixed(1)),
+    totalSeconds: totalSec,
     totalCompletedTasks,
     bestWeekday,
     peakDay,

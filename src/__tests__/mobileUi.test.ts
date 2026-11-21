@@ -1660,3 +1660,95 @@ describe("mobile Review analytics: multi-horizon, Quest X filter, Tasks metric &
     expect(pageErrors(p)).toEqual([]);
   });
 });
+
+describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing", () => {
+  it("removes artificial narrow max-width clamps on >=768px tablets and renders the 5-column Plan board at >=900px", () => {
+    const todayK = localKey(NOW);
+    const tomorrowK = localKey(NOW + 86_400_000);
+    const p = load({
+      seedState: baseState({
+        quests: [quest("quest-1", "Systems", "cyan")],
+        tasks: [
+          task("t-today", "Today deep block", { scheduledDate: todayK, rank: 1000 }),
+          task("t-tmrw", "Tomorrow architecture", { scheduledDate: tomorrowK, rank: 1000 }),
+        ],
+      }),
+      beforeBoot(win) {
+        Object.defineProperty(win, "matchMedia", {
+          configurable: true,
+          value: (q: string) => ({
+            matches: q.includes("min-width: 900px"),
+            media: q,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+          }),
+        });
+      },
+    });
+
+    const tabletBlock = block(cssText(p), "@media (min-width: 768px)");
+    expect(block(tabletBlock, ".screen-body")).toContain("max-width: none");
+    expect(block(tabletBlock, ".screen-body")).toContain("width: 100%");
+    expect(tabletBlock).not.toContain("50vw - 590px");
+    expect(tabletBlock).not.toContain("50vw - 320px");
+
+    p.switchView("plan");
+    const cols = p.document.querySelectorAll(".plan-board-grid .plan-col-panel");
+    expect(cols).toHaveLength(5);
+    const boardText = p.document.getElementById("mainContainer")?.textContent ?? "";
+    expect(boardText).toContain("Today deep block");
+    expect(boardText).toContain("Tomorrow architecture");
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("shows 1-tap Pair Android App banner on Android browser QR scan without exposing the secret in DOM HTML, and handles __huntNativePaired", async () => {
+    const fakeKey = "k".repeat(48);
+    const p = load({
+      url: `http://192.168.2.136:3000/hunt-mobile.html?token=${fakeKey}`,
+      beforeBoot(win) {
+        Object.defineProperty(win.navigator, "userAgent", {
+          value: "Mozilla/5.0 (Linux; Android 15; SM-X936B) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
+          configurable: true,
+        });
+      },
+    });
+
+    // URL bar stripped immediately AND DOM markup never contains the raw secret token
+    expect(p.location.href).not.toContain(fakeKey);
+    const banner = p.document.querySelector(".apk-pair-banner");
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain("Pair Android App");
+    expect(p.document.documentElement.innerHTML).not.toContain(fakeKey);
+
+    click(p, p.document.querySelector(".apk-pair-banner .sheet-close"));
+    expect(p.document.querySelector(".apk-pair-banner")).toBeNull();
+    p.close();
+
+    // Native APK receiving __huntNativePaired updates URL and triggers an immediate sync
+    const syncCalls: string[][] = [];
+    let lastSyncId = "";
+    const apk = load({
+      bridge: {
+        loadState: () => "",
+        saveState: () => undefined,
+        getLaptopUrl: () => "http://192.168.2.136:3000",
+        saveLaptopUrl: () => undefined,
+        syncWithLaptopAsync: (id, candidatesJson) => {
+          lastSyncId = id;
+          syncCalls.push(JSON.parse(candidatesJson) as string[]);
+          return true;
+        },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    apk.__huntSyncDone({ id: lastSyncId, ok: false, reason: "auth", url: null, code: 401, ms: 5, attempts: [], body: "" });
+    await vi.advanceTimersByTimeAsync(20);
+    const before = syncCalls.length;
+    apk.eval(`window.__huntNativePaired({ url: "http://192.168.2.136:3000" })`);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(syncCalls.length).toBeGreaterThan(before);
+    expect(syncCalls[syncCalls.length - 1][0]).toBe("http://192.168.2.136:3000");
+    expect(toastTexts(apk)).toContain("Paired with laptop · syncing…");
+    expect(pageErrors(apk)).toEqual([]);
+  });
+});

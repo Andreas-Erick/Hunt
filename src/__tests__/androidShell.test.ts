@@ -299,10 +299,20 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 15 (1.7.0) so it installs over the shipped 1.6.5 (14)", () => {
+  it("is versionCode >= 16 (1.8.0) so it installs over the shipped 1.7.0 (15)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(15);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.7.0");
+    expect(code).toBeGreaterThanOrEqual(16);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.8.0");
+  });
+
+  it("declares tablet screen support and multi-window resizeability", () => {
+    expect(manifest).toMatch(/<supports-screens[\s\S]*?android:largeScreens="true"/);
+    expect(manifest).toMatch(/<supports-screens[\s\S]*?android:xlargeScreens="true"/);
+    expect(manifest).toMatch(/android:resizeableActivity="true"/);
+    expect(manifest).toMatch(/android:launchMode="singleTask"/);
+    expect(manifest).toMatch(/android:scheme="hunt"[\s\S]*?android:host="pair"/);
+    expect(javaCode).toContain("handlePairingIntent");
+    expect(javaCode).toContain("isAllowedSyncRouteUrl");
   });
 
   it("handles API 30+ system bars & IME via a padded FrameLayout container without panning WebView or jumping on Samsung IME bars", () => {
@@ -487,14 +497,20 @@ const javaExe = ((): string | null => {
   return [...found, "java"].find((java) => spawnSync(java, ["--version"]).status === 0) ?? null;
 })();
 
-const JAVA_PROBES = ["isPageUrl", "isAllowedRequest", "looksLikeJsonObject", "isValidSyncToken"] as const;
+const JAVA_PROBES = [
+  "isPageUrl",
+  "isAllowedRequest",
+  "looksLikeJsonObject",
+  "isValidSyncToken",
+  "isAllowedSyncRouteUrl",
+] as const;
 type JavaProbe = (typeof JAVA_PROBES)[number];
 
 /** A `private static` field declaration or method (header + body) from MainActivity.java. */
 function javaMember(name: string): string {
   const field = new RegExp(`private\\s+static\\s+final\\s+[\\w\\[\\]]+\\s+${name}\\s*=[^;]*;`).exec(javaCode);
   if (field) return field[0];
-  const header = new RegExp(`private\\s+static\\s+\\w+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`);
+  const header = new RegExp(`private\\s+static\\s+[\\w\\[\\]]+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`);
   const m = header.exec(javaCode);
   if (!m) throw new Error(`member ${name} not found in MainActivity.java`);
   return javaCode.slice(m.index, m.index + m[0].length - 1) + blockAfter(javaCode, header);
@@ -502,10 +518,26 @@ function javaMember(name: string): string {
 
 /** Reads "<probe>\t<base64 arg | ->" lines on stdin and prints one 1/0 per line. */
 function javaProbeSource(): string {
-  const members = ["PAGE_URL", "ASSET_URL_PREFIX", "FONT_URL_PREFIXES", "SYNC_TOKEN_RE", "startsWithIgnoreCase", ...JAVA_PROBES];
+  const members = [
+    "PAGE_URL",
+    "ASSET_URL_PREFIX",
+    "FONT_URL_PREFIXES",
+    "SYNC_TOKEN_RE",
+    "startsWithIgnoreCase",
+    "isHttpUrl",
+    "parseIpv4Literal",
+    "isPrivateLanHost",
+    "isCgnatHost",
+    ...JAVA_PROBES,
+  ];
   return [
+    "import java.net.InetAddress;",
+    "import java.net.MalformedURLException;",
+    "import java.net.URL;",
+    "import java.net.UnknownHostException;",
     "import java.nio.charset.StandardCharsets;",
     "import java.util.Base64;",
+    "import java.util.Locale;",
     "import java.util.regex.Pattern;",
     "public class ShellHelpersProbe {",
     ...members.map(javaMember),
@@ -576,6 +608,20 @@ const JAVA_CASES: Array<[JavaProbe, string | null, boolean]> = [
   // Token rule: the same boundary matrix, through java.util.regex.
   ["isValidSyncToken", null, false],
   ...TOKEN_CASES.map(([token, valid]): [JavaProbe, string, boolean] => ["isValidSyncToken", token, valid]),
+  // Pairing deep-link route allowlist: only private LAN, Tailscale CGNAT, or loopback HTTP(S) origins.
+  ["isAllowedSyncRouteUrl", null, false],
+  ["isAllowedSyncRouteUrl", "", false],
+  ["isAllowedSyncRouteUrl", "http://192.168.2.136:3000", true],
+  ["isAllowedSyncRouteUrl", "http://10.0.0.5:3000", true],
+  ["isAllowedSyncRouteUrl", "http://172.16.4.2:3000", true],
+  ["isAllowedSyncRouteUrl", "http://100.78.24.69:3000", true],
+  ["isAllowedSyncRouteUrl", "http://localhost:3000", true],
+  ["isAllowedSyncRouteUrl", "http://127.0.0.1:3000", true],
+  ["isAllowedSyncRouteUrl", "http://192.168.2.136:3000@evil.example", false],
+  ["isAllowedSyncRouteUrl", "https://evil.example:3000", false],
+  ["isAllowedSyncRouteUrl", "http://8.8.8.8:3000", false],
+  ["isAllowedSyncRouteUrl", "http://172.32.0.1:3000", false],
+  ["isAllowedSyncRouteUrl", "ftp://192.168.2.136:3000", false],
 ];
 
 describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK (AND-01, AND-02, AND-04)", () => {

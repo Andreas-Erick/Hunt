@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import crypto from "crypto";
 import {
   newCorrelationId,
   recordBreadcrumb,
   redactText,
   sanitizeCorrelationId,
 } from "@/lib/diagnostics";
+import {
+  authorizeRequestWithSyncKey,
+  getOrCreateServerSyncKey,
+  isLocalhostPeerRequest,
+  type SyncAuthResult,
+} from "@/lib/serverSyncAuth";
 import {
   createEmptySyncPayload,
   mergeSyncPayloads,
@@ -131,7 +136,7 @@ function notePeerSeen(request: Request): void {
     registry.phone = now;
   } else if (client === "desktop") {
     registry.desktop = now;
-  } else if (!client && !isLocalhostRequest(request)) {
+  } else if (!client && !isLocalhostPeerRequest(request)) {
     // Legacy phone builds send no X-Hunt-Client header; the only remote
     // clients of this server are the phone.
     registry.phone = now;
@@ -142,80 +147,28 @@ function peersForResponse() {
   return { phone: { lastSeenAt: peerRegistry().phone } };
 }
 
-/**
- * Whether the request names this machine. Host and X-Forwarded-For are
- * client-controlled, so this only labels peers and never grants access.
- */
-function isLocalhostRequest(request: Request): boolean {
-  const host = (request.headers.get("host") ?? "").toLowerCase();
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded && forwarded !== "127.0.0.1" && forwarded !== "::1") {
-    return false;
-  }
-  return (
-    host.startsWith("localhost:") ||
-    host === "localhost" ||
-    host.startsWith("127.0.0.1:") ||
-    host === "127.0.0.1"
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Auth: every request needs the X-Hunt-Token header (no exemptions)
 // ---------------------------------------------------------------------------
 
 let keyFailureLogged = false;
 
-/**
- * The shared sync key from data/hunt-sync.key (created on first use), or null
- * when it cannot be read or created: callers then fail closed.
- */
-function getOrCreateSyncKey(client: string): string | null {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    let key: string | null = null;
-    if (fs.existsSync(KEY_FILE)) {
-      const existing = fs.readFileSync(KEY_FILE, "utf8").trim();
-      if (existing.length >= 32) key = existing;
-    }
-    if (!key) {
-      key = crypto.randomBytes(32).toString("hex");
-      fs.writeFileSync(KEY_FILE, key, "utf8");
-    }
-    keyFailureLogged = false;
-    return key;
-  } catch (err) {
-    if (!keyFailureLogged) {
-      keyFailureLogged = true;
-      logEvent("key_unavailable", client, err);
-    }
-    return null;
-  }
-}
-
-type AuthResult = "ok" | "unauthorized" | "no_key";
-
-function authorize(request: Request): AuthResult {
-  const secret = getOrCreateSyncKey(clientLabel(request));
-  if (!secret) return "no_key";
-
-  const candidate = (request.headers.get("x-hunt-token") ?? "").trim();
-  if (!candidate || candidate.length !== secret.length) {
-    return "unauthorized";
-  }
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(candidate, "utf8"),
-      Buffer.from(secret, "utf8")
-    )
-      ? "ok"
-      : "unauthorized";
-  } catch {
-    return "unauthorized";
-  }
+function authorize(request: Request): SyncAuthResult {
+  const client = clientLabel(request);
+  const secret = getOrCreateServerSyncKey({
+    dataDir: DATA_DIR,
+    keyFile: KEY_FILE,
+    onSuccess: () => {
+      keyFailureLogged = false;
+    },
+    onError: (err) => {
+      if (!keyFailureLogged) {
+        keyFailureLogged = true;
+        logEvent("key_unavailable", client, err);
+      }
+    },
+  });
+  return authorizeRequestWithSyncKey(request, secret);
 }
 
 /** The 401/503 response for a request that may not use the API, else null. */

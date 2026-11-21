@@ -26,6 +26,10 @@ import {
   type Task,
   type Quest,
 } from "@/lib/db";
+import {
+  formatTelemetryDuration,
+  layoutTimelineBlocks,
+} from "@/lib/reviewAnalytics";
 import { orderAfterDrop, useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
@@ -45,12 +49,6 @@ const IDLE_TICK_MS = 60_000;
 const WEEK_DAYS = 7;
 /** Duration (ms) of the subtle arrival glow on a freshly completed task card. */
 const COMPLETION_HIGHLIGHT_MS = 650;
-const QUEST_ACCENT_HEX: Record<string, string> = {
-  cyan: "#00f0ff",
-  emerald: "#00ff9d",
-  amber: "#ffb800",
-  slate: "#94a3b8",
-};
 
 /** Elements where Alt+Arrow keys belong to text editing, not to reordering. */
 function isTextEntryTarget(target: EventTarget): boolean {
@@ -104,6 +102,7 @@ export function CommandCenterView() {
 
   // Input State
   const [newTitle, setNewTitle] = useState("");
+  const [newNotes, setNewNotes] = useState("");
   // Set synchronously by the first add; drops activations that arrive before
   // React re-renders with the cleared input.
   const addingRef = useRef(false);
@@ -324,8 +323,7 @@ export function CommandCenterView() {
     }
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
-    const accentHex =
-      QUEST_ACCENT_HEX[quest?.accentColor ?? "emerald"] ?? "#00ff9d";
+    const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
     pendingSceneRef.current = captureTaskCompletionScene(
       taskFlowRef.current,
       taskId,
@@ -351,20 +349,31 @@ export function CommandCenterView() {
 
   const handleAdd = async (promoteToTop: boolean) => {
     const title = newTitle.trim();
+    const rawNotes = newNotes;
+    const trimmedNotes = rawNotes.trim();
     // The input is cleared before the write, so a double click or a repeated
     // Enter cannot create the task twice.
     if (!title || addingRef.current) return;
     addingRef.current = true;
     setNewTitle("");
+    setNewNotes("");
     hudAudio.playClick();
     let created = false;
     try {
       // Resolves false when the local write failed (the store reports it).
-      created = await createTask({ title, questId: selectedQuestId, promoteToTop });
+      created = await createTask({
+        title,
+        questId: selectedQuestId,
+        promoteToTop,
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
+      });
     } finally {
       addingRef.current = false;
-      // Give the title back unless something new was typed meanwhile.
-      if (!created) setNewTitle((current) => (current === "" ? title : current));
+      // Give the title & description back unless something new was typed meanwhile.
+      if (!created) {
+        setNewTitle((current) => (current === "" ? title : current));
+        setNewNotes((current) => (current === "" ? rawNotes : current));
+      }
     }
   };
 
@@ -445,19 +454,33 @@ export function CommandCenterView() {
     }
   };
 
-  // Today's Timeline Logs (08:00 to 22:00)
+  // Today's Timeline Logs (default 08:00–22:00, dynamically expanding for early/late sessions)
   const todayLogs = React.useMemo(() => {
     return (weekLogs ?? [])
       .filter((l) => l.dateKey === todayKey)
       .sort((a, b) => a.startTime - b.startTime);
   }, [weekLogs, todayKey]);
 
-  const timelineHours = [
-    8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-  ];
-  const TIMELINE_START_HOUR = 8;
-  const TIMELINE_END_HOUR = 22;
-  const HOUR_HEIGHT_PX = 52; // 52px per hour = 728px total height
+  const timelineLayout = React.useMemo(() => {
+    const items = todayLogs.map((l) => ({
+      id: l.id,
+      startTime: l.startTime,
+      durationSeconds: l.durationSeconds,
+    }));
+    if (activeTaskObj && isRunning && sessionStartedAt) {
+      items.push({
+        id: "__live_running__",
+        startTime: sessionStartedAt,
+        durationSeconds: Math.max(60, liveDelta),
+      });
+    }
+    return layoutTimelineBlocks(items, 8, 22);
+  }, [todayLogs, activeTaskObj, isRunning, sessionStartedAt, liveDelta]);
+
+  const timelineHours = timelineLayout.hours;
+  const TIMELINE_START_HOUR = timelineLayout.windowStartHour;
+  const TIMELINE_END_HOUR = timelineLayout.windowEndHour;
+  const HOUR_HEIGHT_PX = 52;
 
   const currentHourFloat = React.useMemo(() => {
     const d = new Date(nowMs);
@@ -465,7 +488,7 @@ export function CommandCenterView() {
   }, [nowMs]);
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 py-10 sm:px-10 lg:px-16 lg:py-12">
+    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Subtle Completion Banner (the live region stays mounted so the
           message is announced when it appears) */}
       <div role="status" aria-live="polite">
@@ -501,22 +524,24 @@ export function CommandCenterView() {
       {/* ================================================================= */}
       {/* HEADER ROW: Big Date on Left, Today & Weekly Progress on Right    */}
       {/* ================================================================= */}
-      <div className="mb-12 flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+      <div className="mb-10 sm:mb-12 flex flex-col justify-between gap-4 sm:gap-6 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             {formattedToday}
           </h1>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-medium tracking-tight text-white tabular-nums">
-              {kpisLoading ? "–" : `${(todayQuestSeconds / 3600).toFixed(1)}h`}
+            <span className="text-2xl sm:text-3xl font-medium tracking-tight text-white tabular-nums">
+              {kpisLoading
+                ? "–"
+                : formatTelemetryDuration(todayQuestSeconds, { zeroAs: "0.0h" })}
             </span>
             <span className="text-sm text-hud-muted">today</span>
           </div>
 
-          <div className="w-36 sm:w-44">
+          <div className="w-32 sm:w-44">
             <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
               <div
                 className="h-full rounded-full bg-[#00f0ff] transition-all duration-500"
@@ -526,7 +551,7 @@ export function CommandCenterView() {
             <div className="mt-1.5 text-right text-xs text-hud-muted tabular-nums">
               {kpisLoading
                 ? "–"
-                : `${(weekQuestSeconds / 3600).toFixed(1)}h / ${totalWeeklyTargetHours}h`}{" "}
+                : `${formatTelemetryDuration(weekQuestSeconds, { zeroAs: "0.0h" })} / ${totalWeeklyTargetHours}h`}{" "}
               this week
             </div>
           </div>
@@ -538,9 +563,9 @@ export function CommandCenterView() {
       {/* ================================================================= */}
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 xl:gap-14 items-start">
         {/* LEFT COLUMN (7 cols): QUEST WORK QUEUE */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="min-w-0 lg:col-span-7 space-y-6">
           {/* Section Header + Quest Filter */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
               Quest Work
             </span>
@@ -548,7 +573,7 @@ export function CommandCenterView() {
             <div
               role="group"
               aria-label="Filter by quest"
-              className="flex items-center gap-1.5"
+              className="flex min-w-0 flex-wrap items-center gap-1.5"
             >
               <button
                 type="button"
@@ -633,6 +658,23 @@ export function CommandCenterView() {
               </div>
             </div>
 
+            <div className="mt-2 border-t border-white/[0.05] pt-2">
+              <input
+                type="text"
+                value={newNotes}
+                onChange={(e) => setNewNotes(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAdd(true);
+                  }
+                }}
+                placeholder="Add description (optional)..."
+                aria-label="Task description (optional)"
+                className="w-full bg-transparent px-1 py-1 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+              />
+            </div>
+
             {/* Quest Selector Pills inside the Add Box */}
             <div
               role="group"
@@ -690,9 +732,25 @@ export function CommandCenterView() {
           {/* =============================================================== */}
           <div className="space-y-3.5">
             {questQueue.length === 0 ? (
-              // Nothing while the tasks are still loading: the empty copy
+              // Skeleton while the tasks are still loading: the empty copy
               // would be wrong for a populated queue.
-              allTasks === undefined ? null : (
+              allTasks === undefined ? (
+                <div
+                  aria-busy="true"
+                  data-testid="home-loading-skeleton"
+                  className="space-y-3.5"
+                >
+                  {[0, 1].map((slot) => (
+                    <div
+                      key={slot}
+                      className="rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 pl-6"
+                    >
+                      <div className="h-5 w-3/5 animate-pulse rounded-lg bg-white/[0.06]" />
+                      <div className="mt-3.5 h-4 w-1/3 animate-pulse rounded-lg bg-white/[0.04]" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <div
                   data-flow-key="empty-queue"
                   className="rounded-2xl border border-dashed border-white/[0.08] py-14 text-center text-sm text-hud-muted"
@@ -760,6 +818,12 @@ export function CommandCenterView() {
                       >
                         {task.title}
                       </button>
+
+                      {!isExpanded && task.notes && (
+                        <p className="mt-1.5 max-w-[70ch] line-clamp-2 break-words text-xs leading-relaxed text-hud-muted">
+                          {task.notes}
+                        </p>
+                      )}
 
                       {/* Bottom Metadata & Action Row */}
                       <div className="mt-3.5 flex items-center justify-between gap-4">
@@ -985,8 +1049,14 @@ export function CommandCenterView() {
                       {task.title}
                     </button>
 
-                    <div className="mt-3 flex items-center justify-between gap-4">
-                      <div className="flex min-w-0 items-center gap-3">
+                    {task.notes && (
+                      <p className="mt-1.5 max-w-[70ch] line-clamp-2 break-words text-xs leading-relaxed text-hud-muted">
+                        {task.notes}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1101,8 +1171,8 @@ export function CommandCenterView() {
                       {task.title}
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex min-w-0 items-center gap-3">
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
                         <button
                           type="button"
                           onClick={() => {
@@ -1185,7 +1255,7 @@ export function CommandCenterView() {
         {/* ================================================================= */}
         {/* RIGHT COLUMN (5 cols): TODAY'S DAY TIMELINE (Quest.app style)     */}
         {/* ================================================================= */}
-        <div className="lg:col-span-5">
+        <div className="min-w-0 lg:col-span-5">
           <div className="mb-6 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
               Today&apos;s Timeline
@@ -1222,11 +1292,14 @@ export function CommandCenterView() {
                 );
               })}
 
-              {/* Logged Session Blocks */}
+              {/* Logged Session Blocks (non-overlapping multi-lane layout) */}
               {todayLogs.map((log) => {
                 const startD = new Date(log.startTime);
                 const endD = new Date(log.endTime);
-                const startHr = startD.getHours() + startD.getMinutes() / 60;
+                const placement = timelineLayout.placements.get(log.id);
+                const startHr =
+                  placement?.startHour ??
+                  startD.getHours() + startD.getMinutes() / 60;
                 const durationHr = Math.max(0.35, log.durationSeconds / 3600);
 
                 const clampedStart = Math.max(
@@ -1243,6 +1316,13 @@ export function CommandCenterView() {
                   )
                 );
 
+                const colIndex = placement?.colIndex ?? 0;
+                const totalCols = placement?.totalCols ?? 1;
+                const leftExpr = `calc(3.5rem + (100% - 3.75rem) * ${colIndex} / ${totalCols})`;
+                const widthExpr = `calc((100% - 3.75rem) / ${totalCols} - ${
+                  totalCols > 1 ? 4 : 0
+                }px)`;
+
                 const style = accentStyle(log.accentColorSnapshot);
                 const startStr = `${String(startD.getHours()).padStart(
                   2,
@@ -1256,23 +1336,29 @@ export function CommandCenterView() {
                 return (
                   <div
                     key={log.id}
+                    data-testid="timeline-block"
+                    data-col-index={colIndex}
+                    data-total-cols={totalCols}
+                    title={`${log.taskTitleSnapshot} (${startStr} – ${endStr})`}
                     style={{
                       top: `${topPx}px`,
                       height: `${heightPx}px`,
+                      left: leftExpr,
+                      width: widthExpr,
                       backgroundImage: `repeating-linear-gradient(-45deg, ${style.hex}18, ${style.hex}18 6px, ${style.hex}08 6px, ${style.hex}08 12px)`,
                       borderColor: `${style.hex}45`,
                     }}
-                    className="absolute left-14 right-1 overflow-hidden rounded-xl border px-3.5 py-2"
+                    className="absolute overflow-hidden rounded-xl border px-3 py-2"
                   >
                     <div
-                      className=" bottom-0 left-0 top-0 w-1 absolute"
+                      className="bottom-0 left-0 top-0 w-1 absolute"
                       style={{ backgroundColor: style.hex }}
                     />
                     <div className="truncate text-xs font-medium text-white">
                       {log.taskTitleSnapshot}
                     </div>
                     {heightPx >= 46 && (
-                      <div className="mt-0.5 font-mono text-[11px] tabular-nums text-neutral-400">
+                      <div className="mt-0.5 truncate font-mono text-[11px] tabular-nums text-neutral-400">
                         {startStr} – {endStr}
                       </div>
                     )}
@@ -1284,7 +1370,11 @@ export function CommandCenterView() {
               {activeTaskObj && isRunning && sessionStartedAt && (
                 (() => {
                   const startD = new Date(sessionStartedAt);
-                  const startHr = startD.getHours() + startD.getMinutes() / 60;
+                  const placement =
+                    timelineLayout.placements.get("__live_running__");
+                  const startHr =
+                    placement?.startHour ??
+                    startD.getHours() + startD.getMinutes() / 60;
                   const clampedStart = Math.max(
                     TIMELINE_START_HOUR,
                     Math.min(TIMELINE_END_HOUR - 0.4, startHr)
@@ -1295,6 +1385,12 @@ export function CommandCenterView() {
                     36,
                     (liveDelta / 3600) * HOUR_HEIGHT_PX
                   );
+                  const colIndex = placement?.colIndex ?? 0;
+                  const totalCols = placement?.totalCols ?? 1;
+                  const leftExpr = `calc(3.5rem + (100% - 3.75rem) * ${colIndex} / ${totalCols})`;
+                  const widthExpr = `calc((100% - 3.75rem) / ${totalCols} - ${
+                    totalCols > 1 ? 4 : 0
+                  }px)`;
                   const q = activeTaskObj.questId
                     ? questMap.get(activeTaskObj.questId)
                     : undefined;
@@ -1305,10 +1401,12 @@ export function CommandCenterView() {
                       style={{
                         top: `${topPx}px`,
                         height: `${heightPx}px`,
+                        left: leftExpr,
+                        width: widthExpr,
                         backgroundColor: `${style.hex}1a`,
                         borderColor: `${style.hex}80`,
                       }}
-                      className="absolute left-14 right-1 overflow-hidden rounded-xl border px-3.5 py-2"
+                      className="absolute overflow-hidden rounded-xl border px-3 py-2"
                     >
                       <div className="truncate text-xs font-medium text-white">
                         {activeTaskObj.title}

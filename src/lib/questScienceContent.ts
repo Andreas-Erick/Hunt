@@ -1,4 +1,4 @@
-import type { QuestAccent } from "./db";
+import type { QuestAccent } from "./domainTypes";
 
 export type GuideTabId = "quests" | "tasks" | "system" | "workshop";
 

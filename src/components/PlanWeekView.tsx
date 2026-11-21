@@ -33,6 +33,7 @@ import {
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { useTodayDateKey } from "./useTodayDateKey";
 
 interface DayColumn {
   dateKey: string;
@@ -68,12 +69,6 @@ const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const ADD_BUTTON = `rounded border border-white/10 bg-white/[0.03] p-1 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
 const COMPLETION_HIGHLIGHT_MS = 650;
-const QUEST_ACCENT_HEX: Record<string, string> = {
-  cyan: "#00f0ff",
-  emerald: "#00ff9d",
-  amber: "#ffb800",
-  slate: "#94a3b8",
-};
 
 export function PlanWeekView() {
   const {
@@ -107,6 +102,7 @@ export function PlanWeekView() {
     undefined
   );
   const [inputsByDay, setInputsByDay] = useState<Record<string, string>>({});
+  const [notesByDay, setNotesByDay] = useState<Record<string, string>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
@@ -157,7 +153,7 @@ export function PlanWeekView() {
       : activeQuests[0]?.id ?? null;
   const otherSelected = quests !== undefined && selectedQuestId === null;
 
-  const todayKey = toLocalDateKey();
+  const todayKey = useTodayDateKey();
 
   const columns = React.useMemo(
     () => buildDayColumns(todayKey, dayOffset),
@@ -194,8 +190,7 @@ export function PlanWeekView() {
     }
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
-    const accentHex =
-      QUEST_ACCENT_HEX[quest?.accentColor ?? "emerald"] ?? "#00ff9d";
+    const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
     const scene = captureTaskCompletionScene(
       colFlowRefs.current[colDateKey] ?? null,
       taskId,
@@ -227,10 +222,13 @@ export function PlanWeekView() {
 
   const handleAddForDay = async (dateKey: string, promoteToTop: boolean) => {
     const title = (inputsByDay[dateKey] ?? "").trim();
+    const rawNotes = notesByDay[dateKey] ?? "";
+    const trimmedNotes = rawNotes.trim();
     if (!title || addingDaysRef.current.has(dateKey)) return;
     hudAudio.playClick();
     addingDaysRef.current.add(dateKey);
     setInputsByDay((prev) => ({ ...prev, [dateKey]: "" }));
+    setNotesByDay((prev) => ({ ...prev, [dateKey]: "" }));
     let created = false;
     try {
       // Resolves false when the local write failed (the store reports it).
@@ -239,13 +237,17 @@ export function PlanWeekView() {
         questId: selectedQuestId,
         promoteToTop,
         scheduledDate: dateKey,
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
       });
     } finally {
       addingDaysRef.current.delete(dateKey);
-      // Give the title back unless something new was typed meanwhile.
+      // Give the title & description back unless something new was typed meanwhile.
       if (!created) {
         setInputsByDay((prev) =>
           (prev[dateKey] ?? "") === "" ? { ...prev, [dateKey]: title } : prev
+        );
+        setNotesByDay((prev) =>
+          (prev[dateKey] ?? "") === "" ? { ...prev, [dateKey]: rawNotes } : prev
         );
       }
     }
@@ -308,11 +310,11 @@ export function PlanWeekView() {
   );
 
   return (
-    <div className="mx-auto max-w-[1560px] px-6 py-10 sm:px-10 lg:px-14 lg:py-12">
+    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Header Row: "Plan the week" + Active Quest Selector + Month / Today Controls */}
-      <div className="mb-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-        <div className="flex min-w-0 flex-wrap items-center gap-4">
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+      <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:gap-6 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             Plan the week
           </h1>
 
@@ -367,8 +369,8 @@ export function PlanWeekView() {
         </div>
 
         {/* Right: Month Label + Today Navigation */}
-        <div className="flex items-center gap-3">
-          <span className="mr-2 text-base text-neutral-400">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <span className="mr-1 sm:mr-2 text-sm sm:text-base text-neutral-400">
             {columns[2]?.monthYear}
           </span>
           <button
@@ -397,10 +399,10 @@ export function PlanWeekView() {
         </div>
       </div>
 
-      {/* 5-Column Weekly Board */}
+      {/* 5-Column Weekly Board (Intrinsic Fluid Grid across 320px -> Split-Screen -> 5-Col) */}
       <div
         ref={boardRef}
-        className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-5"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 xl:grid-cols-5"
       >
         {columns.map((col) => {
           const dayTasks = (allTasks ?? [])
@@ -430,7 +432,7 @@ export function PlanWeekView() {
               }}
               onDragLeave={() => setDragOverDateKey(null)}
               onDrop={() => handleDropOnDay(col.dateKey)}
-              className={`flex min-h-[620px] min-w-0 flex-col rounded-2xl border p-4 transition-colors ${
+              className={`flex min-h-[200px] xl:min-h-[560px] min-w-0 flex-col rounded-2xl border p-4 transition-colors ${
                 isDragTarget
                   ? "border-[#00f0ff]/50 bg-[#141821]"
                   : col.isToday
@@ -468,45 +470,68 @@ export function PlanWeekView() {
 
               {/* Dashed Add Task Input (for Today & Future Columns) */}
               {!col.isPast && (
-                <div className="mb-3.5 flex items-center justify-between gap-2 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3 py-2.5 transition-colors duration-150 ease-out focus-within:border-white/40">
-                  <input
-                    type="text"
-                    value={dayInput}
-                    onChange={(e) =>
-                      setInputsByDay((prev) => ({
-                        ...prev,
-                        [col.dateKey]: e.target.value,
-                      }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddForDay(col.dateKey, true);
+                <div className="mb-3.5 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3 py-2.5 transition-colors duration-150 ease-out focus-within:border-white/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={dayInput}
+                      onChange={(e) =>
+                        setInputsByDay((prev) => ({
+                          ...prev,
+                          [col.dateKey]: e.target.value,
+                        }))
                       }
-                    }}
-                    placeholder="Add a task..."
-                    aria-label={`Add task for ${col.weekdayLong}`}
-                    className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
-                  />
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleAddForDay(col.dateKey, true)}
-                      disabled={!dayInput.trim()}
-                      title="Add to top"
-                      className={`${ADD_BUTTON} text-neutral-400`}
-                    >
-                      <ArrowUpToLine className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAddForDay(col.dateKey, false)}
-                      disabled={!dayInput.trim()}
-                      title="Add to bottom"
-                      className={`${ADD_BUTTON} text-hud-muted`}
-                    >
-                      <ArrowDownToLine className="h-3 w-3" />
-                    </button>
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddForDay(col.dateKey, true);
+                        }
+                      }}
+                      placeholder="Add a task..."
+                      aria-label={`Add task for ${col.weekdayLong}`}
+                      className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
+                    />
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleAddForDay(col.dateKey, true)}
+                        disabled={!dayInput.trim()}
+                        title="Add to top"
+                        className={`${ADD_BUTTON} text-neutral-400`}
+                      >
+                        <ArrowUpToLine className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddForDay(col.dateKey, false)}
+                        disabled={!dayInput.trim()}
+                        title="Add to bottom"
+                        className={`${ADD_BUTTON} text-hud-muted`}
+                      >
+                        <ArrowDownToLine className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
+                    <input
+                      type="text"
+                      value={notesByDay[col.dateKey] ?? ""}
+                      onChange={(e) =>
+                        setNotesByDay((prev) => ({
+                          ...prev,
+                          [col.dateKey]: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddForDay(col.dateKey, true);
+                        }
+                      }}
+                      placeholder="Description (optional)..."
+                      aria-label={`Task description for ${col.weekdayLong} (optional)`}
+                      className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+                    />
                   </div>
                 </div>
               )}
@@ -571,6 +596,12 @@ export function PlanWeekView() {
                       >
                         {task.title}
                       </button>
+
+                      {task.notes && (
+                        <p className="mt-1 line-clamp-2 break-words text-[11px] leading-relaxed text-hud-muted">
+                          {task.notes}
+                        </p>
+                      )}
 
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">

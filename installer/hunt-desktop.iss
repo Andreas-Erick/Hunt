@@ -1,8 +1,8 @@
 ; Hunt Desktop Windows Installer (Inno Setup 6)
-; Compiled in GitHub Actions via: iscc /DAppVersion=1.7.0 /DStageDir=... installer/hunt-desktop.iss
+; Compiled in GitHub Actions via: iscc /DAppVersion=1.8.0 /DStageDir=... installer/hunt-desktop.iss
 
 #ifndef AppVersion
-  #define AppVersion "1.7.0"
+  #define AppVersion "1.8.0"
 #endif
 
 #ifndef StageDir
@@ -24,8 +24,9 @@ DefaultGroupName=Hunt
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 DisableProgramGroupPage=yes
-SetupIconFile=..\HUNT.ico
-UninstallDisplayIcon={app}\HUNT.ico
+SetupIconFile=..\HUNT-Falcon.ico
+UninstallDisplayIcon={app}\HUNT-Falcon.ico
+ChangesAssociations=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=Hunt-Desktop-Setup-{#AppVersion}
 Compression=lzma2/ultra64
@@ -45,9 +46,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Hunt"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch-Hunt.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\HUNT.ico"
+Name: "{group}\Hunt"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch-Hunt.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\HUNT-Falcon.ico"
 Name: "{group}\Uninstall Hunt"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Hunt"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch-Hunt.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\HUNT.ico"; Tasks: desktopicon
+Name: "{autodesktop}\Hunt"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch-Hunt.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\HUNT-Falcon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\wscript.exe"; Parameters: """{app}\Launch-Hunt.vbs"""; WorkingDir: "{app}"; Description: "Launch Hunt"; Flags: nowait postinstall skipifsilent

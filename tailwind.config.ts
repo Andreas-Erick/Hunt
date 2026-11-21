@@ -24,6 +24,11 @@ const config: Config = {
           cyan: "#00f0ff",
           emerald: "#00ff9d",
           amber: "#ffb800",
+          purple: "#b388ff",
+          rose: "#ff6b9d",
+          sky: "#38bdf8",
+          orange: "#ff8547",
+          lime: "#a3e635",
           crimson: "#ff2a5f",
           slate: "#64748b",
           // Slate-tinted secondary text / placeholders: >= 5.9:1 (WCAG AA) on #0b0c0e, #0d0f14, #111318 and #14171f.
@@ -40,6 +45,11 @@ const config: Config = {
         "neon-cyan-strong": "0 0 25px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.15)",
         "neon-emerald": "0 0 15px rgba(0, 255, 157, 0.28), inset 0 0 12px rgba(0, 255, 157, 0.08)",
         "neon-amber": "0 0 15px rgba(255, 184, 0, 0.28), inset 0 0 12px rgba(255, 184, 0, 0.08)",
+        "neon-purple": "0 0 15px rgba(179, 136, 255, 0.28), inset 0 0 12px rgba(179, 136, 255, 0.08)",
+        "neon-rose": "0 0 15px rgba(255, 107, 157, 0.28), inset 0 0 12px rgba(255, 107, 157, 0.08)",
+        "neon-sky": "0 0 15px rgba(56, 189, 248, 0.28), inset 0 0 12px rgba(56, 189, 248, 0.08)",
+        "neon-orange": "0 0 15px rgba(255, 133, 71, 0.28), inset 0 0 12px rgba(255, 133, 71, 0.08)",
+        "neon-lime": "0 0 15px rgba(163, 230, 53, 0.28), inset 0 0 12px rgba(163, 230, 53, 0.08)",
         "neon-crimson": "0 0 15px rgba(255, 42, 95, 0.35), inset 0 0 12px rgba(255, 42, 95, 0.1)",
       },
       animation: {

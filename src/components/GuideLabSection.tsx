@@ -12,7 +12,13 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { db, QUEST_ACCENT_STYLES, loadSortedQuests, type QuestAccent } from "@/lib/db";
+import {
+  db,
+  QUEST_ACCENT_KEYS,
+  QUEST_ACCENT_STYLES,
+  loadSortedQuests,
+  type QuestAccent,
+} from "@/lib/db";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import {
@@ -32,11 +38,11 @@ type LabMode = "task" | "quest";
 const PRESSABLE =
   "transition-colors duration-150 ease-out active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hud-cyan/70";
 
-const ACCENT_CHOICES: ReadonlyArray<{ id: QuestAccent; label: string }> = [
-  { id: "cyan", label: "Cyan" },
-  { id: "amber", label: "Amber" },
-  { id: "emerald", label: "Emerald" },
-];
+const ACCENT_CHOICES: ReadonlyArray<{ id: QuestAccent; label: string }> =
+  QUEST_ACCENT_KEYS.map((id) => ({
+    id,
+    label: QUEST_ACCENT_STYLES[id].label,
+  }));
 
 const CONFIRM_FEEDBACK_MS = 1500;
 
@@ -270,7 +276,7 @@ export function GuideLabSection() {
         {loadingAudit || !audit ? (
           <div
             aria-busy="true"
-            className="grid grid-cols-1 gap-4 md:grid-cols-3"
+            className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4"
           >
             {[0, 1, 2].map((i) => (
               <div
@@ -281,7 +287,7 @@ export function GuideLabSection() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
               {/* Active Quests KPI */}
               <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
                 <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
@@ -417,7 +423,7 @@ export function GuideLabSection() {
       {/* 2. Interactive Task & Quest Workshop */}
       <section
         aria-labelledby={`${ids}-workshop-heading`}
-        className="rounded-2xl border border-white/[0.08] bg-[#111318] p-6 sm:p-7"
+        className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
       >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -427,7 +433,7 @@ export function GuideLabSection() {
                 Interactive Draft Tester
               </h2>
             </div>
-            <p className="mt-1 text-xs text-hud-muted">
+            <p className="mt-1 max-w-[68ch] text-xs text-hud-muted">
               Practice writing a high-clarity Task or Quest, get instant science feedback, then add it directly to Hunt.
             </p>
           </div>
@@ -510,7 +516,7 @@ export function GuideLabSection() {
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Left: Form */}
           {mode === "task" ? (
-            <form onSubmit={handleSaveTask} noValidate className="space-y-4">
+            <form onSubmit={handleSaveTask} noValidate className="min-w-0 space-y-4">
               <div>
                 <label htmlFor={taskTitleId} className="mb-1.5 block text-xs text-neutral-300">
                   Task title
@@ -613,7 +619,7 @@ export function GuideLabSection() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleSaveQuest} noValidate className="space-y-4">
+            <form onSubmit={handleSaveQuest} noValidate className="min-w-0 space-y-4">
               <div>
                 <label htmlFor={questTitleId} className="mb-1.5 block text-xs text-neutral-300">
                   Quest title
@@ -672,7 +678,7 @@ export function GuideLabSection() {
                   <span className="text-hud-muted">h/wk</span>
                 </div>
 
-                <div role="group" aria-label="Quest accent" className="flex items-center gap-1.5">
+                <div role="group" aria-label="Quest accent" className="flex flex-wrap items-center gap-1.5">
                   {ACCENT_CHOICES.map((opt) => (
                     <button
                       key={opt.id}
@@ -721,7 +727,7 @@ export function GuideLabSection() {
           )}
 
           {/* Right: Live Science Evaluation */}
-          <div className="rounded-xl border border-white/[0.06] bg-[#0b0c0e] p-5">
+          <div className="min-w-0 rounded-xl border border-white/[0.06] bg-[#0b0c0e] p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
                 Science check
@@ -729,7 +735,7 @@ export function GuideLabSection() {
               <VerdictBadge evaluation={activeEvaluation} />
             </div>
 
-            <p className="mt-3 text-xs leading-relaxed text-neutral-300">
+            <p className="mt-3 max-w-[68ch] text-xs leading-relaxed text-neutral-300">
               {activeEvaluation.summary}
             </p>
 

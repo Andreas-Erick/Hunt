@@ -65,13 +65,36 @@ def foreground_svg(tile_svg, color_override=None):
             f'viewBox="{x0:.2f} {x0:.2f} {w:.2f} {w:.2f}">{body}</svg>')
 
 
+def _rgba_to_dib(im):
+    """32-bit BGRA bottom-up BITMAPINFOHEADER DIB + 1-bit AND mask for Win32 ICO compatibility."""
+    w, h = im.size
+    rgba = im.tobytes("raw", "RGBA")
+    xor_buf = bytearray(w * h * 4)
+    mask_row = ((w + 31) // 32) * 4
+    and_buf = bytearray(mask_row * h)
+    for y in range(h):
+        sy = h - 1 - y
+        for x in range(w):
+            s = (sy * w + x) * 4
+            d = (y * w + x) * 4
+            r, g, b, a = rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]
+            xor_buf[d:d + 4] = bytes((b, g, r, a))
+            if a == 0:
+                and_buf[y * mask_row + (x >> 3)] |= 0x80 >> (x & 7)
+    hdr = struct.pack("<IIIHHIIIIII", 40, w, h * 2, 1, 32, 0, len(xor_buf) + len(and_buf), 0, 0, 0, 0)
+    return hdr + bytes(xor_buf) + bytes(and_buf)
+
+
 def write_ico(path, frames):
-    """frames: list of PIL RGBA images (distinct sizes). Writes PNG-compressed ICO entries."""
+    """frames: list of PIL RGBA images (distinct sizes). Uses DIB for <256px and PNG for 256px."""
     blobs = []
     for im in frames:
-        tmp = pathlib.Path(tempfile.mkdtemp()) / "f.png"
-        im.save(tmp, format="PNG")
-        blobs.append((im.size[0], tmp.read_bytes()))
+        if im.size[0] >= 256:
+            tmp = pathlib.Path(tempfile.mkdtemp()) / "f.png"
+            im.save(tmp, format="PNG")
+            blobs.append((im.size[0], tmp.read_bytes()))
+        else:
+            blobs.append((im.size[0], _rgba_to_dib(im)))
     header = struct.pack("<HHH", 0, 1, len(blobs))
     offset = 6 + 16 * len(blobs)
     entries, data = b"", b""
@@ -109,7 +132,7 @@ def main(prefix, out_root):
     # falcon-less small tile; 64px and up show the full mark.
     frames = [tile_s.resize((s, s), Image.LANCZOS) for s in (16, 24, 32, 48)] + \
              [tile.resize((s, s), Image.LANCZOS) for s in (64, 128, 256)]
-    for name in ("HUNT.ico", "HUNT-Orbital.ico"):
+    for name in ("HUNT.ico", "HUNT-Orbital.ico", "HUNT-Falcon.ico", "public/favicon.ico"):
         write_ico(out / name, frames)
 
     # 4. Android launcher icons

@@ -1,4 +1,13 @@
-import { db, type Habit, type Quest, type Task, type TimeLog } from "./db";
+import { db } from "./db";
+import {
+  SYNC_TOKEN_STORAGE_KEY,
+  TOMBSTONE_STORAGE_KEY,
+  type ActiveFocusState,
+  type Habit,
+  type Quest,
+  type Task,
+  type TimeLog,
+} from "./domainTypes";
 import {
   newCorrelationId,
   recordBreadcrumb,
@@ -10,12 +19,9 @@ import {
   pickLogWinner,
   pickRowWinner,
   validateSyncPayload,
-  type ActiveFocusState,
   type SyncPayload,
 } from "./syncTypes";
 
-const TOMBSTONE_STORAGE_KEY = "hunt-sync-tombstones-v1";
-const SYNC_TOKEN_STORAGE_KEY = "hunt-sync-token-v1";
 /** A pairing key: 32–256 printable, non-space ASCII characters (same rule as the Android shell). */
 const SYNC_TOKEN_RE = /^[\x21-\x7E]{32,256}$/;
 

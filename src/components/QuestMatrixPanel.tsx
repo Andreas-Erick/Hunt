@@ -23,16 +23,17 @@ import {
 } from "lucide-react";
 import {
   db,
+  QUEST_ACCENT_KEYS,
   QUEST_ACCENT_STYLES,
   accentStyle,
   dateKeyFromOffset,
   loadSortedQuests,
-  toLocalDateKey,
   formatChronoMMSS,
   type Quest,
   type QuestAccent,
   type TimeLog,
 } from "@/lib/db";
+import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
@@ -42,12 +43,7 @@ import {
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
-
-const QUEST_ACCENT_HEX: Record<string, string> = {
-  cyan: "#00f0ff",
-  emerald: "#00ff9d",
-  amber: "#ffb800",
-};
+import { useTodayDateKey } from "./useTodayDateKey";
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
@@ -55,11 +51,11 @@ const WEEK_DAYS = 7;
 /** Native `pattern` (matched against the whole value): at least one non-space character. */
 const NON_BLANK_PATTERN = ".*\\S.*";
 
-const ACCENT_OPTIONS: ReadonlyArray<{ id: QuestAccent; label: string }> = [
-  { id: "cyan", label: "Cyan" },
-  { id: "amber", label: "Amber" },
-  { id: "emerald", label: "Emerald" },
-];
+const ACCENT_OPTIONS: ReadonlyArray<{ id: QuestAccent; label: string }> =
+  QUEST_ACCENT_KEYS.map((id) => ({
+    id,
+    label: QUEST_ACCENT_STYLES[id].label,
+  }));
 
 /** Armed text of a quest's Complete: completing moves open tasks to Other work. */
 function completeQuestConfirmLabel(openTaskCount: number): string {
@@ -223,7 +219,7 @@ export function QuestMatrixPanel() {
   }, [completedQuestLogs]);
 
   // Recomputed when the day changes (the view can stay open past midnight).
-  const todayKey = toLocalDateKey();
+  const todayKey = useTodayDateKey();
   // Today and the 6 days before it, stepped from a noon anchor (DST-safe).
   const weekDateKeys = useMemo(
     () =>
@@ -271,6 +267,9 @@ export function QuestMatrixPanel() {
   const newQuestToggleRef = useRef<HTMLButtonElement | null>(null);
 
   const [quickTaskByQuest, setQuickTaskByQuest] = useState<
+    Record<string, string>
+  >({});
+  const [quickNotesByQuest, setQuickNotesByQuest] = useState<
     Record<string, string>
   >({});
   // Quest ids whose quick-add write is in flight.
@@ -357,7 +356,7 @@ export function QuestMatrixPanel() {
     const scene = captureTaskCompletionScene(
       questFlowRefs.current[questId] ?? null,
       taskId,
-      QUEST_ACCENT_HEX[accent] ?? "#00ff9d"
+      accentStyle(accent).hex
     );
     pendingTaskSceneRef.current = scene ? { questId, scene } : null;
     hudAudio.playComplete();
@@ -469,9 +468,12 @@ export function QuestMatrixPanel() {
 
   const handleQuickAdd = async (questId: string) => {
     const text = (quickTaskByQuest[questId] ?? "").trim();
+    const rawNotes = quickNotesByQuest[questId] ?? "";
+    const trimmedNotes = rawNotes.trim();
     if (!text || quickAddInFlight.current.has(questId)) return;
     quickAddInFlight.current.add(questId);
     setQuickTaskByQuest((prev) => ({ ...prev, [questId]: "" }));
+    setQuickNotesByQuest((prev) => ({ ...prev, [questId]: "" }));
     hudAudio.playClick();
     let created = false;
     try {
@@ -479,12 +481,16 @@ export function QuestMatrixPanel() {
         title: text,
         questId,
         promoteToTop: false,
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
       });
     } finally {
       quickAddInFlight.current.delete(questId);
       if (!created) {
         setQuickTaskByQuest((prev) =>
           (prev[questId] ?? "") === "" ? { ...prev, [questId]: text } : prev
+        );
+        setQuickNotesByQuest((prev) =>
+          (prev[questId] ?? "") === "" ? { ...prev, [questId]: rawNotes } : prev
         );
       }
     }
@@ -496,14 +502,14 @@ export function QuestMatrixPanel() {
   const editDescId = `${ids}-edit-desc`;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 py-10 sm:px-10 lg:px-16 lg:py-12">
+    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Page Heading + New Quest Button */}
-      <div className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             Quests
           </h1>
-          <p className="mt-2 text-sm text-neutral-400">
+          <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
             Connect your high-level ambitions to weekly input hours and daily
             tasks.
           </p>
@@ -546,7 +552,7 @@ export function QuestMatrixPanel() {
           onKeyDown={(e) => {
             if (e.key === "Escape") cancelCreate();
           }}
-          className="mb-8 rounded-2xl border border-[#00f0ff]/30 bg-[#111318] p-6 space-y-4"
+          className="cq-card mb-8 rounded-2xl border border-[#00f0ff]/30 bg-[#111318] p-5 sm:p-6 space-y-4"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-base font-medium text-white">
@@ -561,7 +567,7 @@ export function QuestMatrixPanel() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="cq-form-two-col">
             <div>
               <label
                 htmlFor={newTitleId}
@@ -582,19 +588,22 @@ export function QuestMatrixPanel() {
             </div>
 
             <div>
-              <label
-                htmlFor={newDescId}
-                className="mb-1 block text-xs text-neutral-400"
-              >
-                Description
-              </label>
+              <div className="mb-1 flex items-center justify-between">
+                <label
+                  htmlFor={newDescId}
+                  className="block text-xs text-neutral-400"
+                >
+                  Description
+                </label>
+                <span className="text-[11px] text-hud-muted">Optional</span>
+              </div>
               <input
                 id={newDescId}
                 type="text"
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 placeholder="What moves this quest forward?"
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-neutral-200 focus:border-[#00f0ff] focus:outline-none"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-neutral-200 placeholder:text-hud-muted focus:border-[#00f0ff] focus:outline-none"
               />
             </div>
           </div>
@@ -622,18 +631,18 @@ export function QuestMatrixPanel() {
       )}
 
       <LayoutGroup id="quests-matrix">
-      {/* 3-Column Spacious Quest Grid */}
+      {/* Intrinsic Fluid Quest Grid (1 col -> 2 col split-screen -> 3 col desktop) */}
       {quests === undefined ? (
         // Layout-matching skeleton cards while IndexedDB resolves (no empty-state flash or CLS).
         <div
           aria-busy="true"
           data-testid="quests-loading-skeleton"
-          className="grid grid-cols-1 gap-8 lg:grid-cols-3"
+          className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-6 sm:gap-8"
         >
           {[0, 1, 2].map((slot) => (
             <div
               key={slot}
-              className="flex min-h-[320px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-7"
+              className="flex min-h-[320px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 sm:p-7"
             >
               <div className="space-y-4">
                 <div className="h-6 w-2/3 animate-pulse rounded-lg bg-white/[0.06]" />
@@ -650,7 +659,7 @@ export function QuestMatrixPanel() {
           one.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-6 sm:gap-8">
           {activeQuests.map((quest) => {
             const style = accentStyle(quest.accentColor);
             const weeklySeconds = weeklySecondsByQuest.get(quest.id) ?? 0;
@@ -687,12 +696,12 @@ export function QuestMatrixPanel() {
                 key={quest.id}
                 data-testid="quest-card"
                 data-quest-id={quest.id}
-                className="flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-7"
+                className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
               >
                 <div>
                   {/* Top Row: Colored Dot + Quest Title + Complete & Edit Buttons */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <span
                         className={`mt-2 h-3 w-3 shrink-0 rounded-full ${style.bg}`}
                       />
@@ -729,7 +738,7 @@ export function QuestMatrixPanel() {
                   </div>
 
                   {quest.description && (
-                    <p className="mt-2.5 break-words text-sm leading-relaxed text-neutral-400">
+                    <p className="mt-2.5 max-w-[65ch] break-words text-sm leading-relaxed text-neutral-400">
                       {quest.description}
                     </p>
                   )}
@@ -840,7 +849,9 @@ export function QuestMatrixPanel() {
                         <strong className="text-lg font-medium text-white">
                           {weekLogs === undefined
                             ? "–"
-                            : `${weeklyHours.toFixed(1)}h`}
+                            : formatTelemetryDuration(weeklySeconds, {
+                                zeroAs: "0.0h",
+                              })}
                         </strong>{" "}
                         / {quest.targetWeeklyHours}h
                       </span>
@@ -921,34 +932,57 @@ export function QuestMatrixPanel() {
                 </div>
 
                 {/* Quick Add Task to this Quest */}
-                <div className="mt-6 flex items-center gap-2 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
-                  <input
-                    type="text"
-                    value={quickTaskByQuest[quest.id] ?? ""}
-                    onChange={(e) =>
-                      setQuickTaskByQuest((prev) => ({
-                        ...prev,
-                        [quest.id]: e.target.value,
-                      }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleQuickAdd(quest.id);
+                <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
+                  <div className="flex items-center gap-2 focus-within:border-white/40">
+                    <input
+                      type="text"
+                      value={quickTaskByQuest[quest.id] ?? ""}
+                      onChange={(e) =>
+                        setQuickTaskByQuest((prev) => ({
+                          ...prev,
+                          [quest.id]: e.target.value,
+                        }))
                       }
-                    }}
-                    placeholder={`Add task to ${quest.title}...`}
-                    aria-label={`Add quest work to ${quest.title}`}
-                    className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAdd(quest.id)}
-                    aria-label={`Add task to ${quest.title}`}
-                    className="rounded-lg p-1 text-neutral-400 hover:text-white transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleQuickAdd(quest.id);
+                        }
+                      }}
+                      placeholder={`Add task to ${quest.title}...`}
+                      aria-label={`Add quest work to ${quest.title}`}
+                      className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAdd(quest.id)}
+                      aria-label={`Add task to ${quest.title}`}
+                      className="rounded-lg p-1 text-neutral-400 hover:text-white transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
+                    <input
+                      type="text"
+                      value={quickNotesByQuest[quest.id] ?? ""}
+                      onChange={(e) =>
+                        setQuickNotesByQuest((prev) => ({
+                          ...prev,
+                          [quest.id]: e.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleQuickAdd(quest.id);
+                        }
+                      }}
+                      placeholder="Description (optional)..."
+                      aria-label={`Task description for ${quest.title} (optional)`}
+                      className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+                    />
+                  </div>
                 </div>
               </motion.div>
             );
@@ -968,11 +1002,10 @@ export function QuestMatrixPanel() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-6">
             {completedQuests.map((quest) => {
               const style = accentStyle(quest.accentColor);
-              const totalHours =
-                (totalSecondsByCompletedQuest.get(quest.id) ?? 0) / 3600;
+              const totalSec = totalSecondsByCompletedQuest.get(quest.id) ?? 0;
               const isJustFinished = justCompletedQuestId === quest.id;
 
               return (
@@ -990,15 +1023,15 @@ export function QuestMatrixPanel() {
                   key={quest.id}
                   data-testid="completed-quest-card"
                   data-quest-id={quest.id}
-                  className={`flex min-w-0 flex-col justify-between rounded-2xl border bg-[#0e1015]/80 p-6 transition-[border-color,box-shadow] duration-500 ease-out ${
+                  className={`cq-card flex min-w-0 flex-col justify-between rounded-2xl border bg-[#0e1015]/80 p-5 sm:p-6 transition-[border-color,box-shadow] duration-500 ease-out ${
                     isJustFinished
                       ? "border-[#00ff9d]/40 shadow-[0_0_26px_-10px_rgba(0,255,157,0.35)]"
                       : "border-white/[0.06]"
                   }`}
                 >
                   <div>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
                         <span
                           className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${style.bg} opacity-65`}
                         />
@@ -1014,7 +1047,7 @@ export function QuestMatrixPanel() {
                     </div>
 
                     {quest.description && (
-                      <p className="mt-2 break-words text-xs leading-relaxed text-hud-muted">
+                      <p className="mt-2 max-w-[65ch] break-words text-xs leading-relaxed text-hud-muted">
                         {quest.description}
                       </p>
                     )}
@@ -1024,7 +1057,9 @@ export function QuestMatrixPanel() {
                     <span className="font-mono text-hud-muted tabular-nums">
                       {completedQuestLogs === undefined
                         ? "–"
-                        : `${totalHours.toFixed(1)}h logged`}
+                        : `${formatTelemetryDuration(totalSec, {
+                            zeroAs: "0.0h",
+                          })} logged`}
                     </span>
 
                     <div className="flex items-center gap-2">

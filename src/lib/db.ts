@@ -1,61 +1,54 @@
 import Dexie, { type EntityTable } from "dexie";
+import {
+  QUEST_ACCENT_KEYS,
+  SYNC_TOKEN_STORAGE_KEY,
+  TOMBSTONE_STORAGE_KEY,
+  type Habit,
+  type Quest,
+  type QuestAccent,
+  type Task,
+  type TaskStatus,
+  type TimeLog,
+} from "./domainTypes";
+import {
+  compareQuestSlot,
+  dateFromKey,
+  dateKeyFromOffset,
+  formatChronoMMSS,
+  formatTacticalDuration,
+  habitTaskId,
+  isTaskVisibleToday,
+  toLocalDateKey,
+} from "./dateUtils";
+import {
+  QUEST_ACCENT_STYLES,
+  accentStyle,
+  type QuestAccentStyle,
+} from "./questAccents";
 import { syncPayloadHasContent, type SyncPayload } from "./syncTypes";
 
-export type QuestAccent = "cyan" | "emerald" | "amber";
-
-export interface Quest {
-  id: string;
-  slotIndex: 0 | 1 | 2;
-  code: string;
-  title: string;
-  description: string;
-  accentColor: QuestAccent;
-  targetWeeklyHours: number;
-  archived: boolean;
-  createdAt: number;
-  updatedAt?: number;
-  completedAt?: number;
-}
-
-export interface Habit {
-  id: string;
-  title: string;
-  notes: string;
-  questId: string | null; // null = Other / Maintenance work
-  rank: number;
-  createdAt: number;
-  updatedAt?: number;
-}
-
-export type TaskStatus = "queued" | "active" | "completed" | "archived";
-
-export interface Task {
-  id: string;
-  title: string;
-  notes: string;
-  questId: string | null; // null = Other / Maintenance work
-  status: TaskStatus;
-  rank: number;
-  accumulatedSeconds: number;
-  scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
-  habitId?: string; // Source Habit.id when materialized from a daily habit
-  createdAt: number;
-  updatedAt?: number;
-  completedAt?: number;
-}
-
-export interface TimeLog {
-  id: string;
-  taskId: string;
-  taskTitleSnapshot: string;
-  questId: string | null;
-  questCodeSnapshot: string;
-  accentColorSnapshot: QuestAccent | "slate";
-  startTime: number;
-  endTime: number;
-  durationSeconds: number;
-  dateKey: string; // YYYY-MM-DD local date
-}
+export {
+  QUEST_ACCENT_KEYS,
+  SYNC_TOKEN_STORAGE_KEY,
+  TOMBSTONE_STORAGE_KEY,
+  compareQuestSlot,
+  dateFromKey,
+  dateKeyFromOffset,
+  formatChronoMMSS,
+  formatTacticalDuration,
+  habitTaskId,
+  isTaskVisibleToday,
+  toLocalDateKey,
+  QUEST_ACCENT_STYLES,
+  accentStyle,
+  type Habit,
+  type Quest,
+  type QuestAccent,
+  type QuestAccentStyle,
+  type Task,
+  type TaskStatus,
+  type TimeLog,
+};
 
 class CommandCenterDB extends Dexie {
   quests!: EntityTable<Quest, "id">;
@@ -85,217 +78,20 @@ class CommandCenterDB extends Dexie {
       habits: "id, rank, questId",
     });
 
-    // Yield stale connections on schema upgrades so a background Hunt window
-    // never blocks a newly opened window from reading IndexedDB.
+    // Yield stale connections on schema upgrades while keeping auto-open enabled
+    // (Dexie 4's default close() sets disableAutoOpen: true, which permanently
+    // locks out liveQueries in this tab if a versionchange fires during boot).
     this.on("versionchange", () => {
-      this.close();
+      this.close({ disableAutoOpen: false });
     });
   }
 }
 
 export const db = new CommandCenterDB();
 
-/**
- * Deterministic Quest sort by slotIndex (0..2), breaking ties by createdAt then id.
- * Coerces missing/non-finite slotIndex values to 0 so a malformed or legacy synced
- * quest row is never dropped (unlike `db.quests.orderBy("slotIndex")`, whose IDB
- * index cursor omits any record with a missing or non-indexable key).
- */
-export function compareQuestSlot(
-  a: Pick<Quest, "id"> & { slotIndex?: unknown; createdAt?: unknown },
-  b: Pick<Quest, "id"> & { slotIndex?: unknown; createdAt?: unknown }
-): number {
-  const sa = Number.isFinite(Number(a.slotIndex)) ? Number(a.slotIndex) : 0;
-  const sb = Number.isFinite(Number(b.slotIndex)) ? Number(b.slotIndex) : 0;
-  if (sa !== sb) return sa - sb;
-  const ca = Number.isFinite(Number(a.createdAt)) ? Number(a.createdAt) : 0;
-  const cb = Number.isFinite(Number(b.createdAt)) ? Number(b.createdAt) : 0;
-  if (ca !== cb) return ca - cb;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
 /** Reads all quests from the primary store and sorts safely in memory. */
 export async function loadSortedQuests(): Promise<Quest[]> {
   return (await db.quests.toArray()).sort(compareQuestSlot);
-}
-
-/**
- * Deterministic daily task id for a Habit materialized on `dateKey`.
- * Both laptop and phone produce the exact same id offline, so sync merges
- * them into a single task with zero duplicates.
- */
-export function habitTaskId(habitId: string, dateKey: string): string {
-  return `habtsk-${dateKey}-${habitId}`;
-}
-
-/**
- * Whether an open task belongs in today's Home queue / Focus picker.
- * Regular tasks carry over if overdue (<= todayKey) or unscheduled; daily
- * habit instances show ONLY on their own day so missed habits never pile up.
- */
-export function isTaskVisibleToday(
-  task: Pick<Task, "scheduledDate" | "habitId">,
-  todayKey: string
-): boolean {
-  if (task.habitId) {
-    return task.scheduledDate === todayKey;
-  }
-  return !task.scheduledDate || task.scheduledDate <= todayKey;
-}
-
-/**
- * Formats a timestamp (ms) into local YYYY-MM-DD string
- */
-export function toLocalDateKey(timestamp: number = Date.now()): string {
-  const d = new Date(timestamp);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-/** Local date for a YYYY-MM-DD key, at noon (safe across DST changes). */
-export function dateFromKey(dateKey: string, dayOffset = 0): Date {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, m - 1, d + dayOffset, 12);
-}
-
-/**
- * The YYYY-MM-DD key `dayOffset` calendar days away from `baseKey`. Steps whole
- * calendar days from a noon anchor, so 23- and 25-hour DST days never skip or
- * repeat a key (unlike `now - n * 86_400_000`).
- */
-export function dateKeyFromOffset(baseKey: string, dayOffset: number): string {
-  return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
-}
-
-/** Whole, non-negative seconds; NaN, ±Infinity and non-numeric input become 0. */
-function toSafeWholeSeconds(totalSeconds: number): number {
-  const n = Number(totalSeconds);
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-}
-
-/**
- * Formats seconds into MM:SS (or H:MM:SS if >= 60 minutes)
- */
-export function formatChronoMMSS(totalSeconds: number): {
-  minutes: string;
-  seconds: string;
-  hoursPrefix: string | null;
-  formatted: string;
-} {
-  const safe = toSafeWholeSeconds(totalSeconds);
-  const totalMinutes = Math.floor(safe / 60);
-  const secs = safe % 60;
-  const minsStr = String(totalMinutes).padStart(2, "0");
-  const secsStr = String(secs).padStart(2, "0");
-
-  const h = Math.floor(safe / 3600);
-  const mRem = Math.floor((safe % 3600) / 60);
-  const hFormatted =
-    h > 0
-      ? `${h}:${String(mRem).padStart(2, "0")}:${secsStr}`
-      : `${minsStr}:${secsStr}`;
-
-  return {
-    minutes: minsStr,
-    seconds: secsStr,
-    hoursPrefix: h > 0 ? String(h) : null,
-    formatted: hFormatted,
-  };
-}
-
-/**
- * Formats duration in compact notation e.g. "1h 24m" or "42m"
- */
-export function formatTacticalDuration(totalSeconds: number): string {
-  const safe = toSafeWholeSeconds(totalSeconds);
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = safe % 60;
-  if (h > 0) {
-    return `${h}h ${String(m).padStart(2, "0")}m`;
-  }
-  if (m > 0) {
-    return `${m}m ${String(s).padStart(2, "0")}s`;
-  }
-  return `${s}s`;
-}
-
-export interface QuestAccentStyle {
-  label: string;
-  hex: string;
-  border: string;
-  bg: string;
-  bgSubtle: string;
-  text: string;
-  glow: string;
-  badge: string;
-  dot: string;
-}
-
-export const QUEST_ACCENT_STYLES: Record<QuestAccent | "slate", QuestAccentStyle> = {
-  cyan: {
-    label: "Cyan",
-    hex: "#00f0ff",
-    border: "border-[#00f0ff]/40",
-    bg: "bg-[#00f0ff]",
-    bgSubtle: "bg-[#00f0ff]/10",
-    text: "text-[#00f0ff]",
-    glow: "shadow-neon-cyan",
-    badge: "border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff]",
-    dot: "bg-[#00f0ff]",
-  },
-  emerald: {
-    label: "Emerald",
-    hex: "#00ff9d",
-    border: "border-[#00ff9d]/40",
-    bg: "bg-[#00ff9d]",
-    bgSubtle: "bg-[#00ff9d]/10",
-    text: "text-[#00ff9d]",
-    glow: "shadow-neon-emerald",
-    badge: "border-[#00ff9d]/40 bg-[#00ff9d]/10 text-[#00ff9d]",
-    dot: "bg-[#00ff9d]",
-  },
-  amber: {
-    label: "Amber",
-    hex: "#ffb800",
-    border: "border-[#ffb800]/40",
-    bg: "bg-[#ffb800]",
-    bgSubtle: "bg-[#ffb800]/10",
-    text: "text-[#ffb800]",
-    glow: "shadow-neon-amber",
-    badge: "border-[#ffb800]/40 bg-[#ffb800]/10 text-[#ffb800]",
-    dot: "bg-[#ffb800]",
-  },
-  slate: {
-    label: "Other",
-    hex: "#64748b",
-    border: "border-white/15",
-    bg: "bg-slate-500",
-    bgSubtle: "bg-white/[0.04]",
-    text: "text-neutral-400",
-    glow: "",
-    badge: "border-white/10 bg-white/[0.03] text-neutral-400",
-    dot: "bg-neutral-500",
-  },
-};
-
-function isAccentStyleKey(key: unknown): key is keyof typeof QUEST_ACCENT_STYLES {
-  return (
-    typeof key === "string" &&
-    Object.prototype.hasOwnProperty.call(QUEST_ACCENT_STYLES, key)
-  );
-}
-
-/**
- * Style for a data-driven accent key (quest accent or time-log snapshot).
- * Anything that is not an own key of QUEST_ACCENT_STYLES (unknown colour,
- * missing field, "__proto__", "toString", a number) falls back to slate, so a
- * bad synced row cannot crash a render.
- */
-export function accentStyle(key: unknown): QuestAccentStyle {
-  return isAccentStyleKey(key) ? QUEST_ACCENT_STYLES[key] : QUEST_ACCENT_STYLES.slate;
 }
 
 export const SEED_SERVER_CHECK_TIMEOUT_MS = 1500;
@@ -324,7 +120,7 @@ async function serverAlreadyHoldsData(): Promise<boolean> {
   try {
     const headers: Record<string, string> = { "X-Hunt-Client": "desktop" };
     try {
-      const token = window.localStorage?.getItem("hunt-sync-token-v1");
+      const token = window.localStorage?.getItem(SYNC_TOKEN_STORAGE_KEY);
       if (token && token.length >= 32) headers["X-Hunt-Token"] = token;
     } catch {
       // ignore storage errors
@@ -369,7 +165,7 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
     db.habits.count(),
   ]);
   const hasTombstones = Boolean(
-    window.localStorage?.getItem("hunt-sync-tombstones-v1")
+    window.localStorage?.getItem(TOMBSTONE_STORAGE_KEY)
   );
   if (questCount > 0 || taskCount > 0 || logCount > 0 || habitCount > 0 || hasTombstones) return;
 

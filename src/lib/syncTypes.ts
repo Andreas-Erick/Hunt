@@ -1,11 +1,14 @@
-import type { Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./db";
+import type {
+  ActiveFocusState,
+  Habit,
+  Quest,
+  QuestAccent,
+  Task,
+  TaskStatus,
+  TimeLog,
+} from "./domainTypes";
 
-export interface ActiveFocusState {
-  activeTaskId: string | null;
-  isRunning: boolean;
-  sessionStartedAt: number | null;
-  updatedAt: number;
-}
+export type { ActiveFocusState } from "./domainTypes";
 
 export interface SyncPayload {
   quests: Quest[];
@@ -282,7 +285,16 @@ const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DATE_KEY_MS = 253_402_214_400_000;
 const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
-const QUEST_ACCENTS: Record<QuestAccent, true> = { cyan: true, emerald: true, amber: true };
+const QUEST_ACCENTS: Record<QuestAccent, true> = {
+  cyan: true,
+  emerald: true,
+  amber: true,
+  purple: true,
+  rose: true,
+  sky: true,
+  orange: true,
+  lime: true,
+};
 const LOG_ACCENTS: Record<QuestAccent | "slate", true> = { ...QUEST_ACCENTS, slate: true };
 const TASK_STATUSES: Record<TaskStatus, true> = {
   queued: true,

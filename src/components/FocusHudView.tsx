@@ -5,10 +5,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import { Play, Pause, Check, ArrowLeft } from "lucide-react";
-import { db, formatChronoMMSS, accentStyle, toLocalDateKey } from "@/lib/db";
+import { db, formatChronoMMSS, accentStyle } from "@/lib/db";
 import { pickNextFocusTask, useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
+import { DesktopWindowControls } from "./DesktopWindowControls";
 import { TaskNotesField } from "./TaskNotesField";
+import { useTodayDateKey } from "./useTodayDateKey";
 
 /**
  * Space inside these keeps its native meaning (activate the focused control,
@@ -63,7 +65,7 @@ export function FocusHudView() {
   );
 
   // Recomputed when the day changes (the view can stay open past midnight).
-  const todayKey = toLocalDateKey();
+  const todayKey = useTodayDateKey();
   // undefined = still loading, null = nothing queued for today.
   const topQueuedTask = useLiveQuery(
     async () =>
@@ -169,7 +171,12 @@ export function FocusHudView() {
       topQueuedQuest ? topQueuedQuest.accentColor : "slate"
     );
     return (
-      <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-[#0b0c0e] px-6 text-center">
+      <div className="focus-stage-shell mx-auto flex min-h-screen min-h-[100dvh] w-full max-w-[1440px] flex-col bg-[#0b0c0e] px-4 py-6 sm:px-14 sm:py-10 text-center">
+        <div className="flex w-full items-center justify-end">
+          <DesktopWindowControls />
+        </div>
+
+        <div className="my-auto flex flex-col items-center justify-center">
         <div role="status" aria-live="polite" className="w-full max-w-lg">
           {lastCompletedFeedback && (
             <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-4 py-3 text-left text-xs text-[#00ff9d]">
@@ -241,6 +248,7 @@ export function FocusHudView() {
         >
           ← Back to Home
         </button>
+        </div>
       </div>
     );
   }
@@ -253,7 +261,7 @@ export function FocusHudView() {
   const topBarLabel = `Focus · ${linkedQuest ? linkedQuest.title : "Other Work"}`;
 
   return (
-    <div className="mx-auto flex min-h-screen min-h-[100dvh] w-full max-w-[1440px] flex-col justify-between bg-[#0b0c0e] px-6 py-8 sm:px-14 sm:py-10">
+    <div className="focus-stage-shell mx-auto flex min-h-screen min-h-[100dvh] w-full max-w-[1440px] flex-col justify-between bg-[#0b0c0e] px-4 py-6 sm:px-14 sm:py-10">
       {/* Top Bar: "● FOCUS · QUEST NAME" on Left, "←" Back Arrow on Right */}
       <div className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-2.5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
@@ -263,18 +271,27 @@ export function FocusHudView() {
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            hudAudio.playClick();
-            returnToQueue();
-          }}
-          title="Return to Home"
-          aria-label="Return to Home"
-          className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-colors"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              hudAudio.playClick();
+              returnToQueue();
+            }}
+            title="Return to Home"
+            aria-label="Return to Home"
+            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          <span
+            aria-hidden="true"
+            className="hidden sm:block h-5 w-px bg-white/[0.08]"
+          />
+
+          <DesktopWindowControls />
+        </div>
       </div>
 
       {/* Center Focus Stage (Quest.app Focus Screen) */}
@@ -296,25 +313,25 @@ export function FocusHudView() {
         </div>
 
         {/* Active Task Title */}
-        <h1 className="mt-6 w-full max-w-2xl break-words [text-wrap:balance] text-2xl font-normal leading-snug text-white sm:text-3xl md:text-4xl">
+        <h1 className="mt-4 sm:mt-6 w-full max-w-2xl break-words [text-wrap:balance] text-[clamp(1.35rem,2.4vw+0.8rem,2.25rem)] font-normal leading-snug text-white">
           {activeTask.title}
         </h1>
 
         {/* Giant Tabular-Nums Timer */}
         <div
           data-testid="focus-timer"
-          className="my-8 max-w-full select-none font-sans text-7xl font-medium leading-none tracking-tight text-white tabular-nums sm:text-[8.5rem] md:text-[9.5rem]"
+          className="focus-fluid-chrono my-6 sm:my-8 max-w-full select-none font-sans text-7xl font-medium leading-none tracking-tight text-white tabular-nums sm:text-[8.5rem] md:text-[9.5rem]"
         >
           {chrono.formatted}
         </div>
 
         {/* RUNNING / PAUSED Status Label */}
-        <div className="mb-10 text-xs font-medium uppercase tracking-[0.22em] text-hud-muted">
+        <div className="focus-status-label mb-8 sm:mb-10 text-xs font-medium uppercase tracking-[0.22em] text-hud-muted">
           {isRunning ? "Running" : "Paused"}
         </div>
 
         {/* Two Clean Outlined Controls: [ ⏸ Pause ]  [ ✓ Complete ] */}
-        <div className="flex flex-wrap items-center justify-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           {isRunning ? (
             <button
               type="button"
@@ -322,7 +339,7 @@ export function FocusHudView() {
                 hudAudio.playClick();
                 suspendTimer();
               }}
-              className="flex min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-white/25 hover:bg-white/[0.07] active:scale-[0.98]"
+              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-white/25 hover:bg-white/[0.07] active:scale-[0.98]"
             >
               <Pause className="h-4 w-4" />
               <span>Pause</span>
@@ -334,7 +351,7 @@ export function FocusHudView() {
                 hudAudio.playLockOn();
                 engageTimer();
               }}
-              className="flex min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/25 bg-white/[0.08] px-6 py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-white/[0.14] active:scale-[0.98]"
+              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/25 bg-white/[0.08] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-white/[0.14] active:scale-[0.98]"
             >
               <Play className="h-4 w-4 fill-current" />
               <span>Resume</span>
@@ -346,7 +363,7 @@ export function FocusHudView() {
             onClick={handleComplete}
             disabled={completing || !showsFocusedTask}
             aria-busy={completing || !showsFocusedTask}
-            className="flex min-w-[148px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-[#00ff9d]/50 hover:bg-[#00ff9d]/10 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+            className="flex min-w-[136px] sm:min-w-[148px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-[#00ff9d]/50 hover:bg-[#00ff9d]/10 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
           >
             <Check className="h-4 w-4" />
             <span>Complete</span>
@@ -354,7 +371,7 @@ export function FocusHudView() {
         </div>
 
         {/* Optional Notes */}
-        <div className="mt-12 w-full max-w-md">
+        <div className="focus-notes-wrap mt-8 sm:mt-12 w-full max-w-md">
           {activeTask.notes || notesOpenForTaskId === activeTask.id ? (
             <TaskNotesField
               key={activeTask.id}

@@ -57,6 +57,7 @@
       font-family: var(--font-sans);
       min-height: 100vh;
       min-height: 100svh;
+      min-height: 100dvh;
       /* clip (not hidden): hidden turned <body> into a scroll container and broke the sticky app bar */
       overflow-x: clip;
       user-select: none;
@@ -168,6 +169,29 @@
       font-size: 18px;
       font-weight: 700;
       letter-spacing: -0.02em;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .brand-version-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--dim);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+      pointer-events: none;
     }
 
     .app-bar-actions {
@@ -341,7 +365,7 @@
 
     .hero-title {
       font-family: var(--font-display);
-      font-size: 28px;
+      font-size: clamp(23px, 5vw + 6px, 28px);
       font-weight: 700;
       letter-spacing: -0.03em;
       margin: 0;
@@ -493,6 +517,7 @@
       font-size: 13px;
       color: var(--muted);
       margin: 0 0 16px;
+      max-width: 68ch;
       line-height: 1.4;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -855,6 +880,7 @@
 
     .bottom-sheet {
       pointer-events: auto;
+      container-type: inline-size;
       width: 100%;
       max-width: 540px;
       background: #13161f;
@@ -862,6 +888,7 @@
       border-radius: 22px;
       padding: 16px 18px var(--sheet-pad-bottom);
       max-height: calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px);
+      max-height: calc(100dvh - var(--safe-top) - var(--eff-kb, 0px) - 28px);
       overflow-y: auto;
       overscroll-behavior: contain;
       box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.78);
@@ -869,6 +896,18 @@
     }
     body.sheet-typing .bottom-sheet {
       max-height: min(54vh, calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px));
+      max-height: min(54dvh, calc(100dvh - var(--safe-top) - var(--eff-kb, 0px) - 28px));
+    }
+    .quest-meta-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 88px;
+      gap: 12px;
+      align-items: start;
+    }
+    @container (max-width: 280px) {
+      .quest-meta-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
     /* Only a freshly opened sheet glides in; in-place updates never replay the animation. */
     .bottom-sheet.entering {
@@ -1068,12 +1107,13 @@
     /* Review KPI Cards */
     .review-kpi-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr));
       gap: 10px;
       margin-bottom: 14px;
     }
 
     .review-card {
+      container-type: inline-size;
       border-radius: 18px;
       border: 1px solid var(--border);
       background: var(--surface);
@@ -1267,10 +1307,20 @@
     /* Focus view (running/paused task). Compacted for short viewports in the max-height media query. */
     .focus-stage {
       min-height: 82vh;
+      min-height: 82svh;
+      min-height: 82dvh;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       padding: 4px 0 8px;
+    }
+    .focus-idle-stage {
+      min-height: 78vh;
+      min-height: 78svh;
+      min-height: 78dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
     .focus-center {
       text-align: center;
@@ -1296,7 +1346,7 @@
     }
     .focus-task-title {
       font-family: var(--font-display);
-      font-size: 25px;
+      font-size: clamp(20px, 5vw + 4px, 25px);
       font-weight: 600;
       line-height: 1.28;
       letter-spacing: -0.015em;
@@ -1307,12 +1357,13 @@
     }
     .focus-chrono {
       font-family: var(--font-display);
-      font-size: 84px;
+      font-size: clamp(52px, 18vw, 84px);
       font-weight: 700;
       letter-spacing: -0.04em;
       font-variant-numeric: tabular-nums;
       line-height: 1;
       margin: 28px 0 12px;
+      max-width: 100%;
       color: white;
     }
     .focus-state {
@@ -1740,7 +1791,8 @@
       .toast-host {
         bottom: calc(60px + var(--safe-bottom));
       }
-      .focus-stage {
+      .focus-stage,
+      .focus-idle-stage {
         min-height: 0;
         padding: 0;
       }
@@ -1770,6 +1822,7 @@
       }
       .bottom-sheet {
         max-height: calc(100vh - var(--safe-top) - 20px);
+        max-height: calc(100dvh - var(--safe-top) - 20px);
         padding-top: 12px;
       }
       .sheet-handle {
@@ -1843,9 +1896,23 @@
         min-width: 0;
       }
     }
+    @media (max-width: 390px) {
+      .brand-version-badge {
+        display: none;
+      }
+    }
+
+    /* Phone default for Today split panes: only the active sub-tab renders visibly */
+    .today-pane:not(.is-active) {
+      display: none;
+    }
+    .today-timeline-tablet-head {
+      display: none;
+    }
 
     /* Quest & Task Guide view */
     .guide-principle-card {
+      container-type: inline-size;
       border-radius: 18px;
       border: 1px solid var(--border);
       background: var(--surface);
@@ -1892,6 +1959,7 @@
       color: var(--text-2);
       line-height: 1.5;
       margin: 8px 0 0;
+      max-width: 68ch;
       overflow-wrap: anywhere;
     }
     .guide-in-hunt {
@@ -1918,6 +1986,11 @@
       grid-template-columns: 1fr;
       gap: 8px;
       margin-top: 12px;
+    }
+    @container (min-width: 400px) {
+      .guide-compare {
+        grid-template-columns: 1fr 1fr;
+      }
     }
     .guide-box {
       padding: 10px 12px;
@@ -1948,7 +2021,7 @@
     .guide-box.aim .guide-box-label { color: var(--emerald); }
     .guide-kpi-row {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 88px), 1fr));
       gap: 10px;
       margin-bottom: 14px;
     }
@@ -2079,6 +2152,409 @@
       bottom: calc(12px + var(--kb, 0px) + var(--safe-bottom));
     }
 
+    .apk-pair-banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 16px;
+      margin: 14px calc(clamp(16px, 2.8vw, 44px) + var(--safe-right)) 0 calc(clamp(16px, 2.8vw, 44px) + var(--safe-left));
+      padding: 12px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(0, 240, 255, 0.34);
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(17, 19, 25, 0.96) 100%);
+    }
+    .apk-pair-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .apk-pair-primary {
+      min-height: var(--touch-min);
+      padding: 0 16px;
+      border-radius: 12px;
+      border: none;
+      background: var(--cyan);
+      color: #05070a;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .url-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .url-label-row .sheet-label {
+      margin-bottom: 0;
+    }
+    .paste-link-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-2);
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .review-bar-track {
+      height: 124px;
+      width: 100%;
+      max-width: 32px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .plan-board-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: clamp(12px, 1.4vw, 20px);
+      align-items: stretch;
+    }
+    .plan-col-panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: rgba(17, 19, 26, 0.72);
+      padding: 12px;
+    }
+    .plan-col-panel.is-today {
+      border-color: rgba(255, 184, 0, 0.32);
+      background: linear-gradient(180deg, rgba(24, 26, 35, 0.92) 0%, rgba(17, 19, 26, 0.82) 100%);
+    }
+    .plan-col-panel.is-selected {
+      border-color: rgba(0, 240, 255, 0.36);
+    }
+    .plan-col-panel > .plan-day-card {
+      width: 100%;
+      margin-bottom: 12px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+    .plan-col-tasks {
+      flex: 1;
+      min-width: 0;
+    }
+    .plan-col-empty {
+      padding: 20px 8px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--dim);
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      margin-bottom: 10px;
+    }
+    .plan-col-add-btn {
+      width: 100%;
+      min-height: var(--touch-min);
+      margin-top: auto;
+      border-radius: 12px;
+      border: 1px dashed var(--border-strong);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--muted);
+      font-family: var(--font-display);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+    }
+    .plan-col-add-btn:active {
+      border-color: rgba(0, 240, 255, 0.45);
+      color: white;
+      background: rgba(0, 240, 255, 0.08);
+    }
+
+    /* =========================================================================
+       TABLET & LARGE-SCREEN FULL-WIDTH LAYOUT (Portrait >=768px & Landscape >=1024px+)
+       Uses 100% of the tablet canvas with fluid gutters — no artificial narrow max-width.
+       Preserves 48px touch targets, 16px sheet inputs, and WCAG AA contrast.
+       ========================================================================= */
+    @media (min-width: 768px) {
+      body {
+        padding-bottom: calc(96px + var(--safe-bottom));
+      }
+      .app-bar {
+        height: calc(66px + var(--safe-top));
+        padding-left: calc(clamp(22px, 2.8vw, 44px) + var(--safe-left));
+        padding-right: calc(clamp(22px, 2.8vw, 44px) + var(--safe-right));
+        background: rgba(10, 12, 17, 0.96);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .brand-word {
+        font-size: 20px;
+      }
+      .sync-chip {
+        height: 36px;
+        padding: 0 14px;
+        font-size: 12.5px;
+      }
+      .icon-circle-btn {
+        width: 36px;
+        height: 36px;
+      }
+      .screen-body {
+        max-width: none;
+        width: 100%;
+        padding: clamp(22px, 2.4vw, 34px) calc(clamp(22px, 2.8vw, 44px) + var(--safe-right)) 42px calc(clamp(22px, 2.8vw, 44px) + var(--safe-left));
+      }
+      .hero-bar {
+        margin-bottom: 22px;
+      }
+      .hero-title {
+        font-size: clamp(30px, 2.6vw, 36px);
+      }
+      .hero-stats-pill {
+        flex-direction: row;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 18px;
+        border-radius: 16px;
+        background: linear-gradient(180deg, #151923 0%, #10131b 100%);
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+      .hero-stats-pill > div:nth-child(2) {
+        width: 128px !important;
+        height: 5px !important;
+        margin: 0 !important;
+        flex-shrink: 0;
+      }
+
+      /* Tablet Horizontal Pill Bottom Bar across the full viewport */
+      .bottom-nav-bar {
+        height: calc(64px + var(--safe-bottom));
+        padding: 8px calc(clamp(22px, 2.8vw, 44px) + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(clamp(22px, 2.8vw, 44px) + var(--safe-left));
+        gap: 10px;
+        background: rgba(11, 13, 19, 0.97);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .nav-tab {
+        flex-direction: row;
+        gap: 9px;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+      }
+      .nav-tab .nav-tab-pill {
+        width: auto;
+        height: auto;
+        background: transparent;
+      }
+      .nav-tab.active {
+        background: rgba(0, 240, 255, 0.11);
+        border-color: rgba(0, 240, 255, 0.28);
+        color: white;
+      }
+      .nav-tab.active .nav-tab-pill {
+        background: transparent;
+        color: var(--cyan);
+      }
+
+      .fab-add {
+        right: calc(clamp(22px, 2.8vw, 44px) + var(--safe-right));
+        bottom: calc(82px + var(--safe-bottom));
+        height: 52px;
+        padding: 0 22px;
+      }
+      body:not(.keyboard-open):not(.sheet-typing) .sheet-backdrop {
+        align-items: center;
+      }
+      .bottom-sheet {
+        max-width: 640px;
+        border-radius: 24px;
+        padding: 24px 28px var(--sheet-pad-bottom);
+      }
+      .sheet-actions {
+        margin: -8px -28px calc(0px - var(--sheet-pad-bottom));
+        padding: 12px 28px var(--sheet-pad-bottom);
+      }
+
+      /* Today on Tablet: Full-Width Priority Queue + Live Day Timeline side-by-side */
+      .segmented-control.today-sub-tabs {
+        display: none;
+      }
+      .today-tablet-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.38fr) minmax(340px, 0.96fr);
+        gap: clamp(22px, 2.5vw, 36px);
+        align-items: start;
+      }
+      .today-pane,
+      .today-pane:not(.is-active) {
+        display: block;
+        min-width: 0;
+      }
+      .today-timeline-tablet-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin: 2px 2px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .filter-pill {
+        height: 34px;
+        padding: 0 14px;
+        font-size: 12.5px;
+      }
+      .spotlight-card {
+        padding: 24px 26px;
+        border-radius: 22px;
+      }
+      .spotlight-title {
+        font-size: 23px;
+      }
+      .spotlight-notes {
+        font-size: 14px;
+      }
+      .spotlight-actions .btn-primary-focus {
+        flex: 0 1 auto;
+        min-width: 210px;
+        padding: 0 26px;
+      }
+      .queue-item-card {
+        padding: 16px 18px 16px 22px;
+        border-radius: 18px;
+      }
+      .queue-item-title {
+        font-size: 15.5px;
+      }
+      .empty-card {
+        border-style: solid;
+        border-color: rgba(255, 255, 255, 0.09);
+        background: linear-gradient(180deg, rgba(20, 24, 34, 0.62) 0%, rgba(14, 17, 24, 0.34) 100%);
+        border-radius: 22px;
+        padding: 48px 32px;
+      }
+      .empty-title {
+        font-size: 16px;
+      }
+      .empty-sub {
+        font-size: 13.5px;
+        max-width: 440px;
+      }
+
+      /* Quests & Habits adaptive full-width grids on Tablet */
+      .quests-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+        gap: clamp(18px, 2vw, 26px);
+        align-items: stretch;
+      }
+      .quests-grid > .review-card {
+        margin-bottom: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .habits-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+        gap: clamp(14px, 1.6vw, 20px);
+        align-items: start;
+      }
+      .habits-grid > .queue-item-card {
+        margin-bottom: 0;
+      }
+
+      /* Plan 5-day strip: roomier cards on Tablet */
+      .plan-strip {
+        gap: 12px;
+      }
+      .plan-day-card {
+        padding: 14px 8px;
+      }
+
+      /* Focus view: atmospheric widescreen stage & larger stopwatch on Tablet */
+      .focus-stage {
+        background: radial-gradient(circle at 50% 44%, rgba(0, 240, 255, 0.055) 0%, transparent 62%);
+        border-radius: 24px;
+        padding: 12px 8px 16px;
+      }
+      .focus-task-title {
+        font-size: clamp(26px, 2.6vw, 34px);
+        max-width: 720px;
+      }
+      .focus-chrono {
+        font-size: clamp(92px, 9.5vw, 136px);
+      }
+      .focus-actions {
+        max-width: 460px;
+      }
+      .focus-notes {
+        max-width: 560px;
+      }
+
+      /* Review view: responsive KPI grid + full-width 2-col breakdown split on Tablet */
+      .review-kpi-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .review-bar-track {
+        height: 168px;
+        max-width: 44px;
+      }
+      .review-tablet-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr);
+        gap: clamp(16px, 1.8vw, 24px);
+        align-items: stretch;
+        margin-bottom: 18px;
+      }
+      .review-tablet-split > .review-card {
+        margin-bottom: 0;
+      }
+
+      /* Guide view: adaptive principle cards & side-by-side Workshop + Science Check */
+      .guide-principles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+        gap: clamp(16px, 1.8vw, 24px);
+        margin-bottom: 18px;
+      }
+      .guide-principles-grid > .guide-principle-card {
+        margin-bottom: 0;
+      }
+      .guide-compare {
+        grid-template-columns: 1fr 1fr;
+      }
+      .guide-workshop-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 24px;
+        align-items: start;
+      }
+      .guide-workshop-split > #guideEvalBox {
+        margin-top: 0 !important;
+      }
+    }
+
+    @media (min-width: 1050px) {
+      .filter-pill > span:last-child {
+        max-width: 320px;
+      }
+    }
+
+    @media (min-width: 1120px) {
+      .today-tablet-split {
+        grid-template-columns: minmax(0, 1.44fr) minmax(420px, 1fr);
+      }
+      .review-kpi-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .dot-indicator,
       .spinner,
@@ -2097,13 +2573,16 @@
 
   <!-- Sticky Top App Bar -->
   <header class="app-bar" id="topHeader">
-    <button class="brand-row pressable" onclick="switchView('command')" aria-label="Hunt, go to Today">
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
-        <path fill="currentColor" fill-rule="evenodd" d="M23.62,16.89L23.08,16.34L23.03,16.26L23.00,16.20L22.98,16.12L22.98,16.05L22.99,15.99L23.02,15.92L23.06,15.85L23.60,15.22L23.67,15.15L23.75,15.11L23.84,15.09L23.93,15.09L24.01,15.11L24.07,15.14L24.12,15.17L24.35,15.41L24.41,15.46L24.48,15.50L24.57,15.54L24.66,15.57L24.77,15.59L24.87,15.59L24.98,15.58L25.09,15.54L25.20,15.49L25.29,15.43L25.37,15.34L25.44,15.25L25.49,15.15L25.52,15.05L25.54,14.92L25.54,14.71L25.32,8.37L25.31,8.17L25.28,7.95L25.24,7.74L25.16,7.46L25.08,7.27L24.99,7.06L24.85,6.81L24.73,6.63L24.60,6.45L24.46,6.29L24.25,6.09L24.09,5.96L23.92,5.84L23.74,5.73L23.54,5.62L23.37,5.54L23.16,5.46L23.05,5.41L22.93,5.34L22.83,5.26L22.72,5.16L22.64,5.06L22.56,4.93L22.45,4.72L22.37,4.58L22.26,4.43L22.16,4.34L22.06,4.27L21.97,4.23L21.86,4.20L21.76,4.19L20.34,4.19L20.21,4.21L20.08,4.26L19.99,4.30L19.91,4.37L19.84,4.43L19.76,4.54L19.70,4.58L19.43,4.72L19.26,4.83L19.11,4.96L19.01,5.08L18.93,5.19L18.87,5.28L18.78,5.46L18.73,5.60L18.70,5.70L18.68,5.85L18.67,5.95L18.67,6.10L18.68,6.25L18.70,6.40L18.75,6.56L18.85,6.39L18.96,6.24L19.01,6.19L19.06,6.16L19.10,6.13L19.16,6.12L19.23,6.11L19.30,6.12L19.36,6.14L19.41,6.17L19.47,6.22L19.51,6.27L19.54,6.33L19.55,6.39L19.56,6.45L19.55,6.50L19.53,6.59L19.50,6.69L19.45,6.80L19.34,6.99L19.25,7.17L19.18,7.35L19.11,7.54L19.06,7.74L19.03,7.87L19.00,8.07L18.98,8.26L18.97,8.47L18.98,8.67L19.00,8.88L19.03,9.09L19.08,9.29L19.14,9.49L19.21,9.68L19.30,9.89L19.40,10.07L19.51,10.25L19.63,10.42L19.76,10.58L22.35,13.30L22.40,13.37L22.43,13.45L22.45,13.53L22.44,13.63L22.41,13.72L22.36,13.80L21.63,14.66L21.57,14.70L21.49,14.74L21.42,14.76L21.34,14.76L21.25,14.74L21.17,14.70L20.74,14.39L20.40,14.15L20.04,13.92L19.68,13.69L19.10,13.35L18.50,13.03L17.82,12.69L17.12,12.38L16.41,12.09L15.70,11.84L15.30,11.71L14.89,11.59L14.15,11.39L13.41,11.22L12.66,11.09L11.90,10.98L11.14,10.90L10.38,10.85L9.96,10.84L9.54,10.83L9.54,2.06L9.53,1.93L9.50,1.82L9.46,1.73L9.40,1.61L9.35,1.55L9.28,1.47L9.20,1.40L9.11,1.35L9.04,1.31L8.94,1.28L8.83,1.26L8.73,1.25L3.82,1.25L3.66,1.28L3.59,1.30L3.49,1.35L3.40,1.40L3.34,1.45L3.23,1.57L3.16,1.68L3.11,1.80L3.08,1.93L3.06,2.06L3.06,29.44L3.07,29.52L3.09,29.62L3.11,29.70L3.15,29.80L3.20,29.89L3.25,29.95L3.30,30.01L3.38,30.08L3.49,30.15L3.61,30.21L3.74,30.24L3.85,30.25L8.75,30.25L8.86,30.24L8.99,30.21L9.09,30.17L9.18,30.11L9.26,30.05L9.34,29.97L9.40,29.89L9.45,29.80L9.48,29.73L9.52,29.62L9.53,29.55L9.54,29.44L9.54,17.31L10.16,17.32L10.78,17.37L11.39,17.44L12.00,17.54L12.61,17.68L13.21,17.84L13.80,18.03L14.38,18.25L14.95,18.49L15.51,18.77L16.06,19.07L16.59,19.39L17.10,19.74L17.59,20.12L18.07,20.52L18.53,20.94L18.92,21.34L19.34,21.80L19.74,22.28L20.07,22.73L20.42,23.25L20.72,23.73L21.02,24.27L21.27,24.78L21.52,25.35L21.74,25.93L21.93,26.52L22.10,27.12L22.23,27.72L22.33,28.28L22.41,28.90L22.46,29.54L22.49,29.67L22.54,29.80L22.61,29.91L22.71,30.03L22.81,30.11L22.91,30.17L23.00,30.21L23.11,30.23L23.24,30.25L28.13,30.25L28.23,30.24L28.36,30.21L28.46,30.18L28.58,30.11L28.66,30.05L28.72,29.99L28.77,29.93L28.83,29.84L28.89,29.70L28.92,29.59L28.93,29.51L28.94,29.43L28.93,29.23L28.89,28.64L28.84,28.13L28.78,27.63L28.69,27.05L28.58,26.46L28.47,25.96L28.33,25.39L28.18,24.82L28.00,24.25L27.84,23.77L27.63,23.21L27.44,22.74L27.24,22.28L27.03,21.82L26.80,21.36L26.56,20.91L26.31,20.47L26.05,20.03L25.82,19.67L25.54,19.25L25.24,18.84L24.94,18.43L24.63,18.03L24.30,17.64L23.97,17.26Z"/>
-        <path fill="#e5aa50" d="M13.70,23.84L13.54,23.84L13.38,23.86L13.23,23.92L13.09,24.00L12.98,24.11L12.88,24.24L12.82,24.38L12.78,24.54L12.77,24.65L12.77,29.47L12.79,29.60L12.82,29.73L12.88,29.85L12.96,29.95L13.07,30.07L13.15,30.13L13.22,30.17L13.30,30.20L13.40,30.23L13.56,30.25L18.40,30.25L18.54,30.23L18.66,30.20L18.78,30.14L18.89,30.06L19.01,29.95L19.09,29.82L19.13,29.74L19.16,29.64L19.19,29.49L19.18,29.35L19.13,29.04L19.07,28.74L18.99,28.44L18.88,28.12L18.76,27.80L18.63,27.49L18.47,27.19L18.31,26.89L18.14,26.63L17.94,26.35L17.73,26.09L17.54,25.88L17.33,25.65L17.12,25.46L16.89,25.26L16.67,25.08L16.42,24.90L16.18,24.75L15.91,24.59L15.66,24.46L15.38,24.33L15.12,24.22L14.83,24.11L14.56,24.03L14.26,23.95L13.98,23.89Z"/>
-      </svg>
-      <span class="brand-word">Hunt</span>
-    </button>
+    <div class="brand-group">
+      <button class="brand-row pressable" onclick="switchView('command')" aria-label="Hunt, go to Today">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M19.2 9.8C21.0 8.6 23.4 8.7 25.2 9.9C26.1 10.5 26.8 11.5 27.0 12.6C25.8 12.2 24.7 12.2 23.7 12.6C23.6 15.8 21.9 19.2 18.6 22.0C15.5 24.6 11.7 26.3 7.2 27.0C6.8 27.1 6.6 26.6 6.9 26.3L12.8 20.6C10.3 19.5 8.0 17.9 6.1 15.7C5.8 15.4 6.1 14.9 6.5 15.0L11.3 15.8C9.6 12.2 7.2 8.6 4.1 5.4C3.8 5.1 4.1 4.6 4.6 4.6C10.8 4.8 15.9 6.7 19.2 9.8Z"/>
+          <circle cx="23" cy="22.8" r="3.3" fill="#e5aa50"/>
+        </svg>
+        <span class="brand-word">Hunt</span>
+      </button>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.8.0</span>
+    </div>
 
     <div class="app-bar-actions">
       <div id="activeHeaderPill"></div>
@@ -2118,6 +2597,8 @@
       </button>
     </div>
   </header>
+
+  <div id="apkPairBannerHost"></div>
 
   <!-- Main Screen Body -->
   <main class="screen-body" id="mainContainer"></main>
@@ -2180,6 +2661,7 @@
       }
     } catch (e) {}
 
+    const APP_VERSION = "1.8.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -2187,11 +2669,28 @@
     const SYNC_TOKEN_KEY = "hunt-sync-token-v1";
     const PAIRING_TOKEN_RE = /^[\x21-\x7E]{32,256}$/;
 
+    const QUEST_COLOR_KEYS = ["cyan", "emerald", "amber", "purple", "rose", "sky", "orange", "lime"];
     const ACCENT_HEX = {
       cyan: "#00f0ff",
       emerald: "#00ff9d",
       amber: "#ffb800",
+      purple: "#b388ff",
+      rose: "#ff6b9d",
+      sky: "#38bdf8",
+      orange: "#ff8547",
+      lime: "#a3e635",
       slate: "#64748b"
+    };
+    const ACCENT_RGB = {
+      cyan: "0,240,255",
+      emerald: "0,255,157",
+      amber: "255,184,0",
+      purple: "179,136,255",
+      rose: "255,107,157",
+      sky: "56,189,248",
+      orange: "255,133,71",
+      lime: "163,230,53",
+      slate: "148,163,184"
     };
 
     // Crisp Vector SVG Icons
@@ -2260,6 +2759,22 @@
         return h + ":" + String(mRem).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
       }
       return String(totalMinutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+    }
+
+    // Formats logged duration cleanly for both <6m micro-sessions ("2m", "45s") and 100h–10,000h+ totals.
+    function formatTelemetryDuration(seconds, zeroAs, compactLarge) {
+      const n = Number(seconds);
+      const sec = Number.isFinite(n) && n > 0 ? n : 0;
+      if (sec <= 0) return zeroAs === undefined ? "0.0h" : zeroAs;
+      if (sec < 60) return Math.max(1, Math.round(sec)) + "s";
+      if (sec < 360) return Math.max(1, Math.round(sec / 60)) + "m";
+      const h = sec / 3600;
+      if (compactLarge) {
+        if (h >= 10000) return Math.round(h / 1000) + "kh";
+        if (h >= 1000) return (h / 1000).toFixed(1) + "kh";
+        if (h >= 100) return Math.round(h) + "h";
+      }
+      return h.toFixed(1) + "h";
     }
 
     // =========================================================================
@@ -2477,6 +2992,8 @@
     let reviewChartMetric = "hours";
     let selectedReviewHeatmapKey = null;
     let showReviewSessionLog = false;
+    let reviewSessionLimit = 50;
+    const REVIEW_SESSION_PAGE = 50;
     let showAllCompletedToday = false;
     const COMPLETED_PREVIEW = 4;
     let justCompletedTaskId = null;
@@ -2729,18 +3246,90 @@
       return PAIRING_TOKEN_RE.test(token) ? { url: u.origin, token } : { error: "bad_token" };
     }
 
-    // Browser copy opened from a pairing link (/hunt-mobile.html?token=<key>): keep the key, then take it
-    // out of the address bar (and this history entry) right away.
+    let pendingNativePairHref = "";
+    let pendingBrowserPairUrl = "";
+
+    function renderApkPairBanner() {
+      const host = document.getElementById("apkPairBannerHost");
+      if (!host) return;
+      if (!pendingNativePairHref || isApkShell() || !/Android/i.test(navigator.userAgent || "")) {
+        host.innerHTML = "";
+        return;
+      }
+      host.innerHTML = `
+        <div class="apk-pair-banner" role="region" aria-label="Pair Android app">
+          <div style="min-width:0;">
+            <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:white;">Using the Hunt Android app on this phone or tablet?</div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:2px;">Tap once to pass this laptop's pairing key straight into the installed Hunt app.</div>
+          </div>
+          <div class="apk-pair-actions">
+            <button type="button" class="apk-pair-primary pressable" onclick="launchNativePairIntent()">Pair Android App →</button>
+            <button type="button" class="sync-chip pressable" onclick="copyBrowserPairingLink()">Copy Link</button>
+            <button type="button" class="sheet-close" onclick="dismissApkPairBanner()" aria-label="Dismiss">×</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function launchNativePairIntent() {
+      if (!pendingNativePairHref) return;
+      playClickSound();
+      try {
+        window.location.assign(pendingNativePairHref);
+      } catch (e) {}
+    }
+
+    async function copyBrowserPairingLink() {
+      if (!pendingBrowserPairUrl) return;
+      playClickSound();
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(pendingBrowserPairUrl);
+          showToast("Pairing link copied");
+        }
+      } catch (e) {
+        showToast("Couldn't copy link");
+      }
+    }
+
+    function dismissApkPairBanner() {
+      pendingNativePairHref = "";
+      renderApkPairBanner();
+    }
+
+    // Native -> JS: MainActivity handled a hunt://pair?url=...&token=... deep link.
+    window.__huntNativePaired = function (info) {
+      const nextUrl = info && typeof info.url === "string" ? normalizeLaptopUrl(info.url) : "";
+      if (nextUrl) {
+        cachedLaptopUrl = nextUrl;
+        try { localStorage.setItem(LAPTOP_URL_KEY, nextUrl); } catch (e) {}
+      }
+      syncMeta.lastUrl = null;
+      syncRun.routeEpoch++;
+      syncRun.paused = false;
+      saveSyncMeta(true);
+      if (isSyncSheetOpen()) refreshSyncSheet();
+      showToast("Paired with laptop · syncing…");
+      void syncNow();
+    };
+
+    // Browser copy opened from a pairing link (/hunt-mobile.html?token=<key>): keep the key, offer 1-tap
+    // handoff to the installed Android app, then take it out of the address bar right away.
     function ingestPairingTokenFromPageUrl() {
       if (isApkShell()) return;
       const params = new URLSearchParams(location.search);
       if (!params.has("token")) return;
-      storePairingToken(params.get("token") || "");
+      const rawToken = params.get("token") || "";
+      if (storePairingToken(rawToken) && /^https?:$/i.test(location.protocol)) {
+        pendingNativePairHref = "hunt://pair?url=" + encodeURIComponent(location.origin) + "&token=" + encodeURIComponent(rawToken);
+        pendingBrowserPairUrl = location.origin + "/hunt-mobile.html?token=" + encodeURIComponent(rawToken);
+      }
       params.delete("token");
       const query = params.toString();
       try {
         history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
       } catch (e) {}
+      renderApkPairBanner();
     }
 
     // Ordered routes: the one that answered last, the user's URL, (browser copy) the laptop that served
@@ -4049,6 +4638,14 @@
 
     // UI-only listeners: keep the keyboard open while choosing a pill in a sheet, Escape closes a sheet
     // (browser copy), and a no-op touchstart so :active press feedback also works in mobile Safari.
+    function isTabletPlanBoard() {
+      try {
+        return !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
+      } catch (e) {
+        return false;
+      }
+    }
+
     function installUiHooks() {
       const sc = document.getElementById("sheetContainer");
       if (sc) {
@@ -4062,6 +4659,14 @@
         if (e.key === "Escape" && isSheetOpen()) closeSheet();
       });
       document.addEventListener("touchstart", () => {}, { passive: true });
+      try {
+        const planMq = window.matchMedia && window.matchMedia("(min-width: 900px)");
+        if (planMq && typeof planMq.addEventListener === "function") {
+          planMq.addEventListener("change", () => {
+            if (activeView === "plan") renderAppSafely();
+          });
+        }
+      } catch (e) {}
     }
 
     function installLifecycleHooks() {
@@ -5072,7 +5677,7 @@
           ${sheetHeaderHtml("New Task", true)}
 
           <input id="sheetTaskTitle" class="sheet-input" placeholder="What moves the needle?" value="${escapeHtml(draft.title)}" enterkeyhint="done" aria-label="Task title" onkeydown="if(event.key==='Enter') submitNewTaskFromSheet(true)" />
-          <textarea id="sheetTaskNotes" class="sheet-input" rows="2" placeholder="Optional session notes..." aria-label="Notes" onkeydown="if(isSubmitKey(event)) submitNewTaskFromSheet(true)">${escapeHtml(draft.notes)}</textarea>
+          <textarea id="sheetTaskNotes" class="sheet-input" rows="2" placeholder="Optional description / session notes..." aria-label="Notes" onkeydown="if(isSubmitKey(event)) submitNewTaskFromSheet(true)">${escapeHtml(draft.notes)}</textarea>
 
           <div class="sheet-label">Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Quest">
@@ -5267,7 +5872,7 @@
     }
 
     function questColorPillsHtml() {
-      return ["cyan", "amber", "emerald"].map(col => `
+      return QUEST_COLOR_KEYS.map(col => `
               <button class="sheet-pill ${selectedQuestColor === col ? 'selected' : ''}" aria-pressed="${selectedQuestColor === col}" data-color="${escapeHtml(col)}" onclick="selectedQuestColor=${jsArg(col)};selectPill(this);">
                 <span style="width:9px;height:9px;border-radius:50%;background:${ACCENT_HEX[col]};"></span>
                 <span style="text-transform:capitalize;">${col}</span>
@@ -5283,9 +5888,9 @@
 
           <input id="newQuestTitleInput" class="sheet-input" placeholder="Quest title (e.g. Launch my idea)" aria-label="Quest Title" value="" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" />
 
-          <textarea id="newQuestDescInput" class="sheet-input" rows="2" placeholder="Why does this quest matter & what moves it forward?" aria-label="Description" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
+          <textarea id="newQuestDescInput" class="sheet-input" rows="2" placeholder="Optional description — why this quest matters & what moves it forward" aria-label="Description" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
 
-          <div style="display:grid;grid-template-columns:1fr 96px;gap:12px;align-items:start;">
+          <div class="quest-meta-grid">
             <div>
               <div class="sheet-label">Accent Color</div>
               <div class="sheet-pill-group" role="group" aria-label="Accent color">
@@ -5357,7 +5962,7 @@
           <label class="sheet-label" for="sheetQuestDesc">Description</label>
           <textarea id="sheetQuestDesc" class="sheet-input" rows="2" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})">${escapeHtml(q.description || "")}</textarea>
 
-          <div style="display:grid;grid-template-columns:1fr 96px;gap:12px;align-items:start;">
+          <div class="quest-meta-grid">
             <div>
               <div class="sheet-label">Accent Color</div>
               <div class="sheet-pill-group" role="group" aria-label="Accent color">
@@ -5563,7 +6168,7 @@
       refused: { title: "Hunt isn't running on the laptop", detail: "The laptop answered, but the Hunt server is not running. Start Hunt on your laptop." },
       server_timeout: { title: "Laptop server not responding", detail: "Hunt on the laptop accepted the connection but did not answer in time." },
       js_timeout: { title: "The laptop took too long", detail: "The sync did not finish in time." },
-      auth: { title: "Not paired, or the key was rejected", detail: "Paste the pairing link from the desktop Phone & Sync window into Laptop address." },
+      auth: { title: "Not paired, or the key was rejected", detail: "Paste the pairing link from the desktop Phone & Sync window into Laptop address, or scan the QR code and tap Pair Android App." },
       too_large: { title: "Data too large to sync", detail: "The laptop rejected the sync because the data is too large." },
       bad_response: { title: "Unexpected answer", detail: "Something answered at this address, but it is not the Hunt sync server." },
       busy: { title: "Still finishing the last sync", detail: "Try again in a moment." },
@@ -5595,8 +6200,11 @@
         const v = bridgeCall("getAppVersion");
         appVersionCache = typeof v === "string" ? v.trim() : "";
       }
-      if (appVersionCache) return "Hunt for Android · v" + appVersionCache;
-      return window.AndroidBridge ? "Hunt for Android" : "Hunt · web companion";
+      const ver = appVersionCache || APP_VERSION;
+      const badge = document.getElementById("headerVersionBadge");
+      if (badge) setTextIfChanged(badge, "v" + ver);
+      if (window.AndroidBridge) return "Hunt for Android (Phone & Tablet) · v" + ver;
+      return "Hunt · web companion · v" + ver;
     }
 
     // Sheet-local UI state (survives in-place refreshes; reset when the sheet is opened fresh).
@@ -5632,7 +6240,10 @@
           <div class="sheet-label">Route</div>
           <div id="syncRoutePills" class="sheet-pill-group" role="group" aria-label="Laptop route"></div>
 
-          <label class="sheet-label" for="modalLaptopUrl">Laptop address</label>
+          <div class="url-label-row">
+            <label class="sheet-label" for="modalLaptopUrl">Laptop address</label>
+            <button type="button" class="paste-link-btn hit-target pressable" onclick="pastePairingLinkFromClipboard()">Paste link</button>
+          </div>
           <input id="modalLaptopUrl" class="sheet-input mono-input" type="url" inputmode="url" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${escapeHtml(getLaptopBaseUrl())}" placeholder="Pairing link or http://192.168.2.136:3000" oninput="syncSheetUi.urlDirty=true;setSyncHint('')" onchange="applyLaptopUrlInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();manualSyncFromSheet();}" />
           <div id="syncUrlHint" class="sync-hint" role="alert"></div>
 
@@ -5642,6 +6253,26 @@
           <div class="sync-footer">${escapeHtml(appVersionLabel())}</div>
       `);
       refreshSyncSheet();
+    }
+
+    async function pastePairingLinkFromClipboard() {
+      playClickSound();
+      const input = document.getElementById("modalLaptopUrl");
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+          const clip = await navigator.clipboard.readText();
+          if (clip && clip.trim()) {
+            if (input) input.value = clip.trim();
+            applyLaptopUrlInput(clip.trim());
+            return;
+          }
+        }
+      } catch (e) {}
+      if (input) {
+        input.focus();
+        if (typeof input.select === "function") input.select();
+      }
+      setSyncHint("Long-press inside the field above and tap Paste to insert the pairing link.");
     }
 
     function setSyncHint(text) {
@@ -5898,8 +6529,8 @@
       showSheet("newHabit", `
           ${sheetHeaderHtml("New Daily Habit")}
 
-          <input id="newHabitTitleInput" class="sheet-input" placeholder="e.g. Read 20 pages, Review flashcards..." enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
-          <textarea id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes copied to each day's task..."></textarea>
+          <input id="newHabitTitleInput" class="sheet-input" placeholder="e.g. Read 20 pages, Review flashcards..." aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
+          <textarea id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional description copied to each day's task..." aria-label="Habit description" onkeydown="if(isSubmitKey(event)) saveNewHabit()"></textarea>
 
           <div class="sheet-label">Assign to Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -6119,6 +6750,7 @@
 
           <div class="queue-item-body" role="button" onclick="initializeFocus(${jsArg(task.id)})">
             <div class="queue-item-title">${title}</div>
+            ${task.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(task.notes)}</div>` : ""}
             <div class="queue-item-sub">
               <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;">
                 <span style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
@@ -6644,7 +7276,7 @@
 
       let bodyHtml = "";
       if (guideTab === "quests") {
-        bodyHtml = renderPrincipleCardsHtml(GUIDE_QUEST_PRINCIPLES) + `
+        bodyHtml = `<div class="guide-principles-grid">${renderPrincipleCardsHtml(GUIDE_QUEST_PRINCIPLES)}</div>` + `
           <button class="guide-entry-btn pressable" onclick="playClickSound();guideTab='tasks';renderApp();">
             <div>
               <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:white;">Next: Crafting Tasks</div>
@@ -6654,7 +7286,7 @@
           </button>
         `;
       } else if (guideTab === "tasks") {
-        bodyHtml = renderPrincipleCardsHtml(GUIDE_TASK_PRINCIPLES) + `
+        bodyHtml = `<div class="guide-principles-grid">${renderPrincipleCardsHtml(GUIDE_TASK_PRINCIPLES)}</div>` + `
           <button class="guide-entry-btn pressable" onclick="playClickSound();guideTab='workshop';renderApp();">
             <div>
               <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:white;">Try the Workshop &amp; Audit</div>
@@ -6664,7 +7296,7 @@
           </button>
         `;
       } else if (guideTab === "system") {
-        bodyHtml = GUIDE_RHYTHM_STEPS.map(s => {
+        bodyHtml = `<div class="guide-principles-grid">` + GUIDE_RHYTHM_STEPS.map(s => {
           const hex = ACCENT_HEX[s.accent] || ACCENT_HEX.cyan;
           return `
             <article class="guide-principle-card">
@@ -6679,7 +7311,7 @@
               </div>
             </article>
           `;
-        }).join("") + `
+        }).join("") + `</div>
           <div class="guide-principle-card">
             <div class="hero-eyebrow" style="margin-bottom:8px;">30-Second Pre-Flight Checklist</div>
             ${[
@@ -6751,6 +7383,8 @@
               `).join("")}
             </div>
 
+            <div class="guide-workshop-split">
+              <div>
             ${guideLabMode === "task" ? `
               <label class="sheet-label" for="guideTaskTitleInput">Task Title</label>
               <input id="guideTaskTitleInput" class="sheet-input" placeholder="e.g. Draft 400 words for essay #4" value="${escapeHtml(guideTaskTitle)}" enterkeyhint="done" oninput="guideTaskTitle=this.value;updateGuideEvalLive();" onkeydown="if(isSubmitKey(event)) saveGuideTask();" />
@@ -6781,16 +7415,18 @@
 
               <div class="sheet-label">Accent Color</div>
               <div class="sheet-pill-group" role="group" aria-label="Quest accent color" style="margin-bottom:14px;">
-                ${["cyan", "amber", "emerald"].map(col => `
+                ${QUEST_COLOR_KEYS.map(col => `
                   <button class="sheet-pill ${guideQuestColor === col ? "selected" : ""}" aria-pressed="${guideQuestColor === col}" onclick="playClickSound();guideQuestColor=${jsArg(col)};renderApp();"><span style="width:9px;height:9px;border-radius:50%;background:${ACCENT_HEX[col]};flex-shrink:0;"></span><span style="text-transform:capitalize;">${col}</span></button>
                 `).join("")}
               </div>
 
               <button class="guide-action-btn pressable" onclick="saveGuideQuest()">+ Create Quest</button>
             `}
+              </div>
 
-            <div id="guideEvalBox" style="margin-top:16px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--bg);">
-              ${renderGuideEvalHtml(ev)}
+              <div id="guideEvalBox" style="margin-top:16px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--bg);">
+                ${renderGuideEvalHtml(ev)}
+              </div>
             </div>
           </div>
         `;
@@ -6819,6 +7455,7 @@
       if (filterQuestId !== "ALL" && !activeQuests.some(q => q.id === filterQuestId)) filterQuestId = "ALL";
       updateMuteIcon();
       updateHeaderStatus();
+      appVersionLabel();
       const topHeader = document.getElementById("topHeader");
       const fabBtn = document.getElementById("fabBtn");
       const container = document.getElementById("mainContainer");
@@ -6925,20 +7562,20 @@
               <h1 class="hero-title">Today</h1>
             </div>
 
-            <button type="button" class="hero-stats-pill pressable" onclick="switchView('telemetry')" aria-label="Open weekly review: ${(todayQuestSec / 3600).toFixed(1)} hours today, ${(weekQuestSec / 3600).toFixed(1)} of ${totalTargetHrs} weekly hours">
+            <button type="button" class="hero-stats-pill pressable" onclick="switchView('telemetry')" aria-label="Open weekly review: ${formatTelemetryDuration(todayQuestSec, '0.0h')} today, ${formatTelemetryDuration(weekQuestSec, '0.0h')} of ${totalTargetHrs} weekly hours">
               <div style="display:flex;align-items:baseline;gap:4px;">
-                <span style="font-family:var(--font-display);font-size:20px;font-weight:700;color:white;font-variant-numeric:tabular-nums;">${(todayQuestSec / 3600).toFixed(1)}h</span>
+                <span style="font-family:var(--font-display);font-size:20px;font-weight:700;color:white;font-variant-numeric:tabular-nums;">${formatTelemetryDuration(todayQuestSec, "0.0h")}</span>
                 <span style="font-size:11px;color:var(--muted);">today</span>
               </div>
               <div style="height:4px;width:100%;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;margin:5px 0 4px;">
                 <div style="height:100%;width:${weekPct}%;background:var(--cyan);border-radius:999px;"></div>
               </div>
-              <div style="font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;">${(weekQuestSec / 3600).toFixed(1)}h / ${totalTargetHrs}h wk <span aria-hidden="true" style="color:var(--cyan);font-weight:700;">›</span></div>
+              <div style="font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;">${formatTelemetryDuration(weekQuestSec, "0.0h")} / ${totalTargetHrs}h wk <span aria-hidden="true" style="color:var(--cyan);font-weight:700;">›</span></div>
             </button>
           </div>
 
-          <!-- Segmented Control -->
-          <div class="segmented-control" role="group" aria-label="Today view">
+          <!-- Segmented Control (Phone switcher; Tablet shows both Queue & Day Timeline side-by-side) -->
+          <div class="segmented-control today-sub-tabs" role="group" aria-label="Today view">
             <button class="seg-option ${homeSubTab === 'queue' ? 'active' : ''}" aria-pressed="${homeSubTab === 'queue'}" onclick="homeSubTab='queue';renderApp();">
               Priority Queue (${questQueue.length})
             </button>
@@ -6947,66 +7584,74 @@
             </button>
           </div>
 
-          ${homeSubTab === "queue" ? `
-            <!-- Single-Row Filter Strip -->
-            ${activeQuests.length ? `
-            <div class="chip-strip" role="group" aria-label="Filter by quest">
-              <button class="filter-pill ${filterQuestId === 'ALL' ? 'active' : ''}" aria-pressed="${filterQuestId === 'ALL'}" onclick="filterQuestId='ALL';renderApp();">All Quests</button>
-              ${activeQuests.map(q => `
-                <button class="filter-pill ${filterQuestId === q.id ? 'active' : ''}" aria-pressed="${filterQuestId === q.id}" onclick="filterQuestId=(filterQuestId===${jsArg(q.id)}?'ALL':${jsArg(q.id)});renderApp();">
-                  <span style="width:7px;height:7px;border-radius:50%;background:${ACCENT_HEX[q.accentColor] || ACCENT_HEX.slate};"></span>
-                  <span>${escapeHtml(q.title)}</span>
-                </button>
-              `).join("")}
-            </div>
-            ` : ""}
+          <div class="today-tablet-split">
+            <div class="today-pane today-queue-pane ${homeSubTab === 'queue' ? 'is-active' : ''}">
+              <!-- Single-Row Filter Strip -->
+              ${activeQuests.length ? `
+              <div class="chip-strip" role="group" aria-label="Filter by quest">
+                <button class="filter-pill ${filterQuestId === 'ALL' ? 'active' : ''}" aria-pressed="${filterQuestId === 'ALL'}" onclick="filterQuestId='ALL';renderApp();">All Quests</button>
+                ${activeQuests.map(q => `
+                  <button class="filter-pill ${filterQuestId === q.id ? 'active' : ''}" aria-pressed="${filterQuestId === q.id}" onclick="filterQuestId=(filterQuestId===${jsArg(q.id)}?'ALL':${jsArg(q.id)});renderApp();">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${ACCENT_HEX[q.accentColor] || ACCENT_HEX.slate};"></span>
+                    <span>${escapeHtml(q.title)}</span>
+                  </button>
+                `).join("")}
+              </div>
+              ` : ""}
 
-            <!-- #01 Spotlight Hero Card -->
-            ${heroHtml}
+              <!-- #01 Spotlight Hero Card -->
+              ${heroHtml}
 
-            <!-- Up Next Queue -->
-            ${restQuestQueue.length > 0 ? `<div class="section-header-label" data-flip-key="sec-upnext">Up Next (${restQuestQueue.length})</div>` : ""}
-            ${restQuestQueue.map(t => renderCompactQueueCard(t)).join("")}
+              <!-- Up Next Queue -->
+              ${restQuestQueue.length > 0 ? `<div class="section-header-label" data-flip-key="sec-upnext">Up Next (${restQuestQueue.length})</div>` : ""}
+              ${restQuestQueue.map(t => renderCompactQueueCard(t)).join("")}
 
-            ${questQueue.length === 0 ? (
-              filterQuest
-                ? emptyCardHtml("Nothing open in " + filterQuest.title, "Add the next step for this quest, or look at everything.", [
-                    { label: "+ Add a step", primary: true, onclick: `openNewTaskSheet(${jsArg(filterQuest.id)})` },
-                    { label: "Show all quests", onclick: "filterQuestId='ALL';renderApp();" }
-                  ])
-                : (!state.tasks.length && !activeQuests.length)
-                  ? emptyCardHtml("A clean slate", "Add the one task that matters most today. Quests group bigger goals and track their weekly hours.", [
-                      { label: "+ New Task", primary: true, onclick: "openNewTaskSheet()" },
-                      { label: "New Quest", onclick: "openNewQuestSheet()" }
+              ${questQueue.length === 0 ? (
+                filterQuest
+                  ? emptyCardHtml("Nothing open in " + filterQuest.title, "Add the next step for this quest, or look at everything.", [
+                      { label: "+ Add a step", primary: true, onclick: `openNewTaskSheet(${jsArg(filterQuest.id)})` },
+                      { label: "Show all quests", onclick: "filterQuestId='ALL';renderApp();" }
                     ])
-                  : !activeQuests.length
-                    ? emptyCardHtml("No quest work queued", "Create a quest to give your most important work a home.", [
+                  : (!state.tasks.length && !activeQuests.length)
+                    ? emptyCardHtml("A clean slate", "Add the one task that matters most today. Quests group bigger goals and track their weekly hours.", [
+                        { label: "+ New Task", primary: true, onclick: "openNewTaskSheet()" },
                         { label: "New Quest", onclick: "openNewQuestSheet()" }
                       ])
-                    : emptyCardHtml("Your Quest queue is clear", "Queue the next step of a quest to see it here as #1.", [
-                        { label: "+ New Task", primary: true, onclick: "openNewTaskSheet()" }
-                      ])
-            ) : ""}
+                    : !activeQuests.length
+                      ? emptyCardHtml("No quest work queued", "Create a quest to give your most important work a home.", [
+                          { label: "New Quest", onclick: "openNewQuestSheet()" }
+                        ])
+                      : emptyCardHtml("Your Quest queue is clear", "Queue the next step of a quest to see it here as #1.", [
+                          { label: "+ New Task", primary: true, onclick: "openNewTaskSheet()" }
+                        ])
+              ) : ""}
 
-            <!-- Other Work -->
-            ${otherQueue.length > 0 ? `
-              <div class="section-header-label" data-flip-key="sec-other">Other Work</div>
-              ${otherQueue.map(t => renderCompactQueueCard(t)).join("")}
-            ` : ""}
-
-            <!-- Completed Today -->
-            ${completedToday.length > 0 ? `
-              <div class="section-header-label" data-flip-key="sec-completed">Completed today (${completedToday.length})</div>
-              ${completedList.map(t => renderCompletedCard(t, true)).join("")}
-              ${completedToday.length > COMPLETED_PREVIEW ? `
-                <button class="show-more-btn" data-flip-key="btn-showmore" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
-                  ${showAllCompletedToday ? "Show less ↑" : `Show all ${completedToday.length} ↓`}
-                </button>
+              <!-- Other Work -->
+              ${otherQueue.length > 0 ? `
+                <div class="section-header-label" data-flip-key="sec-other">Other Work</div>
+                ${otherQueue.map(t => renderCompactQueueCard(t)).join("")}
               ` : ""}
-            ` : ""}
-          ` : `
-            ${renderTimelineHtml(todayLogs)}
-          `}
+
+              <!-- Completed Today -->
+              ${completedToday.length > 0 ? `
+                <div class="section-header-label" data-flip-key="sec-completed">Completed today (${completedToday.length})</div>
+                ${completedList.map(t => renderCompletedCard(t, true)).join("")}
+                ${completedToday.length > COMPLETED_PREVIEW ? `
+                  <button class="show-more-btn" data-flip-key="btn-showmore" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
+                    ${showAllCompletedToday ? "Show less ↑" : `Show all ${completedToday.length} ↓`}
+                  </button>
+                ` : ""}
+              ` : ""}
+            </div>
+
+            <div class="today-pane today-timeline-pane ${homeSubTab === 'timeline' ? 'is-active' : ''}">
+              <div class="today-timeline-tablet-head">
+                <span>Today's Timeline</span>
+                <span style="font-family:var(--font-mono);color:var(--dim);text-transform:none;letter-spacing:0;">${todayLogs.length} session${todayLogs.length === 1 ? "" : "s"}</span>
+              </div>
+              ${renderTimelineHtml(todayLogs, activeTaskObj, af, liveDelta)}
+            </div>
+          </div>
         `;
       }
 
@@ -7037,45 +7682,89 @@
         const pendingDay = dayTasks.filter(t => t.status === "queued" || t.status === "active");
         const completedDay = dayTasks.filter(t => t.status === "completed");
 
-        container.innerHTML = `
-          <div class="hero-bar">
-            <div>
-              <div class="hero-eyebrow">${activeCol.monthYear}</div>
-              <h1 class="hero-title">Plan the week</h1>
+        if (isTabletPlanBoard()) {
+          container.innerHTML = `
+            <div class="hero-bar">
+              <div>
+                <div class="hero-eyebrow">${activeCol.monthYear}</div>
+                <h1 class="hero-title">Plan the week</h1>
+              </div>
+              <div class="step-chip-row">
+                <button class="sync-chip step-chip" aria-label="Previous day" onclick="planDayOffset--;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">‹</button>
+                <button class="sync-chip step-chip" onclick="planDayOffset=0;selectedPlanDateKey=toLocalDateKey();renderApp();">Today</button>
+                <button class="sync-chip step-chip" aria-label="Next day" onclick="planDayOffset++;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">›</button>
+              </div>
             </div>
-            <div class="step-chip-row">
-              <button class="sync-chip step-chip" aria-label="Previous day" onclick="planDayOffset--;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">‹</button>
-              <button class="sync-chip step-chip" onclick="planDayOffset=0;selectedPlanDateKey=toLocalDateKey();renderApp();">Today</button>
-              <button class="sync-chip step-chip" aria-label="Next day" onclick="planDayOffset++;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">›</button>
+
+            <div class="plan-board-grid">
+              ${cols.map(c => {
+                const colTasks = state.tasks
+                  .filter(t => (t.scheduledDate || todayKey) === c.dateKey)
+                  .sort(compareRank);
+                const colPending = colTasks.filter(t => t.status === "queued" || t.status === "active");
+                const colDone = colTasks.filter(t => t.status === "completed");
+                const cnt = colPending.length;
+                const isSel = c.dateKey === activeCol.dateKey;
+                return `
+                  <div class="plan-col-panel ${c.isToday ? 'is-today' : ''} ${isSel ? 'is-selected' : ''}" data-plan-col="${escapeHtml(c.dateKey)}">
+                    <button class="plan-day-card pressable ${isSel ? 'active' : ''} ${c.isToday ? 'today-mark' : ''}" aria-pressed="${isSel}" aria-label="${escapeHtml(c.fullLabel)}${c.isToday ? ", today" : ""}, ${cnt} open" onclick="selectedPlanDateKey=${jsArg(c.dateKey)};renderApp();">
+                      <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${c.isToday ? 'var(--amber)' : 'var(--muted)'};">${c.weekday}${c.isToday ? ' · TODAY' : ''}</span>
+                      <span style="font-family:var(--font-display);font-size:22px;font-weight:700;margin:4px 0;color:white;">${c.dayNum}</span>
+                      <span style="font-size:11px;color:var(--dim);">${cnt} open${colDone.length ? ' · ' + colDone.length + ' done' : ''}</span>
+                    </button>
+                    <div class="plan-col-tasks">
+                      ${colPending.length === 0 && colDone.length === 0 ? `<div class="plan-col-empty">Nothing planned</div>` : ""}
+                      ${colPending.map(t => renderCompactQueueCard(t)).join("")}
+                      ${colDone.length > 0 ? `<div class="section-header-label" style="margin:12px 0 8px 2px;">Completed (${colDone.length})</div>` : ""}
+                      ${colDone.map(t => renderCompletedCard(t, false)).join("")}
+                    </div>
+                    <button class="plan-col-add-btn pressable" onclick="openNewTaskSheet(undefined, ${jsArg(c.dateKey)})">+ Add for ${escapeHtml(c.weekday)}</button>
+                  </div>
+                `;
+              }).join("")}
             </div>
-          </div>
+          `;
+        } else {
+          container.innerHTML = `
+            <div class="hero-bar">
+              <div>
+                <div class="hero-eyebrow">${activeCol.monthYear}</div>
+                <h1 class="hero-title">Plan the week</h1>
+              </div>
+              <div class="step-chip-row">
+                <button class="sync-chip step-chip" aria-label="Previous day" onclick="planDayOffset--;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">‹</button>
+                <button class="sync-chip step-chip" onclick="planDayOffset=0;selectedPlanDateKey=toLocalDateKey();renderApp();">Today</button>
+                <button class="sync-chip step-chip" aria-label="Next day" onclick="planDayOffset++;selectedPlanDateKey=dayKeyOffset(planDayOffset);renderApp();">›</button>
+              </div>
+            </div>
 
-          <div class="plan-strip">
-            ${cols.map(c => {
-              const cnt = state.tasks.filter(t => (t.scheduledDate || todayKey) === c.dateKey && t.status !== "completed").length;
-              return `
-                <button class="plan-day-card pressable ${c.dateKey === activeCol.dateKey ? 'active' : ''} ${c.isToday ? 'today-mark' : ''}" aria-pressed="${c.dateKey === activeCol.dateKey}" aria-label="${escapeHtml(c.fullLabel)}${c.isToday ? ", today" : ""}, ${cnt} open" onclick="selectedPlanDateKey=${jsArg(c.dateKey)};renderApp();">
-                  <span style="font-size:11px;font-weight:600;color:${c.isToday ? 'var(--amber)' : 'var(--muted)'};">${c.weekday}</span>
-                  <span style="font-family:var(--font-display);font-size:18px;font-weight:700;margin:3px 0;">${c.dayNum}</span>
-                  <span style="font-size:10px;color:var(--dim);">${cnt} open</span>
-                </button>
-              `;
-            }).join("")}
-          </div>
+            <div class="plan-strip">
+              ${cols.map(c => {
+                const cnt = state.tasks.filter(t => (t.scheduledDate || todayKey) === c.dateKey && t.status !== "completed").length;
+                return `
+                  <button class="plan-day-card pressable ${c.dateKey === activeCol.dateKey ? 'active' : ''} ${c.isToday ? 'today-mark' : ''}" aria-pressed="${c.dateKey === activeCol.dateKey}" aria-label="${escapeHtml(c.fullLabel)}${c.isToday ? ", today" : ""}, ${cnt} open" onclick="selectedPlanDateKey=${jsArg(c.dateKey)};renderApp();">
+                    <span style="font-size:11px;font-weight:600;color:${c.isToday ? 'var(--amber)' : 'var(--muted)'};">${c.weekday}</span>
+                    <span style="font-family:var(--font-display);font-size:18px;font-weight:700;margin:3px 0;">${c.dayNum}</span>
+                    <span style="font-size:10px;color:var(--dim);">${cnt} open</span>
+                  </button>
+                `;
+              }).join("")}
+            </div>
 
-          <div class="section-header-label" style="margin-top:4px;">${activeCol.fullLabel} ${activeCol.isToday ? '· TODAY' : ''}</div>
+            <div class="section-header-label" style="margin-top:4px;">${activeCol.fullLabel} ${activeCol.isToday ? '· TODAY' : ''}</div>
 
-          ${pendingDay.length === 0 && completedDay.length === 0 ? emptyCardHtml(
-            "Nothing planned for " + activeCol.weekday,
-            activeCol.isToday ? "Add what you want to get done today." : "Plan ahead: tasks added here are scheduled for this day.",
-            [{ label: "+ Add for " + activeCol.weekday, primary: true, onclick: `openNewTaskSheet(undefined, ${jsArg(activeCol.dateKey)})` }]
-          ) : ""}
+            ${pendingDay.length === 0 && completedDay.length === 0 ? emptyCardHtml(
+              "Nothing planned for " + activeCol.weekday,
+              activeCol.isToday ? "Add what you want to get done today." : "Plan ahead: tasks added here are scheduled for this day.",
+              [{ label: "+ Add for " + activeCol.weekday, primary: true, onclick: `openNewTaskSheet(undefined, ${jsArg(activeCol.dateKey)})` }]
+            ) : ""}
 
-          ${pendingDay.map(t => renderCompactQueueCard(t)).join("")}
+            ${pendingDay.map(t => renderCompactQueueCard(t)).join("")}
 
-          ${completedDay.length > 0 ? `<div class="section-header-label" data-flip-key="sec-plan-completed">Completed (${completedDay.length})</div>` : ""}
-          ${completedDay.map(t => renderCompletedCard(t, false)).join("")}
-        `;
+            ${completedDay.length > 0 ? `<div class="section-header-label" data-flip-key="sec-plan-completed">Completed (${completedDay.length})</div>` : ""}
+            ${completedDay.map(t => renderCompletedCard(t, false)).join("")}
+          `;
+        }
       }
 
       // =====================================================================
@@ -7093,7 +7782,7 @@
           const topQuest = topTask ? state.quests.find(x => x.id === topTask.questId) : null;
 
           container.innerHTML = `
-            <div style="min-height:78vh;display:flex;flex-direction:column;justify-content:space-between;">
+            <div class="focus-idle-stage">
               <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;">
                 <div class="hero-eyebrow">Focus Mode</div>
                 ${topTask ? `
@@ -7218,9 +7907,7 @@
               { label: "Create your first quest", primary: true, onclick: "openNewQuestSheet()" },
               { label: "Read Quest Guide", onclick: "openGuideView('quests')" }
             ]
-          ) : ""}
-
-          ${activeQuests.map(quest => {
+          ) : `<div class="quests-grid">` + activeQuests.map(quest => {
             const hex = ACCENT_HEX[quest.accentColor] || ACCENT_HEX.slate;
             const sec = weekSecByQuest.get(quest.id) || 0;
             const hrs = sec / 3600;
@@ -7248,7 +7935,7 @@
                 <div style="margin-top:16px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--bg);">
                   <div style="display:flex;justify-content:space-between;align-items:baseline;">
                     <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);">Quest Hours (7d)</span>
-                    <span style="font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;"><strong style="font-family:var(--font-display);font-size:18px;color:white;">${hrs.toFixed(1)}h</strong> / ${Number(quest.targetWeeklyHours) || 0}h (${pct}%)</span>
+                    <span style="font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;"><strong style="font-family:var(--font-display);font-size:18px;color:white;">${formatTelemetryDuration(sec, "0.0h")}</strong> / ${Number(quest.targetWeeklyHours) || 0}h (${pct}%)</span>
                   </div>
                   <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;margin-top:10px;">
                     <div style="height:100%;width:${pct}%;background:${hex};border-radius:999px;"></div>
@@ -7268,13 +7955,14 @@
                 ` : ""}
               </div>
             `;
-          }).join("")}
+          }).join("") + `</div>`}
 
           ${completedQuests.length > 0 ? `
             <div class="section-header-label">Completed Quests (${completedQuests.length})</div>
+            <div class="quests-grid">
             ${completedQuests.map(quest => {
               const hex = ACCENT_HEX[quest.accentColor] || ACCENT_HEX.slate;
-              const totalHrs = ((totalSecByQuest.get(quest.id) || 0) / 3600).toFixed(1);
+              const totalSec = totalSecByQuest.get(quest.id) || 0;
               return `
                 <div class="review-card" style="padding:18px;background:rgba(17,19,25,0.72);">
                   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
@@ -7286,7 +7974,7 @@
                   </div>
                   ${quest.description ? `<p style="font-size:12px;color:var(--dim);margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere;">${escapeHtml(quest.description)}</p>` : ""}
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-                    <span style="font-family:var(--font-mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;">${totalHrs}h logged</span>
+                    <span style="font-family:var(--font-mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;">${formatTelemetryDuration(totalSec, "0.0h")} logged</span>
                     <div style="display:flex;align-items:center;gap:8px;">
                       <button class="sync-chip pressable" onclick="reopenQuestItem(${jsArg(quest.id)})" aria-label="Reopen quest ${escapeHtml(quest.title)}">Reopen</button>
                       <button class="sync-chip pressable" style="color:var(--rose);border-color:rgba(255,42,95,0.3);" onclick="deleteQuestItem(${jsArg(quest.id)})" aria-label="Delete quest ${escapeHtml(quest.title)}">Delete</button>
@@ -7295,6 +7983,7 @@
                 </div>
               `;
             }).join("")}
+            </div>
           ` : ""}
         `;
       }
@@ -7495,6 +8184,7 @@
         const byQuestSec = new Map();
         const byQuestTasks = new Map();
         const activeDaysSet = new Set();
+        const focusActiveDaysSet = new Set();
         const scopedLogs = [];
         let questSec = 0;
         let otherSec = 0;
@@ -7513,15 +8203,17 @@
           } else {
             otherSec += dur;
           }
-          if (effectiveScope === "ALL" && dur > 0) activeDaysSet.add(l.dateKey);
           const inScope = matchesScope(qId);
           if (inScope) {
             scopeSec += dur;
-            sessionsCount++;
-            if (dur > longestSessionSec) longestSessionSec = dur;
-            if (dur > 0 && effectiveScope !== "ALL") activeDaysSet.add(l.dateKey);
+            if (dur > 0) {
+              sessionsCount++;
+              if (dur > longestSessionSec) longestSessionSec = dur;
+              activeDaysSet.add(l.dateKey);
+              focusActiveDaysSet.add(l.dateKey);
+            }
             const b = buckets[bucketIndex(l.dateKey, l.startTime)];
-            if (b) b.scopeSec += dur;
+            if (b && dur > 0) b.scopeSec += dur;
           }
           if (effectiveScope === "ALL" || inScope) scopedLogs.push(l);
         }
@@ -7543,7 +8235,7 @@
           completedTasksCount++;
           if (t.habitId) habitTasksCompleted++;
           else stepTasksCompleted++;
-          if (effectiveScope !== "ALL") activeDaysSet.add(dk);
+          if (matchesScope(qId)) activeDaysSet.add(dk);
           const b = buckets[bucketIndex(dk, t.completedAt)];
           if (b) b.tasks += 1;
         }
@@ -7553,12 +8245,8 @@
           hours: Number((b.scopeSec / 3600).toFixed(1))
         }));
 
-        const totalQuestH = Number((questSec / 3600).toFixed(1));
-        const totalOtherH = Number((otherSec / 3600).toFixed(1));
         const grandSec = questSec + otherSec;
-        const focusH = win.horizon === "week"
-          ? Number(chartBuckets.reduce((a, b) => a + b.hours, 0).toFixed(1))
-          : Number((scopeSec / 3600).toFixed(1));
+        const focusH = Number((scopeSec / 3600).toFixed(1));
 
         let weeklyTargetBase = 0;
         if (effectiveScope === "ALL") {
@@ -7576,25 +8264,27 @@
 
         const targetPct = totalTargetH > 0 ? Math.round(((scopeSec / 3600) / totalTargetH) * 100) : 0;
         const activeDaysCount = activeDaysSet.size;
-        const dailyAvg = focusH / Math.max(1, activeDaysCount);
+        const focusDenomDays = Math.max(1, focusActiveDaysSet.size > 0 ? focusActiveDaysSet.size : activeDaysCount);
+        const dailyAvgSec = scopeSec / focusDenomDays;
         const consistencyPct = Math.min(100, Math.round((activeDaysCount / Math.max(1, win.elapsedDays)) * 100));
         const focusPct = grandSec > 0 ? Math.round((scopeSec / grandSec) * 100) : 0;
         const overallQuestPct = grandSec > 0 ? Math.round((questSec / grandSec) * 100) : 0;
-        const avgBoutMin = sessionsCount > 0 ? Math.round(scopeSec / sessionsCount / 60) : 0;
-        const maxBoutMin = Math.round(longestSessionSec / 60);
+        const avgBoutMin = sessionsCount > 0 && scopeSec > 0 ? Math.max(1, Math.round(scopeSec / sessionsCount / 60)) : 0;
+        const maxBoutMin = longestSessionSec > 0 ? Math.max(1, Math.round(longestSessionSec / 60)) : 0;
 
         const maxBucketVal = reviewChartMetric === "tasks"
           ? Math.max(4, ...chartBuckets.map(b => b.tasks))
-          : Math.max(5, ...chartBuckets.map(b => b.hours));
+          : Math.max(1800, ...chartBuckets.map(b => b.scopeSec));
 
         const hoursByQuest = state.quests
           .map(q => {
             const sec = byQuestSec.get(q.id) || 0;
             const qTasks = byQuestTasks.get(q.id) || 0;
-            return { quest: q, hours: Number((sec / 3600).toFixed(1)), tasks: qTasks };
+            return { quest: q, sec, hours: Number((sec / 3600).toFixed(1)), tasks: qTasks };
           })
-          .filter(x => !x.quest.archived || x.hours > 0 || x.tasks > 0);
-        const maxQuestH = Math.max(4, ...hoursByQuest.map(x => x.hours));
+          .filter(x => !x.quest.archived || x.sec > 0 || x.tasks > 0)
+          .sort((a, b) => (b.sec - a.sec) || (b.tasks - a.tasks) || ((a.quest.slotIndex || 0) - (b.quest.slotIndex || 0)));
+        const maxQuestSec = Math.max(1800, ...hoursByQuest.map(x => x.sec));
 
         // 16-week Monday-aligned Activity Heatmap
         const HEATMAP_WEEKS = 16;
@@ -7623,10 +8313,10 @@
         }
 
         const hmBaseRgb = selectedQuest
-          ? (selectedQuest.accentColor === "cyan" ? "0,240,255" : selectedQuest.accentColor === "emerald" ? "0,255,157" : "255,184,0")
+          ? (ACCENT_RGB[selectedQuest.accentColor] || ACCENT_RGB.amber)
           : effectiveScope === "OTHER"
-          ? "148,163,184"
-          : "255,184,0";
+          ? ACCENT_RGB.slate
+          : ACCENT_RGB.amber;
         const hmLevelBg = [
           "rgba(255,255,255,0.05)",
           `rgba(${hmBaseRgb},0.22)`,
@@ -7664,8 +8354,8 @@
             const tCount = rec ? rec.tasks : 0;
             const sCount = rec ? rec.sessions : 0;
             const hrs = Number((sec / 3600).toFixed(1));
-            const score = hrs + tCount * 0.35;
-            const lvl = isFuture || (hrs <= 0 && tCount <= 0) ? 0 : score < 1 ? 1 : score < 2.5 ? 2 : score < 4.5 ? 3 : 4;
+            const score = (sec / 3600) + tCount * 0.35;
+            const lvl = isFuture || (sec <= 0 && tCount <= 0) ? 0 : score < 1 ? 1 : score < 2.5 ? 2 : score < 4.5 ? 3 : 4;
             const shortLbl = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 
             if (!isFuture) {
@@ -7680,7 +8370,7 @@
                 hmRunStreak = 0;
               }
             }
-            const cellObj = { dateKey: dk, shortLbl, hours: hrs, tasks: tCount, sessions: sCount, lvl, isToday: dk === todayKey, isFuture };
+            const cellObj = { dateKey: dk, shortLbl, sec, hours: hrs, tasks: tCount, sessions: sCount, lvl, isToday: dk === todayKey, isFuture };
             if (cellObj.isToday) todayCell = cellObj;
             if (!isFuture && selectedReviewHeatmapKey === dk) inspectedCell = cellObj;
             cells.push(cellObj);
@@ -7726,33 +8416,33 @@
               <h1 class="hero-title">${escapeHtml(win.heading)}</h1>
             </div>
             <div class="step-chip-row">
-              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.prevLabel)}" onclick="reviewWeekOffset--;renderApp();">‹</button>
-              <button class="sync-chip step-chip" onclick="reviewWeekOffset=0;renderApp();" ${safeOffset === 0 ? "disabled" : ""}>${escapeHtml(win.currentLabel)}</button>
-              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.nextLabel)}" onclick="if(reviewWeekOffset<0){reviewWeekOffset++;renderApp();}" ${safeOffset < 0 ? "" : "disabled"}>›</button>
+              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.prevLabel)}" onclick="reviewWeekOffset--;reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">‹</button>
+              <button class="sync-chip step-chip" onclick="reviewWeekOffset=0;reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();" ${safeOffset === 0 ? "disabled" : ""}>${escapeHtml(win.currentLabel)}</button>
+              <button class="sync-chip step-chip" aria-label="${escapeHtml(win.nextLabel)}" onclick="if(reviewWeekOffset<0){reviewWeekOffset++;reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();}" ${safeOffset < 0 ? "" : "disabled"}>›</button>
             </div>
           </div>
 
           <div class="review-horizon-bar" role="group" aria-label="Review timeframe">
             ${horizonTabs.map(([id, lbl]) => `
-              <button class="review-horizon-btn ${win.horizon === id ? "active" : ""}" aria-pressed="${win.horizon === id}" onclick="reviewHorizon=${jsArg(id)};reviewWeekOffset=0;renderApp();">${lbl}</button>
+              <button class="review-horizon-btn ${win.horizon === id ? "active" : ""}" aria-pressed="${win.horizon === id}" onclick="reviewHorizon=${jsArg(id)};reviewWeekOffset=0;reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">${lbl}</button>
             `).join("")}
           </div>
 
           <div class="chip-strip" role="group" aria-label="Filter review by quest">
-            <button class="filter-pill ${effectiveScope === "ALL" ? "active" : ""}" aria-pressed="${effectiveScope === "ALL"}" onclick="reviewScope='ALL';renderApp();">
+            <button class="filter-pill ${effectiveScope === "ALL" ? "active" : ""}" aria-pressed="${effectiveScope === "ALL"}" onclick="reviewScope='ALL';reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">
               <span>All Quests</span>
             </button>
             ${state.quests.map(q => {
               const qHex = ACCENT_HEX[q.accentColor] || ACCENT_HEX.slate;
               const isSel = effectiveScope === q.id;
               return `
-                <button class="filter-pill ${isSel ? "active" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : q.id)};renderApp();">
+                <button class="filter-pill ${isSel ? "active" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : q.id)};reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">
                   <span style="width:7px;height:7px;border-radius:50%;background:${qHex};flex-shrink:0;"></span>
                   <span>${escapeHtml(q.title)}</span>
                 </button>
               `;
             }).join("")}
-            <button class="filter-pill ${effectiveScope === "OTHER" ? "active" : ""}" aria-pressed="${effectiveScope === "OTHER"}" onclick="reviewScope=${jsArg(effectiveScope === "OTHER" ? "ALL" : "OTHER")};renderApp();">
+            <button class="filter-pill ${effectiveScope === "OTHER" ? "active" : ""}" aria-pressed="${effectiveScope === "OTHER"}" onclick="reviewScope=${jsArg(effectiveScope === "OTHER" ? "ALL" : "OTHER")};reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">
               <span style="width:7px;height:7px;border-radius:50%;background:var(--neutral-dot);flex-shrink:0;"></span>
               <span>Other</span>
             </button>
@@ -7762,7 +8452,7 @@
             <div class="review-card" style="grid-column:span 2;margin-bottom:0;">
               <div class="hero-eyebrow">${effectiveScope === "OTHER" ? "Other Work Hours" : selectedQuest ? escapeHtml(selectedQuest.title) + " · Hours" : "Quest Hours"}</div>
               <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;font-variant-numeric:tabular-nums;">
-                <span style="font-family:var(--font-display);font-size:36px;font-weight:700;color:${scopeHex};">${focusH.toFixed(1)}h</span>
+                <span style="font-family:var(--font-display);font-size:36px;font-weight:700;color:${scopeHex};">${formatTelemetryDuration(scopeSec, "0.0h")}</span>
                 ${effectiveScope !== "OTHER" ? `<span style="font-size:16px;color:var(--dim);">/ ${totalTargetH}h</span>` : ""}
                 <span style="margin-left:auto;font-size:12px;color:var(--muted);">${effectiveScope === "OTHER" ? "Unassigned work" : `${targetPct}% of target`}</span>
               </div>
@@ -7770,14 +8460,14 @@
 
             <div class="review-card" style="margin-bottom:0;">
               <div class="hero-eyebrow">Daily Average</div>
-              <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${dailyAvg.toFixed(1)}h</div>
+              <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${formatTelemetryDuration(dailyAvgSec, "0.0h")}</div>
               <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">${activeDaysCount}/${win.elapsedDays}d active (${consistencyPct}%)</div>
             </div>
 
             <div class="review-card" style="margin-bottom:0;">
               <div class="hero-eyebrow">${effectiveScope === "ALL" ? "Quest vs Other" : "Focus Share"}</div>
               <div style="font-family:var(--font-display);font-size:28px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;">${focusPct}<span style="font-size:16px;color:var(--dim);">%</span></div>
-              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">Of ${(grandSec / 3600).toFixed(1)}h total</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums;">Of ${formatTelemetryDuration(grandSec, "0.0h")} total</div>
             </div>
 
             <div class="review-card" style="margin-bottom:0;" data-review-stat="tasks">
@@ -7793,6 +8483,7 @@
             </div>
           </div>
 
+          <div class="review-tablet-split">
           <div class="review-card">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px;">
               <div class="hero-eyebrow" style="margin-bottom:0;">${reviewChartMetric === "tasks" ? "Completed Tasks" : "Focus Hours"} · ${win.horizon === "day" ? "By Block" : win.horizon === "week" ? "Per Day" : win.horizon === "month" ? "By Week" : "Per Month"}</div>
@@ -7803,15 +8494,17 @@
             </div>
             <div style="display:grid;grid-template-columns:repeat(${chartBuckets.length}, minmax(0, 1fr));gap:${chartBuckets.length > 8 ? "4px" : "8px"};align-items:end;">
               ${chartBuckets.map(d => {
-                const val = reviewChartMetric === "tasks" ? d.tasks : d.hours;
+                const val = reviewChartMetric === "tasks" ? d.tasks : d.scopeSec;
                 const barPct = val > 0 ? Math.max(8, Math.round((val / maxBucketVal) * 100)) : 3;
-                const topLabel = reviewChartMetric === "tasks" ? String(d.tasks) : (d.hours > 0 ? d.hours + "h" : "0h");
+                const topLabel = reviewChartMetric === "tasks"
+                  ? (d.tasks >= 1000 ? (d.tasks / 1000).toFixed(1) + "k" : String(d.tasks))
+                  : formatTelemetryDuration(d.scopeSec, "0h", true);
                 return `
                   <div style="display:flex;flex-direction:column;align-items:center;min-width:0;">
-                    <span style="font-family:var(--font-mono);font-size:${chartBuckets.length > 8 ? "9px" : "10px"};font-variant-numeric:tabular-nums;margin-bottom:8px;color:${d.isCurrent ? scopeHex : (val > 0 ? "var(--text-2)" : "var(--dim)")};">
+                    <span style="font-family:var(--font-mono);font-size:${chartBuckets.length > 8 ? "9px" : "10px"};font-variant-numeric:tabular-nums;margin-bottom:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${d.isCurrent ? scopeHex : (val > 0 ? "var(--text-2)" : "var(--dim)")};">
                       ${topLabel}
                     </span>
-                    <div style="height:124px;width:100%;max-width:32px;display:flex;align-items:flex-end;justify-content:center;">
+                    <div class="review-bar-track">
                       <div style="width:100%;height:${barPct}%;border-radius:6px 6px 2px 2px;background:${d.isCurrent ? scopeHex : (val > 0 ? "#3b3f4c" : "rgba(255,255,255,0.05)")};"></div>
                     </div>
                     <span style="font-size:${chartBuckets.length > 8 ? "10px" : "11px"};margin-top:8px;color:${d.isCurrent ? scopeHex : "var(--dim)"};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">${escapeHtml(d.label)}</span>
@@ -7839,14 +8532,14 @@
                 ${hmCols.map(col => `
                   <div class="heatmap-col">
                     ${col.cells.map(cell => cell.isFuture ? `<span style="aspect-ratio:1/1;width:100%;"></span>` : `
-                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" aria-label="${escapeHtml(cell.shortLbl + ": " + cell.hours + "h, " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
+                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" aria-label="${escapeHtml(cell.shortLbl + ": " + formatTelemetryDuration(cell.sec, "0h") + ", " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
                     `).join("")}
                   </div>
                 `).join("")}
               </div>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">
-              <span>${inspectedCell ? `${escapeHtml(inspectedCell.shortLbl)} · ${inspectedCell.hours.toFixed(1)}h · ${inspectedCell.tasks} ${inspectedCell.tasks === 1 ? "task" : "tasks"}` : "Tap a day to inspect"}</span>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">
+              <span>${inspectedCell ? `${escapeHtml(inspectedCell.shortLbl)} · ${formatTelemetryDuration(inspectedCell.sec, "0.0h")} · ${inspectedCell.tasks} ${inspectedCell.tasks === 1 ? "task" : "tasks"}` : "Tap a day to inspect"}</span>
               <span style="display:inline-flex;align-items:center;gap:3px;color:var(--dim);font-size:10px;">
                 Less
                 ${hmLevelBg.map(bg => `<span style="width:8px;height:8px;border-radius:2px;background:${bg};"></span>`).join("")}
@@ -7854,25 +8547,27 @@
               </span>
             </div>
           </div>
+          </div>
 
+          <div class="review-tablet-split">
           <div class="review-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
               <div class="hero-eyebrow" style="margin-bottom:0;">Hours &amp; Tasks by Quest</div>
               ${hoursByQuest.length > 0 ? `<span style="font-size:11px;color:var(--dim);">Tap to filter</span>` : ""}
             </div>
             ${hoursByQuest.length === 0 ? `<div style="font-size:13px;color:var(--dim);">No quests yet. Hours per quest appear here once you create one.</div>` : ""}
-            ${hoursByQuest.map(({ quest, hours, tasks }) => {
+            ${hoursByQuest.map(({ quest, sec, tasks }) => {
               const hex = ACCENT_HEX[quest.accentColor] || ACCENT_HEX.slate;
-              const wPct = hours > 0 ? Math.max(8, Math.round((hours / maxQuestH) * 100)) : 0;
+              const wPct = sec > 0 ? Math.max(8, Math.round((sec / maxQuestSec) * 100)) : 0;
               const isSel = effectiveScope === quest.id;
               return `
-                <button class="review-quest-btn ${isSel ? "selected" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : quest.id)};renderApp();">
+                <button class="review-quest-btn ${isSel ? "selected" : ""}" aria-pressed="${isSel}" onclick="reviewScope=${jsArg(isSel ? "ALL" : quest.id)};reviewSessionLimit=REVIEW_SESSION_PAGE;renderApp();">
                   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;font-size:13px;">
                     <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;">
                       <span style="width:8px;height:8px;margin-top:5px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
                       <span style="line-height:1.35;color:var(--text-2);overflow-wrap:anywhere;text-wrap:pretty;">${escapeHtml(quest.title)}</span>
                     </div>
-                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-2);"><span style="color:var(--dim);">${tasks} ${tasks === 1 ? "task" : "tasks"} · </span>${hours}h</span>
+                    <span style="flex-shrink:0;font-family:var(--font-mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-2);"><span style="color:var(--dim);">${tasks} ${tasks === 1 ? "task" : "tasks"} · </span>${formatTelemetryDuration(sec, "0h", true)}</span>
                   </div>
                   <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:999px;overflow:hidden;">
                     <div style="height:100%;width:${wPct}%;background:${hex};border-radius:999px;"></div>
@@ -7888,9 +8583,10 @@
               <div style="height:100%;width:${overallQuestPct}%;background:var(--amber);"></div>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;">
-              <span style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></span>Quest work · ${totalQuestH.toFixed(1)}h</span>
-              <span style="display:flex;align-items:center;gap:6px;color:var(--dim);"><span style="width:8px;height:8px;border-radius:50%;background:#2c2f3a;"></span>Other · ${totalOtherH.toFixed(1)}h (${otherTasksCompleted} ${otherTasksCompleted === 1 ? "task" : "tasks"})</span>
+              <span style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);"></span>Quest work · ${formatTelemetryDuration(questSec, "0.0h")}</span>
+              <span style="display:flex;align-items:center;gap:6px;color:var(--dim);"><span style="width:8px;height:8px;border-radius:50%;background:#2c2f3a;"></span>Other · ${formatTelemetryDuration(otherSec, "0.0h")} (${otherTasksCompleted} ${otherTasksCompleted === 1 ? "task" : "tasks"})</span>
             </div>
+          </div>
           </div>
 
           <button class="text-action" onclick="showReviewSessionLog=!showReviewSessionLog;renderApp();" aria-expanded="${showReviewSessionLog}" style="color:var(--muted);font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;margin:0 -8px;">
@@ -7900,7 +8596,7 @@
           ${showReviewSessionLog ? `
             <div class="review-card" style="margin-top:10px;padding:6px 16px;">
               ${scopedLogs.length === 0 ? `<div style="padding:14px 0;font-size:13px;color:var(--dim);text-align:center;">No focus sessions in this period.</div>` : ""}
-              ${scopedLogs.map(log => {
+              ${scopedLogs.slice(0, reviewSessionLimit).map(log => {
                 const hex = ACCENT_HEX[log.accentColorSnapshot] || ACCENT_HEX.slate;
                 return `
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;">
@@ -7915,6 +8611,11 @@
                   </div>
                 `;
               }).join("")}
+              ${scopedLogs.length > reviewSessionLimit ? `
+                <button class="show-more-btn" data-testid="mobile-logs-show-more" onclick="reviewSessionLimit+=REVIEW_SESSION_PAGE;renderApp();">
+                  Show more sessions (${scopedLogs.length - reviewSessionLimit} remaining) ↓
+                </button>
+              ` : ""}
             </div>
           ` : ""}
 
@@ -7983,7 +8684,7 @@
             "No daily habits yet",
             "Create a recurring routine and it will appear in Today's queue every day.",
             [{ label: "+ New Habit", primary: true, onclick: "openNewHabitSheet()" }]
-          ) : habitsList.map(h => {
+          ) : `<div class="habits-grid">` + habitsList.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
             const tt = todayTaskByHabit.get(h.id);
@@ -8006,7 +8707,7 @@
                 <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})">
                   <div class="queue-item-title" style="${doneToday ? "text-decoration:line-through;color:var(--muted);" : ""}">${title}</div>
                   ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;">${escapeHtml(h.notes)}</div>` : ""}
-                  <div class="queue-item-sub" style="margin-top:8px;justify-content:space-between;gap:10px;">
+                  <div class="queue-item-sub" style="margin-top:8px;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;">
                     <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1;">
                       <span style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
                       <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
@@ -8023,7 +8724,7 @@
                 </div>
               </div>
             `;
-          }).join("")}
+          }).join("") + `</div>`}
         `;
       }
 
@@ -8039,9 +8740,85 @@
       if (nextStrip) nextStrip.scrollLeft = chipScrollLeft;
     }
 
-    function renderTimelineHtml(todayLogs) {
-      const START_HR = 8;
-      const END_HR = 22;
+    function computeTimelineLayout(items, defaultStartHr, defaultEndHr) {
+      let minStart = defaultStartHr;
+      let maxEnd = defaultEndHr;
+      const raw = items.map(it => {
+        const d = new Date(it.startTime);
+        const sHr = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+        const safeStart = Number.isFinite(sHr) ? Math.max(0, Math.min(23.75, sHr)) : defaultStartHr;
+        const durHr = Math.max(0.42, (Math.max(0, Number(it.durationSeconds) || 0)) / 3600);
+        const safeEnd = Math.min(24, safeStart + durHr);
+        if (safeStart < minStart) minStart = Math.max(0, Math.floor(safeStart));
+        if (safeEnd > maxEnd) maxEnd = Math.min(24, Math.ceil(safeEnd));
+        return { id: it.id, startHour: safeStart, endHour: safeEnd };
+      });
+      raw.sort((a, b) => a.startHour - b.startHour || b.endHour - a.endHour);
+
+      const MAX_COLS = 4;
+      const placements = new Map();
+      let cluster = [];
+      let clusterEnd = -1;
+      let laneEnds = [];
+      const flush = () => {
+        if (!cluster.length) return;
+        const usedCols = Math.min(MAX_COLS, Math.max(1, ...cluster.map(c => c.col + 1)));
+        cluster.forEach(c => {
+          placements.set(c.id, {
+            startHour: c.startHour,
+            colIndex: c.col % usedCols,
+            totalCols: usedCols
+          });
+        });
+        cluster = [];
+        clusterEnd = -1;
+        laneEnds = [];
+      };
+      raw.forEach(item => {
+        if (cluster.length && item.startHour >= clusterEnd - 0.01) flush();
+        let assigned = -1;
+        for (let i = 0; i < laneEnds.length; i++) {
+          if (laneEnds[i] <= item.startHour + 0.01) {
+            assigned = i;
+            laneEnds[i] = item.endHour;
+            break;
+          }
+        }
+        if (assigned === -1) {
+          if (laneEnds.length < MAX_COLS) {
+            assigned = laneEnds.length;
+            laneEnds.push(item.endHour);
+          } else {
+            let earliest = 0;
+            for (let i = 1; i < laneEnds.length; i++) if (laneEnds[i] < laneEnds[earliest]) earliest = i;
+            assigned = earliest;
+            laneEnds[earliest] = Math.max(laneEnds[earliest], item.endHour);
+          }
+        }
+        cluster.push({ ...item, col: assigned });
+        if (item.endHour > clusterEnd) clusterEnd = item.endHour;
+      });
+      flush();
+      return { startHour: minStart, endHour: maxEnd, placements };
+    }
+
+    function renderTimelineHtml(todayLogs, activeTaskObj, af, liveDelta) {
+      const hasLive = !!(activeTaskObj && af && af.isRunning && af.sessionStartedAt);
+      const layoutInputs = todayLogs.map(l => ({
+        id: l.id,
+        startTime: l.startTime,
+        durationSeconds: l.durationSeconds
+      }));
+      if (hasLive) {
+        layoutInputs.push({
+          id: "__live_running__",
+          startTime: af.sessionStartedAt,
+          durationSeconds: Math.max(60, liveDelta || 0)
+        });
+      }
+      const layout = computeTimelineLayout(layoutInputs, 8, 22);
+      const START_HR = layout.startHour;
+      const END_HR = layout.endHour;
       const HR_PX = 48;
       const hours = [];
       for (let h = START_HR; h <= END_HR; h++) hours.push(h);
@@ -8052,23 +8829,49 @@
       const blocksHtml = todayLogs.map(log => {
         const sD = new Date(log.startTime);
         const eD = new Date(log.endTime);
-        const sHr = sD.getHours() + sD.getMinutes() / 60;
+        const pl = layout.placements.get(log.id);
+        const sHr = pl ? pl.startHour : (sD.getHours() + sD.getMinutes() / 60);
         const durHr = Math.max(0.35, log.durationSeconds / 3600);
         const clamped = Math.max(START_HR, Math.min(END_HR - 0.4, sHr));
         const topPx = (clamped - START_HR) * HR_PX;
         const heightPx = Math.max(32, Math.min((END_HR - clamped) * HR_PX, durHr * HR_PX));
+        const colIdx = pl ? pl.colIndex : 0;
+        const totCols = pl ? pl.totalCols : 1;
+        const leftCss = `calc(50px + (100% - 54px) * ${colIdx} / ${totCols})`;
+        const widthCss = `calc((100% - 54px) / ${totCols} - ${totCols > 1 ? 3 : 0}px)`;
         const hex = ACCENT_HEX[log.accentColorSnapshot] || ACCENT_HEX.cyan;
         const sStr = String(sD.getHours()).padStart(2, "0") + ":" + String(sD.getMinutes()).padStart(2, "0");
         const eStr = String(eD.getHours()).padStart(2, "0") + ":" + String(eD.getMinutes()).padStart(2, "0");
 
         return `
-          <div style="position:absolute;left:50px;right:4px;top:${topPx}px;height:${heightPx}px;border-radius:10px;border:1px solid ${hex}66;background-image:repeating-linear-gradient(-45deg, ${hex}22, ${hex}22 6px, ${hex}0a 6px, ${hex}0a 12px);padding:6px 10px;overflow:hidden;">
+          <div data-timeline-col="${escapeHtml(colIdx)}" style="position:absolute;left:${leftCss};width:${widthCss};top:${topPx}px;height:${heightPx}px;border-radius:10px;border:1px solid ${hex}66;background-image:repeating-linear-gradient(-45deg, ${hex}22, ${hex}22 6px, ${hex}0a 6px, ${hex}0a 12px);padding:6px 10px;overflow:hidden;">
             <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:${hex};"></div>
             <div style="font-size:12px;font-weight:500;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(log.taskTitleSnapshot)}</div>
-            ${heightPx >= 42 ? `<div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">${sStr} – ${eStr}</div>` : ""}
+            ${heightPx >= 42 ? `<div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sStr} – ${eStr}</div>` : ""}
           </div>
         `;
       }).join("");
+
+      let liveBlockHtml = "";
+      if (hasLive) {
+        const sD = new Date(af.sessionStartedAt);
+        const pl = layout.placements.get("__live_running__");
+        const sHr = pl ? pl.startHour : (sD.getHours() + sD.getMinutes() / 60);
+        const clamped = Math.max(START_HR, Math.min(END_HR - 0.4, sHr));
+        const topPx = (clamped - START_HR) * HR_PX;
+        const heightPx = Math.max(34, ((liveDelta || 0) / 3600) * HR_PX);
+        const colIdx = pl ? pl.colIndex : 0;
+        const totCols = pl ? pl.totalCols : 1;
+        const leftCss = `calc(50px + (100% - 54px) * ${colIdx} / ${totCols})`;
+        const widthCss = `calc((100% - 54px) / ${totCols} - ${totCols > 1 ? 3 : 0}px)`;
+        const lq = state.quests.find(x => x.id === activeTaskObj.questId);
+        const hex = ACCENT_HEX[lq ? lq.accentColor : "cyan"] || ACCENT_HEX.cyan;
+        liveBlockHtml = `
+          <div style="position:absolute;left:${leftCss};width:${widthCss};top:${topPx}px;height:${heightPx}px;border-radius:10px;border:1px solid ${hex}99;background:${hex}1e;padding:6px 10px;overflow:hidden;">
+            <div style="font-size:12px;font-weight:600;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(activeTaskObj.title)}</div>
+          </div>
+        `;
+      }
 
       const nowLineHtml = (curFloat >= START_HR && curFloat <= END_HR) ? `
         <div style="position:absolute;left:44px;right:0;top:${(curFloat - START_HR) * HR_PX}px;display:flex;align-items:center;pointer-events:none;">
@@ -8079,7 +8882,7 @@
 
       return `
         <div class="review-card" style="padding:16px 14px;">
-          ${todayLogs.length ? "" : `<div class="timeline-empty">No focus sessions yet today<span>Start one from the Priority Queue and it shows up here.</span></div>`}
+          ${todayLogs.length || hasLive ? "" : `<div class="timeline-empty">No focus sessions yet today<span>Start one from the Priority Queue and it shows up here.</span></div>`}
           <div style="position:relative;height:${(END_HR - START_HR) * HR_PX}px;">
             ${hours.map(hr => `
               <div style="position:absolute;left:0;right:0;top:${(hr - START_HR) * HR_PX}px;display:flex;align-items:flex-start;">
@@ -8088,6 +8891,7 @@
               </div>
             `).join("")}
             ${blocksHtml}
+            ${liveBlockHtml}
             ${nowLineHtml}
           </div>
         </div>

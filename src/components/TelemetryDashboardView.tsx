@@ -19,13 +19,13 @@ import {
   db,
   accentStyle,
   loadSortedQuests,
-  toLocalDateKey,
   formatChronoMMSS,
 } from "@/lib/db";
 import {
   buildHorizonWindow,
   computeActivityHeatmap,
   computePeriodReport,
+  formatTelemetryDuration,
   getHeatmapStartKey,
   type ReviewChartMetric,
   type ReviewHorizon,
@@ -35,9 +35,11 @@ import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { ReviewHeatmapCard } from "./ReviewHeatmapCard";
+import { useTodayDateKey } from "./useTodayDateKey";
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const HEATMAP_WEEKS_DESKTOP = 26;
+export const SESSION_LOG_PAGE_SIZE = 50;
 
 const HORIZON_OPTIONS: ReadonlyArray<{ id: ReviewHorizon; label: string }> = [
   { id: "day", label: "Day" },
@@ -57,9 +59,10 @@ export function TelemetryDashboardView() {
   const [chartMetric, setChartMetric] = useState<ReviewChartMetric>("hours");
   const [showScopeMenu, setShowScopeMenu] = useState(false);
   const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [visibleLogLimit, setVisibleLogLimit] = useState(SESSION_LOG_PAGE_SIZE);
   const scopeMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const todayKey = toLocalDateKey();
+  const todayKey = useTodayDateKey();
 
   useEffect(() => {
     if (!showScopeMenu) return;
@@ -176,20 +179,24 @@ export function TelemetryDashboardView() {
   const primaryBarClass = scopeStyle ? scopeStyle.bg : "bg-[#ffb800]";
   const primaryTextClass = scopeStyle ? scopeStyle.text : "text-[#ffb800]";
 
+  useEffect(() => {
+    setVisibleLogLimit(SESSION_LOG_PAGE_SIZE);
+  }, [periodId, effectiveScope]);
+
   const maxBucketValue = React.useMemo(() => {
     if (chartMetric === "tasks") {
       return Math.max(4, ...report.buckets.map((b) => b.completedTasks));
     }
-    return Math.max(5, ...report.buckets.map((b) => b.hours));
+    return Math.max(1800, ...report.buckets.map((b) => b.seconds));
   }, [chartMetric, report.buckets]);
 
-  const maxQuestHours = Math.max(
-    4,
-    ...report.questBreakdown.map((item) => item.hours)
+  const maxQuestSeconds = Math.max(
+    1800,
+    ...report.questBreakdown.map((item) => item.seconds)
   );
 
-  const hoursText = (hours: number) =>
-    loading ? "–" : `${hours.toFixed(1)}h`;
+  const durationText = (seconds: number, zeroAs = "0.0h") =>
+    loading ? "–" : formatTelemetryDuration(seconds, { zeroAs });
 
   const handleHorizonChange = (next: ReviewHorizon) => {
     if (next === horizon) return;
@@ -223,47 +230,47 @@ export function TelemetryDashboardView() {
       : "grid-cols-5 gap-3 sm:gap-5";
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 py-10 sm:px-10 lg:px-16 lg:py-12">
+    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* ================================================================= */}
       {/* HEADER: Horizon Title + Scope Picker + Period Navigation          */}
       {/* ================================================================= */}
-      <div className="mb-8 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+      <div className="mb-8 flex flex-col justify-between gap-5 sm:gap-6 lg:flex-row lg:items-end">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             {windowSpec.heading}
           </h1>
-          <p className="mt-2 text-sm text-neutral-400">
+          <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
             {windowSpec.subtitle}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Quest Scope Filter Dropdown */}
-          <div ref={scopeMenuRef} className="relative">
+          <div ref={scopeMenuRef} className="relative max-w-full">
             <button
               type="button"
               onClick={() => setShowScopeMenu((v) => !v)}
               aria-haspopup="listbox"
               aria-expanded={showScopeMenu}
               aria-label={`Filter review scope: ${scopeTitle}`}
-              className={`flex items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               {scopeStyle ? (
                 <span className={`h-2 w-2 shrink-0 rounded-full ${scopeStyle.bg}`} />
               ) : (
-                <Filter className="h-3.5 w-3.5 text-neutral-400" />
+                <Filter className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
               )}
               <span className="max-w-[160px] truncate">
                 {effectiveScope === "ALL" ? "All Quests" : scopeTitle}
               </span>
-              <ChevronDown className="h-3.5 w-3.5 text-hud-muted" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-hud-muted" />
             </button>
 
             {showScopeMenu && (
               <div
                 role="listbox"
                 aria-label="Quest filter options"
-                className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-white/12 bg-[#141720] p-1.5 shadow-2xl"
+                className="absolute left-0 sm:left-auto sm:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1.5 shadow-2xl"
               >
                 <button
                   type="button"
@@ -345,7 +352,7 @@ export function TelemetryDashboardView() {
           <div
             role="group"
             aria-label="Review timeframe"
-            className="flex items-center rounded-full border border-white/10 bg-[#111318] p-1"
+            className="flex max-w-full flex-wrap items-center rounded-2xl sm:rounded-full border border-white/10 bg-[#111318] p-1"
           >
             {HORIZON_OPTIONS.map((opt) => {
               const active = horizon === opt.id;
@@ -355,7 +362,7 @@ export function TelemetryDashboardView() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => handleHorizonChange(opt.id)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                  className={`rounded-full px-2.5 sm:px-3 py-1.5 text-xs font-medium ${
                     active
                       ? "bg-white/12 text-white"
                       : "text-hud-muted hover:text-neutral-200"
@@ -368,7 +375,7 @@ export function TelemetryDashboardView() {
           </div>
 
           {/* Period Stepper */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setPeriodOffset((w) => w - 1)}
@@ -377,7 +384,7 @@ export function TelemetryDashboardView() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-[120px] text-center text-sm text-neutral-200 tabular-nums">
+            <span className="min-w-[96px] sm:min-w-[120px] text-center text-xs sm:text-sm text-neutral-200 tabular-nums">
               {windowSpec.rangeLabel}
             </span>
             <button
@@ -393,7 +400,7 @@ export function TelemetryDashboardView() {
             <button
               type="button"
               onClick={() => setPeriodOffset(0)}
-              className={`ml-1 flex items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`sm:ml-1 flex items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-3.5 sm:px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               <Calendar className="h-3.5 w-3.5 text-neutral-400" />
               <span>{windowSpec.currentLabel}</span>
@@ -405,15 +412,15 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       {/* TOP ROW: 3 Large Hero KPI Cards                                   */}
       {/* ================================================================= */}
-      <div className="mb-4 grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 sm:gap-6">
         {/* Card 1: QUEST HOURS */}
-        <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             {effectiveScope === "OTHER" ? "Other Work Hours" : "Quest Hours"}
           </div>
-          <div className="mt-4 flex items-baseline gap-2 tabular-nums">
+          <div className="mt-4 flex flex-wrap items-baseline gap-2 tabular-nums">
             <span className={`text-4xl font-medium tracking-tight sm:text-5xl ${primaryTextClass}`}>
-              {hoursText(report.focusHours)}
+              {durationText(report.focusSeconds)}
             </span>
             {effectiveScope !== "OTHER" && (
               <span className="text-lg text-hud-muted">
@@ -429,12 +436,12 @@ export function TelemetryDashboardView() {
         </div>
 
         {/* Card 2: DAILY AVERAGE */}
-        <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             Daily Average
           </div>
           <div className="mt-4 text-4xl font-medium tracking-tight text-white tabular-nums sm:text-5xl">
-            {hoursText(report.dailyAverageHours)}
+            {durationText(report.dailyAverageSeconds)}
           </div>
           <div className="mt-4 text-sm text-hud-muted tabular-nums">
             {loading
@@ -446,7 +453,7 @@ export function TelemetryDashboardView() {
         </div>
 
         {/* Card 3: QUEST WORK VS OTHER (or Share of Total Focus when scoped) */}
-        <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             {effectiveScope === "ALL" ? "Quest Work vs Other" : "Share of Total Focus"}
           </div>
@@ -460,8 +467,8 @@ export function TelemetryDashboardView() {
             {loading
               ? "– focus split"
               : effectiveScope === "ALL"
-              ? `${report.questHours.toFixed(1)}h quest · ${report.otherHours.toFixed(1)}h other`
-              : `Of ${report.grandTotalHours.toFixed(1)}h total logged`}
+              ? `${formatTelemetryDuration(report.questSeconds)} quest · ${formatTelemetryDuration(report.otherSeconds)} other`
+              : `Of ${formatTelemetryDuration(report.grandTotalSeconds)} total logged`}
           </div>
         </div>
       </div>
@@ -469,7 +476,7 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       {/* EXTENDED TELEMETRY STRIP: Tasks Completed, Bouts, Streak, Peak    */}
       {/* ================================================================= */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))] gap-4">
         <div
           data-testid="stat-tasks-completed"
           className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5"
@@ -545,7 +552,7 @@ export function TelemetryDashboardView() {
             {loading
               ? "–"
               : report.peakBucket
-              ? `${report.peakBucket.hours}h · ${report.peakBucket.completedTasks} ${
+              ? `${formatTelemetryDuration(report.peakBucket.seconds, { zeroAs: "0h", compactLarge: true })} · ${report.peakBucket.completedTasks} ${
                   report.peakBucket.completedTasks === 1 ? "task" : "tasks"
                 }`
               : "No activity in period"}
@@ -558,7 +565,7 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left (7 cols): Adaptive Horizon Bar Chart (Hours or Tasks) */}
-        <div className="lg:col-span-7 flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+        <div className="cq-card min-w-0 lg:col-span-7 flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
               {chartMetric === "hours" ? "Quest Hours" : "Completed Tasks"} ·{" "}
@@ -603,19 +610,23 @@ export function TelemetryDashboardView() {
             </div>
           </div>
 
-          <div className={`mt-8 grid ${chartGridColsClass}`}>
+          <div className={horizon === "year" ? "scroll-shadow-x mt-8 overflow-x-auto pb-1" : "mt-8"}>
+            <div className={`grid ${horizon === "year" ? "min-w-[21rem] " : ""}${chartGridColsClass}`}>
             {report.buckets.map((bucket) => {
               const rawValue =
-                chartMetric === "hours" ? bucket.hours : bucket.completedTasks;
+                chartMetric === "hours" ? bucket.seconds : bucket.completedTasks;
               const barPct =
                 rawValue > 0
                   ? Math.max(8, Math.round((rawValue / maxBucketValue) * 100))
                   : 2;
               const valueLabel =
                 chartMetric === "hours"
-                  ? bucket.hours > 0
-                    ? `${bucket.hours}h`
-                    : "0h"
+                  ? formatTelemetryDuration(bucket.seconds, {
+                      zeroAs: "0h",
+                      compactLarge: true,
+                    })
+                  : bucket.completedTasks >= 1000
+                  ? `${(bucket.completedTasks / 1000).toFixed(1)}k`
                   : `${bucket.completedTasks}`;
 
               return (
@@ -626,7 +637,9 @@ export function TelemetryDashboardView() {
                   className="flex min-w-0 flex-col items-center"
                 >
                   <span
-                    className={`mb-4 font-mono text-xs tabular-nums ${
+                    className={`mb-4 max-w-full truncate font-mono ${
+                      horizon === "year" ? "text-[10px] sm:text-xs" : "text-xs"
+                    } tabular-nums ${
                       bucket.isCurrent
                         ? `font-semibold ${primaryTextClass}`
                         : rawValue > 0
@@ -662,12 +675,13 @@ export function TelemetryDashboardView() {
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
 
         {/* Right (5 cols): HOURS & TASKS BY QUEST + QUEST WORK VS OTHER */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          <div className="flex-1 rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+        <div className="min-w-0 lg:col-span-5 flex flex-col gap-6">
+          <div className="cq-card flex-1 rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
             <div className="mb-6 flex items-center justify-between gap-2">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
                 Hours by Quest
@@ -685,12 +699,12 @@ export function TelemetryDashboardView() {
                   No quests yet. Create one in Quests.
                 </p>
               )}
-              {report.questBreakdown.map(({ quest, hours, completedTasks: qTasks }) => {
+              {report.questBreakdown.map(({ quest, seconds: qSeconds, completedTasks: qTasks }) => {
                 const style = accentStyle(quest.accentColor);
                 const isSelected = effectiveScope === quest.id;
                 const widthPct =
-                  hours > 0
-                    ? Math.max(8, Math.round((hours / maxQuestHours) * 100))
+                  qSeconds > 0
+                    ? Math.max(8, Math.round((qSeconds / maxQuestSeconds) * 100))
                     : 0;
 
                 return (
@@ -726,7 +740,12 @@ export function TelemetryDashboardView() {
                         <span className="text-hud-muted">
                           {qTasks} {qTasks === 1 ? "task" : "tasks"} ·{" "}
                         </span>
-                        <span>{hours}h</span>
+                        <span>
+                          {formatTelemetryDuration(qSeconds, {
+                            zeroAs: "0h",
+                            compactLarge: true,
+                          })}
+                        </span>
                       </span>
                     </div>
                     <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
@@ -742,7 +761,7 @@ export function TelemetryDashboardView() {
           </div>
 
           {/* Card: QUEST WORK VS OTHER */}
-          <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-7">
+          <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
             <div className="mb-5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
               Quest Work vs Other
             </div>
@@ -751,8 +770,8 @@ export function TelemetryDashboardView() {
               <div
                 style={{
                   width: `${
-                    report.grandTotalHours > 0
-                      ? Math.round((report.questHours / report.grandTotalHours) * 100)
+                    report.grandTotalSeconds > 0
+                      ? Math.round((report.questSeconds / report.grandTotalSeconds) * 100)
                       : 0
                   }%`,
                 }}
@@ -763,12 +782,12 @@ export function TelemetryDashboardView() {
             <div className="mt-4 flex flex-wrap items-center gap-6 text-xs">
               <div className="flex items-center gap-2 text-neutral-200">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#ffb800]" />
-                <span>Quest work · {hoursText(report.questHours)}</span>
+                <span>Quest work · {durationText(report.questSeconds)}</span>
               </div>
               <div className="flex items-center gap-2 text-hud-muted">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#2c2f3a]" />
                 <span>
-                  Other · {hoursText(report.otherHours)} ({report.otherTasksCompleted}{" "}
+                  Other · {durationText(report.otherSeconds)} ({report.otherTasksCompleted}{" "}
                   {report.otherTasksCompleted === 1 ? "task" : "tasks"})
                 </span>
               </div>
@@ -806,24 +825,24 @@ export function TelemetryDashboardView() {
         </button>
 
         {showSessionHistory && (
-          <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-[#111318] px-6 py-2">
+          <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-[#111318] px-4 sm:px-6 py-2">
             {periodLogs !== undefined && report.filteredLogs.length === 0 && (
               <p className="py-3.5 text-sm text-hud-muted">
                 No sessions logged {windowSpec.sessionUnitLabel}.
               </p>
             )}
-            {report.filteredLogs.map((log) => {
+            {report.filteredLogs.slice(0, visibleLogLimit).map((log) => {
               const style = accentStyle(log.accentColorSnapshot);
               return (
                 <div
                   key={log.id}
                   data-testid="session-row"
                   data-log-id={log.id}
-                  className="group flex items-center justify-between gap-4 py-3.5 text-sm"
+                  className="group flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4 py-3.5 text-sm"
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${style.bg}`} />
-                    <span className="w-24 shrink-0 text-xs text-hud-muted">
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-hud-muted">
                       {log.dateKey}
                     </span>
                     <span className="truncate text-neutral-200" title={log.taskTitleSnapshot}>
@@ -845,6 +864,21 @@ export function TelemetryDashboardView() {
                 </div>
               );
             })}
+            {report.filteredLogs.length > visibleLogLimit && (
+              <div className="py-3 text-center">
+                <button
+                  type="button"
+                  data-testid="review-logs-show-more"
+                  onClick={() =>
+                    setVisibleLogLimit((cur) => cur + SESSION_LOG_PAGE_SIZE)
+                  }
+                  className={`rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                >
+                  Show more sessions ({report.filteredLogs.length - visibleLogLimit}{" "}
+                  remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

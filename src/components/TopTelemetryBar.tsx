@@ -11,8 +11,10 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { db, formatChronoMMSS } from "@/lib/db";
+import { APP_VERSION } from "@/lib/version";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
+import { DesktopWindowControls } from "./DesktopWindowControls";
 import { HuntLogo } from "./HuntLogo";
 import { MobileSyncModal } from "./MobileSyncModal";
 import { RegionErrorBoundary } from "./RegionErrorBoundary";
@@ -116,7 +118,7 @@ function PhoneSyncButton({ onOpen }: { onOpen: () => void }) {
         }`}
       />
       <Smartphone className="h-4 w-4 text-[#00f0ff]" />
-      <span className="hidden sm:inline">Phone</span>
+      <span className="hidden xl:inline">Phone</span>
       {server.state === "error" && (
         <TriangleAlert className="h-3.5 w-3.5 text-[#ffb800]" />
       )}
@@ -150,25 +152,34 @@ export function TopTelemetryBar() {
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0b0c0e]/90 backdrop-blur-md">
-        <div className="mx-auto flex h-16 sm:h-20 max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-10 lg:px-16">
-          {/* Left: HUNT Logo + Clean Navigation Tabs */}
-          <div className="flex min-w-0 items-center gap-4 sm:gap-10">
-            <button
-              type="button"
-              onClick={() => setActiveView("command")}
-              aria-label="Hunt, go to Home"
-              className="group flex shrink-0 items-center gap-2.5 text-left"
-            >
-              <HuntLogo
-                size={36}
-                className="transition-transform duration-200 group-hover:scale-105"
-              />
-              <span className="hidden sm:inline text-lg font-semibold tracking-tight text-white">
-                Hunt
+        <div className="top-telemetry-shell mx-auto flex h-16 sm:h-20 max-w-[1440px] items-center justify-between gap-2 sm:gap-3 px-3.5 sm:px-6 lg:px-12 xl:px-16">
+          {/* Left: HUNT Logo + App Version + Clean Navigation Tabs */}
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-4 lg:gap-7">
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveView("command")}
+                aria-label="Hunt, go to Home"
+                className="group flex shrink-0 items-center gap-2.5 text-left"
+              >
+                <HuntLogo
+                  size={36}
+                  className="transition-transform duration-200 group-hover:scale-105"
+                />
+                <span className="hidden sm:inline text-lg font-semibold tracking-tight text-white">
+                  Hunt
+                </span>
+              </button>
+              <span
+                data-testid="app-version"
+                title={`Hunt v${APP_VERSION}`}
+                className="hidden lg:inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] font-medium tabular-nums text-hud-muted select-none"
+              >
+                v{APP_VERSION}
               </span>
-            </button>
+            </div>
 
-            <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            <nav className="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar">
               {NAV_ITEMS.map((item) => {
                 const isActive =
                   activeView === item.id ||
@@ -182,7 +193,7 @@ export function TopTelemetryBar() {
                       hudAudio.playClick();
                       setActiveView(item.id);
                     }}
-                    className={`shrink-0 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition-all ${
+                    className={`shrink-0 rounded-lg px-2.5 lg:px-3.5 py-1.5 lg:py-2 text-xs lg:text-sm transition-all ${
                       isActive
                         ? "bg-white/[0.09] font-medium text-white"
                         : "text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
@@ -195,8 +206,8 @@ export function TopTelemetryBar() {
             </nav>
           </div>
 
-          {/* Right: Active Running Session Pill + Phone Sync Button + Sound Toggle */}
-          <div className="flex shrink-0 items-center gap-2.5 sm:gap-3.5">
+          {/* Right: Active Running Session Pill + Phone/Tablet Sync + Sound Toggle + Desktop Window Controls */}
+          <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <RegionErrorBoundary region="Session timer" fallback={null}>
               <ActiveSessionPill />
             </RegionErrorBoundary>
@@ -205,6 +216,7 @@ export function TopTelemetryBar() {
             <PhoneSyncButton onOpen={() => setSyncModalOpen(true)} />
 
             <button
+              type="button"
               onClick={handleToggleMute}
               title={muted ? "Unmute interface audio" : "Mute interface audio"}
               aria-label={muted ? "Unmute interface audio" : "Mute interface audio"}
@@ -216,6 +228,13 @@ export function TopTelemetryBar() {
                 <Volume2 className="h-4 w-4" />
               )}
             </button>
+
+            <span
+              aria-hidden="true"
+              className="hidden sm:block h-5 w-px bg-white/[0.08] mx-0.5"
+            />
+
+            <DesktopWindowControls />
           </div>
         </div>
       </header>

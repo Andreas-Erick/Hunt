@@ -2,26 +2,33 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { db, loadSortedQuests } from "@/lib/db";
 import {
-  db,
   habitTaskId,
   isTaskVisibleToday,
-  loadSortedQuests,
   toLocalDateKey,
+} from "@/lib/dateUtils";
+import {
+  fromFocusSession,
+  toFocusSession,
+  type ActiveFocusState,
+  type FocusSession,
   type Habit,
   type Quest,
   type QuestAccent,
   type Task,
-} from "@/lib/db";
+} from "@/lib/domainTypes";
 import {
   logDiagnostic,
   recordBreadcrumb,
   summarizeError,
 } from "@/lib/diagnostics";
 import {
+  SnapshotFormatError,
   describeSyncError,
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
+  importAndMergeSnapshotJson,
   performServerSync,
   recordDeletedHabitTombstone,
   recordDeletedLogTombstone,
@@ -37,9 +44,14 @@ import {
   MAX_HABIT_TITLE_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
   MAX_TASK_TITLE_LENGTH,
+  type SyncPayload,
 } from "@/lib/syncTypes";
 
 export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "telemetry" | "guide" | "log";
+
+export type SnapshotImportResult =
+  | { ok: true; merged: SyncPayload }
+  | { ok: false; reason: "bad_format" | "storage"; error: unknown };
 
 export interface CompletedDirectiveFeedback {
   taskTitle: string;
@@ -87,6 +99,12 @@ interface CommandStoreState {
   autoSync: () => Promise<boolean>;
   /** Trailing-debounced sync request (~300 ms); use after local mutations. Lifts an auto-sync pause. */
   requestSync: () => void;
+  /**
+   * Merges an offline JSON snapshot into local IndexedDB, reconciles active focus
+   * (flushing any losing running session via R4), and materializes daily habits.
+   * Never rejects.
+   */
+  importSnapshot: (jsonText: string) => Promise<SnapshotImportResult>;
 
   /** User-facing text of the last failed local (IndexedDB) action; not persisted. */
   actionError: string | null;
@@ -213,6 +231,46 @@ function nextStamp(row: { updatedAt?: number } | null | undefined): number {
 /** R6 for the focus state: a local focus change is always newer than the focus it replaces. */
 function nextFocusStamp(get: StoreGet): number {
   return Math.max(Date.now(), (get().focusUpdatedAt || 0) + 1);
+}
+
+/** Projects store focus fields into the validated FocusSession state union. */
+function readStoreFocusSession(
+  state: Pick<
+    CommandStoreState,
+    "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
+  >
+): FocusSession {
+  return toFocusSession({
+    activeTaskId: state.activeTaskId,
+    isRunning: state.isRunning,
+    sessionStartedAt: state.sessionStartedAt,
+    updatedAt: state.focusUpdatedAt || 0,
+  });
+}
+
+/** Converts a validated FocusSession transition into Zustand store fields. */
+function focusSessionToStorePatch(
+  session: FocusSession
+): Pick<
+  CommandStoreState,
+  "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
+> {
+  const wire = fromFocusSession(session);
+  return {
+    activeTaskId: wire.activeTaskId,
+    isRunning: wire.isRunning,
+    sessionStartedAt: wire.sessionStartedAt,
+    focusUpdatedAt: wire.updatedAt,
+  };
+}
+
+function readStoreActiveFocus(
+  state: Pick<
+    CommandStoreState,
+    "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
+  >
+): ActiveFocusState {
+  return fromFocusSession(readStoreFocusSession(state));
 }
 
 /**
@@ -570,42 +628,21 @@ async function runAction(
 }
 
 /**
- * One sync round trip + local bookkeeping. Returns the failure code (null on
- * success) and whether it wrote local rows that still need to be pushed
- * (flushed burst).
+ * Reconciles a merged payload's `activeFocus` against this device's current focus:
+ * flushes any losing local running burst using R4 (`losingSessionEndAt`), requeues
+ * a replaced active task, and appends any winning remote focus fields to `patch`.
  */
-async function runSyncOnce(
+async function reconcileMergedFocus(
+  merged: SyncPayload,
   get: StoreGet,
-  set: StoreSet
-): Promise<{ error: SyncErrorCode | null; wroteLocal: boolean }> {
-  const snapshot = get();
-  const res = await performServerSync({
-    activeTaskId: snapshot.activeTaskId,
-    isRunning: snapshot.isRunning,
-    sessionStartedAt: snapshot.sessionStartedAt,
-    updatedAt: snapshot.focusUpdatedAt || 0,
-  });
-
-  if (!res.ok || !res.merged) {
-    const error = res.error ?? "unreachable";
-    setChanged(get, set, { isSyncOnline: false, syncError: error });
-    return { error, wroteLocal: false };
-  }
-
+  patch: Partial<CommandStoreState>
+): Promise<boolean> {
   let wroteLocal = false;
-  const patch: Partial<CommandStoreState> = {
-    isSyncOnline: true,
-    syncError: null,
-    lastSyncedAt: res.merged.lastSyncedAt || Date.now(),
-  };
-  if (res.lanUrls && res.lanUrls.length > 0) patch.lanUrls = res.lanUrls;
-  const phoneSeen = res.peers?.phone.lastSeenAt ?? null;
-  // The server keeps peers in memory only; after a server restart keep what we knew.
-  if (phoneSeen !== null) patch.phoneLastSeenAt = phoneSeen;
-
-  const remote = res.merged.activeFocus;
+  const remote = merged.activeFocus;
   const before = get();
   if (remote && (remote.updatedAt || 0) > (before.focusUpdatedAt || 0)) {
+    const beforeSession = readStoreFocusSession(before);
+    const remoteSession = toFocusSession(remote);
     const sameSession =
       remote.activeTaskId === before.activeTaskId &&
       remote.sessionStartedAt === before.sessionStartedAt;
@@ -614,28 +651,28 @@ async function runSyncOnce(
     // running burst (idempotent, so a burst the other device already logged is
     // not counted twice) and give our task back to the queue. The burst ends
     // when the other device moved on, not now (R4: we may learn it hours late).
-    if (!sameSession && before.activeTaskId) {
+    if (!sameSession && beforeSession.status !== "idle") {
       try {
-        if (before.isRunning && before.sessionStartedAt) {
+        if (beforeSession.status === "running") {
           const endAt = losingSessionEndAt(
-            before.activeTaskId,
-            before.sessionStartedAt,
+            beforeSession.taskId,
+            beforeSession.sessionStartedAt,
             remote,
-            res.merged.timeLogs,
+            merged.timeLogs,
             Date.now()
           );
           if (
             (await flushActiveBurst(
-              before.activeTaskId,
-              before.sessionStartedAt,
+              beforeSession.taskId,
+              beforeSession.sessionStartedAt,
               endAt
             )) > 0
           ) {
             wroteLocal = true;
           }
         }
-        if (remote.activeTaskId !== before.activeTaskId) {
-          if (await requeueIfActive(before.activeTaskId)) wroteLocal = true;
+        if (remote.activeTaskId !== beforeSession.taskId) {
+          if (await requeueIfActive(beforeSession.taskId)) wroteLocal = true;
         }
       } catch (err) {
         logDiagnostic({
@@ -649,12 +686,40 @@ async function runSyncOnce(
 
     // A local focus change made while we were awaiting is newer than `remote`.
     if (get().focusUpdatedAt === before.focusUpdatedAt) {
-      patch.activeTaskId = remote.activeTaskId;
-      patch.isRunning = remote.isRunning;
-      patch.sessionStartedAt = remote.sessionStartedAt;
-      patch.focusUpdatedAt = remote.updatedAt;
+      Object.assign(patch, focusSessionToStorePatch(remoteSession));
     }
   }
+  return wroteLocal;
+}
+
+/**
+ * One sync round trip + local bookkeeping. Returns the failure code (null on
+ * success) and whether it wrote local rows that still need to be pushed
+ * (flushed burst).
+ */
+async function runSyncOnce(
+  get: StoreGet,
+  set: StoreSet
+): Promise<{ error: SyncErrorCode | null; wroteLocal: boolean }> {
+  const res = await performServerSync(readStoreActiveFocus(get()));
+
+  if (!res.ok || !res.merged) {
+    const error = res.error ?? "unreachable";
+    setChanged(get, set, { isSyncOnline: false, syncError: error });
+    return { error, wroteLocal: false };
+  }
+
+  const patch: Partial<CommandStoreState> = {
+    isSyncOnline: true,
+    syncError: null,
+    lastSyncedAt: res.merged.lastSyncedAt || Date.now(),
+  };
+  if (res.lanUrls && res.lanUrls.length > 0) patch.lanUrls = res.lanUrls;
+  const phoneSeen = res.peers?.phone.lastSeenAt ?? null;
+  // The server keeps peers in memory only; after a server restart keep what we knew.
+  if (phoneSeen !== null) patch.phoneLastSeenAt = phoneSeen;
+
+  let wroteLocal = await reconcileMergedFocus(res.merged, get, patch);
 
   setChanged(get, set, patch);
   // If sync brought in new habits from another device, ensure today's tasks exist.
@@ -676,17 +741,18 @@ async function runSyncOnce(
  * task is queued for today so the user can choose whether to start it.
  */
 async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> {
-  const { activeTaskId, isRunning, sessionStartedAt } = get();
-  if (!activeTaskId) return;
+  const session = readStoreFocusSession(get());
+  if (session.status === "idle") return;
+  const activeTaskId = session.taskId;
 
   const currentTask = await db.tasks.get(activeTaskId);
   if (!currentTask) {
-    set({
-      activeTaskId: null,
-      isRunning: false,
-      sessionStartedAt: null,
-      focusUpdatedAt: nextFocusStamp(get),
-    });
+    set(
+      focusSessionToStorePatch({
+        status: "idle",
+        updatedAt: nextFocusStamp(get),
+      })
+    );
     get().requestSync();
     return;
   }
@@ -697,8 +763,8 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
 
   const now = Date.now();
   let burstSeconds = 0;
-  if (isRunning && sessionStartedAt) {
-    burstSeconds = await flushActiveBurst(activeTaskId, sessionStartedAt);
+  if (session.status === "running") {
+    burstSeconds = await flushActiveBurst(activeTaskId, session.sessionStartedAt);
   } else if (!alreadyCompleted && (currentTask.accumulatedSeconds || 0) === 0) {
     burstSeconds = await flushActiveBurst(activeTaskId, now - 1000);
   }
@@ -733,10 +799,10 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
   };
   const currentView = get().activeView;
   set({
-    activeTaskId: null,
-    isRunning: false,
-    sessionStartedAt: null,
-    focusUpdatedAt: nextFocusStamp(get),
+    ...focusSessionToStorePatch({
+      status: "idle",
+      updatedAt: nextFocusStamp(get),
+    }),
     activeView:
       currentView === "focus" ? (nextTask ? "focus" : "command") : currentView,
     lastCompletedFeedback: feedback,
@@ -827,6 +893,18 @@ function recordSyncOutcome(failure: SyncErrorCode | null): void {
   autoSyncPausedUntil = Date.now() + backoff * (0.5 + Math.random() / 2);
 }
 
+/** Deterministically cancels any pending debounced sync timer and resets transient scheduler backoff. */
+export function disposeCommandStoreScheduler(): void {
+  if (syncDebounceTimer !== null) {
+    clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = null;
+  }
+  syncAgain = false;
+  consecutiveSyncFailures = 0;
+  autoSyncPausedUntil = 0;
+  editJoinedInFlightSync = false;
+}
+
 export const useCommandStore = create<CommandStoreState>()(
   persist(
     (set, get) => ({
@@ -912,19 +990,48 @@ export const useCommandStore = create<CommandStoreState>()(
         }, SYNC_DEBOUNCE_MS);
       },
 
+      importSnapshot: async (jsonText: string): Promise<SnapshotImportResult> => {
+        try {
+          const merged = await importAndMergeSnapshotJson(
+            jsonText,
+            readStoreActiveFocus(get())
+          );
+          const patch: Partial<CommandStoreState> = {};
+          await reconcileMergedFocus(merged, get, patch);
+          setChanged(get, set, patch);
+          try {
+            await materializeHabitsIntoDB(toLocalDateKey());
+          } catch (err) {
+            console.error("[hunt] action_failed", "materializeDailyHabits", err);
+          }
+          return { ok: true, merged };
+        } catch (err) {
+          if (err instanceof SnapshotFormatError || err instanceof SyntaxError) {
+            return { ok: false, reason: "bad_format", error: err };
+          }
+          recordBreadcrumb({
+            level: "ERROR",
+            domain: "sync",
+            event: "snapshot_import_failed",
+            context: summarizeError(err),
+          });
+          console.error("[hunt] snapshot_import_failed", err);
+          return { ok: false, reason: "storage", error: err };
+        }
+      },
+
       clearActionError: () => set({ actionError: null }),
       setActiveView: (view) => set({ activeView: view }),
       clearFeedback: () => set({ lastCompletedFeedback: null }),
 
       initializeFocus: async (requestedTaskId?: string) => {
         await runAction(set, "initializeFocus", async () => {
-          const state = get();
+          const session = readStoreFocusSession(get());
 
           if (
             requestedTaskId &&
-            state.activeTaskId === requestedTaskId &&
-            state.isRunning &&
-            state.sessionStartedAt
+            session.status === "running" &&
+            session.taskId === requestedTaskId
           ) {
             // Already running on this task: keep the session (restarting it would
             // silently drop the time since sessionStartedAt).
@@ -932,11 +1039,11 @@ export const useCommandStore = create<CommandStoreState>()(
             return;
           }
 
-          if (state.activeTaskId && state.activeTaskId !== requestedTaskId) {
-            if (state.isRunning && state.sessionStartedAt) {
-              await flushActiveBurst(state.activeTaskId, state.sessionStartedAt);
+          if (session.status !== "idle" && session.taskId !== requestedTaskId) {
+            if (session.status === "running") {
+              await flushActiveBurst(session.taskId, session.sessionStartedAt);
             }
-            await requeueIfActive(state.activeTaskId);
+            await requeueIfActive(session.taskId);
           }
 
           let targetId = requestedTaskId;
@@ -953,10 +1060,12 @@ export const useCommandStore = create<CommandStoreState>()(
           await writeTask(targetId, { status: "active" });
 
           set({
-            activeTaskId: targetId,
-            isRunning: true,
-            sessionStartedAt: startedAt,
-            focusUpdatedAt: nextFocusStamp(get),
+            ...focusSessionToStorePatch({
+              status: "running",
+              taskId: targetId,
+              sessionStartedAt: startedAt,
+              updatedAt: nextFocusStamp(get),
+            }),
             activeView: "focus",
             lastCompletedFeedback: null,
           });
@@ -967,13 +1076,16 @@ export const useCommandStore = create<CommandStoreState>()(
 
       engageTimer: () => {
         try {
-          const { activeTaskId, isRunning } = get();
-          if (!activeTaskId || isRunning) return;
-          set({
-            isRunning: true,
-            sessionStartedAt: Date.now(),
-            focusUpdatedAt: nextFocusStamp(get),
-          });
+          const session = readStoreFocusSession(get());
+          if (session.status !== "paused") return;
+          set(
+            focusSessionToStorePatch({
+              status: "running",
+              taskId: session.taskId,
+              sessionStartedAt: Date.now(),
+              updatedAt: nextFocusStamp(get),
+            })
+          );
           get().requestSync();
         } catch (err) {
           reportActionFailure(set, "engageTimer", err);
@@ -982,16 +1094,18 @@ export const useCommandStore = create<CommandStoreState>()(
 
       suspendTimer: async () => {
         await runAction(set, "suspendTimer", async () => {
-          const { activeTaskId, isRunning, sessionStartedAt } = get();
-          if (!activeTaskId || !isRunning) return;
+          const session = readStoreFocusSession(get());
+          if (session.status !== "running") return;
 
-          await flushActiveBurst(activeTaskId, sessionStartedAt);
+          await flushActiveBurst(session.taskId, session.sessionStartedAt);
 
-          set({
-            isRunning: false,
-            sessionStartedAt: null,
-            focusUpdatedAt: nextFocusStamp(get),
-          });
+          set(
+            focusSessionToStorePatch({
+              status: "paused",
+              taskId: session.taskId,
+              updatedAt: nextFocusStamp(get),
+            })
+          );
 
           get().requestSync();
         });
@@ -1029,18 +1143,18 @@ export const useCommandStore = create<CommandStoreState>()(
 
       returnToQueue: async () => {
         await runAction(set, "returnToQueue", async () => {
-          const { activeTaskId, isRunning, sessionStartedAt } = get();
-          if (activeTaskId) {
-            if (isRunning && sessionStartedAt) {
-              await flushActiveBurst(activeTaskId, sessionStartedAt);
+          const session = readStoreFocusSession(get());
+          if (session.status !== "idle") {
+            if (session.status === "running") {
+              await flushActiveBurst(session.taskId, session.sessionStartedAt);
             }
-            await writeTask(activeTaskId, { status: "queued" });
+            await writeTask(session.taskId, { status: "queued" });
           }
           set({
-            activeTaskId: null,
-            isRunning: false,
-            sessionStartedAt: null,
-            focusUpdatedAt: nextFocusStamp(get),
+            ...focusSessionToStorePatch({
+              status: "idle",
+              updatedAt: nextFocusStamp(get),
+            }),
             activeView: "command",
           });
           get().requestSync();
@@ -1099,12 +1213,12 @@ export const useCommandStore = create<CommandStoreState>()(
         await runAction(set, "deleteTask", async () => {
           recordDeletedTaskTombstone(taskId);
           if (get().activeTaskId === taskId) {
-            set({
-              activeTaskId: null,
-              isRunning: false,
-              sessionStartedAt: null,
-              focusUpdatedAt: nextFocusStamp(get),
-            });
+            set(
+              focusSessionToStorePatch({
+                status: "idle",
+                updatedAt: nextFocusStamp(get),
+              })
+            );
           }
           await db.tasks.delete(taskId);
           get().requestSync();

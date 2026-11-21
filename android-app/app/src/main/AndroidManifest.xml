@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.hunt.companion"
-    android:versionCode="15"
-    android:versionName="1.7.0">
+    android:versionCode="16"
+    android:versionName="1.8.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <!-- Universal Phone, Tablet & Foldable screen support (no compatibility letterboxing on tablets) -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+        android:anyDensity="true" />
 
     <!-- Required to sync with Laptop over local Wi-Fi / Hotspot -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -39,11 +47,22 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- One-tap local LAN/Tailscale pairing handoff from the scanned QR browser page -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="hunt"
+                    android:host="pair" />
             </intent-filter>
         </activity>
 

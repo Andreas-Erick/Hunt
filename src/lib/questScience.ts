@@ -1,4 +1,4 @@
-import type { Quest, Task } from "./db";
+import type { Quest, Task } from "./domainTypes";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 export type DraftVerdict = "empty" | "weak" | "fair" | "strong";

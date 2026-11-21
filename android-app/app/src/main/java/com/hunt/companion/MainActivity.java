@@ -1,6 +1,7 @@
 package com.hunt.companion;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.graphics.Color;
@@ -265,6 +266,7 @@ public class MainActivity extends Activity {
     private int lastImeDp = -1;
     private int imeAnimationDepth = 0;
     private boolean containerPaddingInitialized = false;
+    private String pendingPairedToastUrl;
 
     // =======================================================================================
     // Lifecycle
@@ -368,8 +370,57 @@ public class MainActivity extends Activity {
         }
 
         registerNetworkCallback();
+        handlePairingIntent(getIntent(), false);
 
         webView.loadUrl(PAGE_URL);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handlePairingIntent(intent, true);
+    }
+
+    /**
+     * Handles a {@code hunt://pair?url=<origin>&token=<secret>} deep link launched from the QR
+     * browser page on the same device. Only private LAN, Tailscale CGNAT and loopback origins are
+     * accepted, and the token must match {@link #SYNC_TOKEN_RE}.
+     */
+    private void handlePairingIntent(Intent intent, boolean notifyNow) {
+        if (intent == null) return;
+        Uri uri = intent.getData();
+        intent.setData(null);
+        if (uri == null) return;
+        if (!"hunt".equalsIgnoreCase(uri.getScheme()) || !"pair".equalsIgnoreCase(uri.getHost())) {
+            return;
+        }
+        String baseUrl = normalizeUrl(uri.getQueryParameter("url"));
+        if (!isAllowedSyncRouteUrl(baseUrl)) {
+            Log.w(TAG, "Ignored pairing deep link: disallowed laptop route");
+            return;
+        }
+        String rawKey = uri.getQueryParameter("token");
+        if (!saveSyncTokenInternal(rawKey)) {
+            Log.w(TAG, "Ignored pairing deep link: invalid key format");
+            return;
+        }
+        saveLaptopUrlInternal(baseUrl);
+        if (notifyNow) {
+            notifyPagePaired(baseUrl);
+        } else {
+            pendingPairedToastUrl = baseUrl;
+        }
+    }
+
+    private void notifyPagePaired(String baseUrl) {
+        JSONObject info = new JSONObject();
+        try {
+            info.put("url", baseUrl);
+        } catch (JSONException ignored) {
+            // static key
+        }
+        callJs("__huntNativePaired", toJsLiteral(info));
     }
 
     private void installSmoothImeInsets(View container) {
@@ -578,6 +629,15 @@ public class MainActivity extends Activity {
             if (uri != null && isPageUrl(uri.toString())) return false;
             Log.w(TAG, "Blocked navigation to " + originForLog(uri));
             return true; // cancelled, and never handed to another app
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (pendingPairedToastUrl != null && isPageUrl(url != null ? url : "")) {
+                String pairedUrl = pendingPairedToastUrl;
+                pendingPairedToastUrl = null;
+                notifyPagePaired(pairedUrl);
+            }
         }
 
         /** Every subresource and frame load (background thread): allowlisted, else an empty 403. */
@@ -1608,6 +1668,21 @@ public class MainActivity extends Activity {
         try {
             String host = new URL(url).getHost();
             return host != null && !host.isEmpty();
+        } catch (MalformedURLException e) {
+            return false;
+        }
+    }
+
+    /** True only for HTTP(S) origins on private LAN (RFC1918), Tailscale CGNAT, or loopback, with no userinfo. */
+    private static boolean isAllowedSyncRouteUrl(String url) {
+        if (url == null || !isHttpUrl(url)) return false;
+        try {
+            URL parsed = new URL(url);
+            if (parsed.getUserInfo() != null && !parsed.getUserInfo().isEmpty()) return false;
+            String host = parsed.getHost();
+            if (host == null || host.isEmpty()) return false;
+            return isPrivateLanHost(host) || isCgnatHost(host)
+                    || "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host);
         } catch (MalformedURLException e) {
             return false;
         }

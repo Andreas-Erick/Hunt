@@ -23,33 +23,20 @@ import {
   type Quest,
   type Task,
 } from "@/lib/db";
+import { computeHabitStreak } from "@/lib/dateUtils";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { useTodayDateKey } from "./useTodayDateKey";
+
+export { computeHabitStreak };
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 const HISTORY_DAYS = 7;
 
 function confirmDiscard(dirty: boolean): boolean {
   return !dirty || window.confirm(DISCARD_PROMPT);
-}
-
-/**
- * Consecutive completed days for a habit ending on `todayKey` (or yesterday if
- * today is not yet completed, so a running streak does not drop to 0 at 8 AM).
- */
-export function computeHabitStreak(
-  completedDates: ReadonlySet<string>,
-  todayKey: string
-): number {
-  let offset = completedDates.has(todayKey) ? 0 : -1;
-  let streak = 0;
-  while (completedDates.has(dateKeyFromOffset(todayKey, offset))) {
-    streak += 1;
-    offset -= 1;
-  }
-  return streak;
 }
 
 export function HabitsView() {
@@ -83,7 +70,7 @@ export function HabitsView() {
     []
   );
 
-  const todayKey = toLocalDateKey();
+  const todayKey = useTodayDateKey();
 
   // Ensure today's daily habit tasks exist whenever Habits view opens or the day rolls over.
   useEffect(() => {
@@ -293,14 +280,14 @@ export function HabitsView() {
   const editNotesId = `${ids}-edit-notes`;
 
   return (
-    <div className="mx-auto max-w-[1120px] px-6 py-10 sm:px-10 lg:px-16 lg:py-12">
+    <div className="mx-auto max-w-[1120px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Header */}
-      <div className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             Daily habits
           </h1>
-          <p className="mt-2 text-sm text-neutral-400">
+          <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
             Recurring routines added to your Home queue every day.
           </p>
         </div>
@@ -338,6 +325,17 @@ export function HabitsView() {
             <Plus className="h-3.5 w-3.5" />
             <span>Add Habit</span>
           </button>
+        </div>
+
+        <div className="mt-2 border-t border-white/[0.05] pt-2">
+          <input
+            type="text"
+            value={newNotes}
+            onChange={(e) => setNewNotes(e.target.value)}
+            placeholder="Add description (optional)..."
+            aria-label="Habit description (optional)"
+            className="w-full bg-transparent px-1 py-1 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+          />
         </div>
 
         <div
@@ -392,7 +390,21 @@ export function HabitsView() {
 
       {/* Habits List */}
       {habits === undefined ? (
-        <div aria-busy="true" className="space-y-3.5" />
+        <div
+          aria-busy="true"
+          data-testid="habits-loading-skeleton"
+          className="space-y-3.5"
+        >
+          {[0, 1].map((slot) => (
+            <div
+              key={slot}
+              className="rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 pl-6"
+            >
+              <div className="h-5 w-1/2 animate-pulse rounded-lg bg-white/[0.06]" />
+              <div className="mt-3.5 h-4 w-1/3 animate-pulse rounded-lg bg-white/[0.04]" />
+            </div>
+          ))}
+        </div>
       ) : habits.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/[0.08] py-16 text-center text-sm text-hud-muted">
           No daily habits yet. Add one above and it will appear in today&apos;s
@@ -419,7 +431,7 @@ export function HabitsView() {
                 key={habit.id}
                 data-testid="habit-row"
                 data-habit-id={habit.id}
-                className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111318] transition-colors hover:border-white/[0.15]"
+                className="cq-card group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111318] transition-colors hover:border-white/[0.15]"
               >
                 <div
                   className={`absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full ${style.bg} ${
@@ -427,9 +439,9 @@ export function HabitsView() {
                   }`}
                 />
 
-                <div className="p-5 pl-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                <div className="p-4 sm:p-5 pl-5 sm:pl-6">
+                  <div className="flex items-start justify-between gap-3 sm:gap-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-3.5">
                       <button
                         type="button"
                         onClick={() => void handleToggleToday(habit)}
@@ -483,7 +495,7 @@ export function HabitsView() {
                           {habit.title}
                         </div>
                         {habit.notes && (
-                          <p className="mt-1 break-words text-xs text-hud-muted">
+                          <p className="mt-1 max-w-[70ch] break-words text-xs text-hud-muted">
                             {habit.notes}
                           </p>
                         )}

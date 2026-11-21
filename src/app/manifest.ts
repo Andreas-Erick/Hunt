@@ -7,7 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description:
       "Calm single-task focus, weekly quest hours, and done-list telemetry.",
     start_url: "/",
-    display: "standalone",
+    display: "fullscreen",
+    display_override: ["fullscreen", "standalone"],
     background_color: "#0b0c0e",
     theme_color: "#0b0c0e",
     icons: [

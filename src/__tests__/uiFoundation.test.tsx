@@ -5,6 +5,7 @@ import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 import tailwindConfig from "../../tailwind.config";
 import {
+  QUEST_ACCENT_KEYS,
   QUEST_ACCENT_STYLES,
   accentStyle,
   dateFromKey,
@@ -44,7 +45,7 @@ afterEach(() => {
 // accentStyle (DUI-02)
 // ---------------------------------------------------------------------------
 describe("accentStyle()", () => {
-  it.each(["cyan", "emerald", "amber", "slate"] as const)("maps %s to its own style", (key) => {
+  it.each([...QUEST_ACCENT_KEYS, "slate"] as const)("maps %s to its own style", (key) => {
     expect(accentStyle(key)).toBe(QUEST_ACCENT_STYLES[key]);
   });
 
@@ -592,6 +593,18 @@ describe("tailwind.config.ts", () => {
     }
   );
 
+  it.each(["#0b0c0e", "#111318", "#0d0f14", "#14171f", "#05070a"])(
+    "all 8 quest accent colours read at >= 4.5:1 WCAG AA on %s",
+    (surface) => {
+      for (const key of QUEST_ACCENT_KEYS) {
+        const hex = QUEST_ACCENT_STYLES[key].hex;
+        const ratio = contrastRatio(hex, surface);
+        expect(ratio, `${key} (${hex}) on ${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+        expect(hudColor(key)).toBe(hex);
+      }
+    }
+  );
+
   it("includes a content glob covering src/lib", () => {
     expect(contentGlobs()).toContain("./src/lib/**/*.{js,ts,jsx,tsx,mdx}");
   });
@@ -608,6 +621,11 @@ describe("tailwind.config.ts", () => {
       ".bg-slate-500",
       ".border-\\[\\#00f0ff\\]\\/40",
       ".border-\\[\\#00ff9d\\]\\/40",
+      ".border-\\[\\#b388ff\\]\\/40",
+      ".border-\\[\\#ff6b9d\\]\\/40",
+      ".border-\\[\\#38bdf8\\]\\/40",
+      ".border-\\[\\#ff8547\\]\\/40",
+      ".border-\\[\\#a3e635\\]\\/40",
       ".bg-neutral-500",
     ]) {
       expect(result.css).toContain(`${selector} {`);

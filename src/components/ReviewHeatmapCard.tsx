@@ -3,11 +3,15 @@
 import React, { useState } from "react";
 import { Flame, Sparkles } from "lucide-react";
 import type { QuestAccent } from "@/lib/db";
-import type { ActivityHeatmapReport, HeatmapCell } from "@/lib/reviewAnalytics";
+import {
+  formatTelemetryDuration,
+  type ActivityHeatmapReport,
+  type HeatmapCell,
+} from "@/lib/reviewAnalytics";
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 
-type HeatmapPalette = QuestAccent | "amber" | "slate";
+type HeatmapPalette = QuestAccent | "slate";
 
 const LEVEL_CLASSES: Record<HeatmapPalette, readonly [string, string, string, string, string]> = {
   amber: [
@@ -31,6 +35,41 @@ const LEVEL_CLASSES: Record<HeatmapPalette, readonly [string, string, string, st
     "bg-[#00ff9d]/70 hover:bg-[#00ff9d]/80",
     "bg-[#00ff9d] hover:bg-[#4dffb8]",
   ],
+  purple: [
+    "bg-white/[0.04] hover:bg-white/[0.09]",
+    "bg-[#b388ff]/20 hover:bg-[#b388ff]/30",
+    "bg-[#b388ff]/40 hover:bg-[#b388ff]/55",
+    "bg-[#b388ff]/70 hover:bg-[#b388ff]/80",
+    "bg-[#b388ff] hover:bg-[#c8a8ff]",
+  ],
+  rose: [
+    "bg-white/[0.04] hover:bg-white/[0.09]",
+    "bg-[#ff6b9d]/20 hover:bg-[#ff6b9d]/30",
+    "bg-[#ff6b9d]/40 hover:bg-[#ff6b9d]/55",
+    "bg-[#ff6b9d]/70 hover:bg-[#ff6b9d]/80",
+    "bg-[#ff6b9d] hover:bg-[#ff8fb5]",
+  ],
+  sky: [
+    "bg-white/[0.04] hover:bg-white/[0.09]",
+    "bg-[#38bdf8]/20 hover:bg-[#38bdf8]/30",
+    "bg-[#38bdf8]/40 hover:bg-[#38bdf8]/55",
+    "bg-[#38bdf8]/70 hover:bg-[#38bdf8]/80",
+    "bg-[#38bdf8] hover:bg-[#7dd3fc]",
+  ],
+  orange: [
+    "bg-white/[0.04] hover:bg-white/[0.09]",
+    "bg-[#ff8547]/20 hover:bg-[#ff8547]/30",
+    "bg-[#ff8547]/40 hover:bg-[#ff8547]/55",
+    "bg-[#ff8547]/70 hover:bg-[#ff8547]/80",
+    "bg-[#ff8547] hover:bg-[#ffa070]",
+  ],
+  lime: [
+    "bg-white/[0.04] hover:bg-white/[0.09]",
+    "bg-[#a3e635]/20 hover:bg-[#a3e635]/30",
+    "bg-[#a3e635]/40 hover:bg-[#a3e635]/55",
+    "bg-[#a3e635]/70 hover:bg-[#a3e635]/80",
+    "bg-[#a3e635] hover:bg-[#bef264]",
+  ],
   slate: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
     "bg-slate-400/20 hover:bg-slate-400/30",
@@ -41,8 +80,11 @@ const LEVEL_CLASSES: Record<HeatmapPalette, readonly [string, string, string, st
 };
 
 function resolvePalette(accent: string | null | undefined): HeatmapPalette {
-  if (accent === "cyan" || accent === "emerald" || accent === "amber" || accent === "slate") {
-    return accent;
+  if (
+    accent &&
+    Object.prototype.hasOwnProperty.call(LEVEL_CLASSES, accent)
+  ) {
+    return accent as HeatmapPalette;
   }
   return "amber";
 }
@@ -83,7 +125,7 @@ export function ReviewHeatmapCard({
     <section
       aria-label="Activity heatmap"
       data-testid="activity-heatmap"
-      className="mt-6 rounded-2xl border border-white/[0.08] bg-[#111318] p-6 sm:p-7"
+      className="cq-card mt-6 rounded-2xl border border-white/[0.08] bg-[#111318] p-4 sm:p-7"
     >
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -93,7 +135,8 @@ export function ReviewHeatmapCard({
           <p className="mt-1 text-xs text-hud-muted">
             {scopeTitle} · {heatmap.activeDays} active{" "}
             {heatmap.activeDays === 1 ? "day" : "days"} ({heatmap.activePct}%) ·{" "}
-            {heatmap.totalHours.toFixed(1)}h logged · {heatmap.totalCompletedTasks}{" "}
+            {formatTelemetryDuration(heatmap.totalSeconds, { zeroAs: "0.0h" })} logged ·{" "}
+            {heatmap.totalCompletedTasks}{" "}
             {heatmap.totalCompletedTasks === 1 ? "task" : "tasks"} completed
           </p>
         </div>
@@ -120,7 +163,7 @@ export function ReviewHeatmapCard({
       </div>
 
       {/* Scrollable Grid Container */}
-      <div className="mt-6 overflow-x-auto pb-1">
+      <div className="scroll-shadow-x mt-6 overflow-x-auto pb-1">
         <div className="inline-flex min-w-full flex-col gap-1.5">
           {/* Month Header Row */}
           <div className="flex items-center gap-1.5 pl-9">
@@ -204,7 +247,9 @@ export function ReviewHeatmapCard({
                 {selectedCell.isToday ? " (Today)" : ""}
               </span>
               <span className="text-hud-muted">·</span>
-              <span>{selectedCell.hours.toFixed(1)}h focus</span>
+              <span>
+                {formatTelemetryDuration(selectedCell.seconds, { zeroAs: "0.0h" })} focus
+              </span>
               <span className="text-hud-muted">·</span>
               <span>
                 {selectedCell.completedTasks}{" "}

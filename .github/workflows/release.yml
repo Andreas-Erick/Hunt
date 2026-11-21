@@ -56,6 +56,9 @@ jobs:
       - name: TypeScript typecheck
         run: npx tsc --noEmit
 
+      - name: Run ESLint
+        run: npm run lint
+
   build-android:
     name: Build Android APK
     needs: verify
@@ -158,8 +161,8 @@ jobs:
           $nodeExe = (Get-Command node).Source
           Copy-Item -Force $nodeExe "$stage\node.exe"
 
-          # Copy desktop launchers and icon.
-          Copy-Item -Force "Start-Hunt.bat","Start-Server.bat","Launch-Hunt.vbs","HUNT.ico" $stage
+          # Copy desktop launchers and icons.
+          Copy-Item -Force "Start-Hunt.bat","Start-Server.bat","Launch-Hunt.vbs","HUNT.ico","HUNT-Falcon.ico" $stage
 
       - name: Build portable Windows ZIP
         shell: pwsh

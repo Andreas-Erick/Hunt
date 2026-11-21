@@ -72,4 +72,100 @@ body {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Pure-CSS horizontal scroll-shadow cues (only visible when content overflows that edge). */
+  .scroll-shadow-x {
+    background-image:
+      linear-gradient(to right, #111318 25%, rgba(17, 19, 24, 0)),
+      linear-gradient(to left, #111318 25%, rgba(17, 19, 24, 0)),
+      radial-gradient(farthest-side at 0 50%, rgba(0, 240, 255, 0.18), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgba(0, 240, 255, 0.18), transparent);
+    background-position: left center, right center, left center, right center;
+    background-repeat: no-repeat;
+    background-size: 20px 100%, 20px 100%, 10px 100%, 10px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+}
+
+/* Component-level CSS Container Queries for portable cards across narrow & wide panes. */
+.cq-card {
+  container-type: inline-size;
+}
+
+.cq-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+@container (min-width: 23rem) {
+  .cq-two-col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.cq-form-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@container (min-width: 30rem) {
+  .cq-form-two-col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Fluid Focus stopwatch on compact (< 380px) viewports so H:MM:SS never overflows 320px. */
+@media (max-width: 380px) {
+  .focus-fluid-chrono {
+    font-size: clamp(2.75rem, 15vw, 4.25rem);
+  }
+}
+
+/* Short-height landscape resilience (e.g. 768x500): compact sticky chrome & Focus stage. */
+@media (max-height: 560px) {
+  .top-telemetry-shell {
+    height: 3.5rem;
+  }
+
+  .sticky-page-notice {
+    top: 3.5rem;
+  }
+
+  .focus-stage-shell {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .focus-fluid-chrono {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: clamp(3.25rem, 12vh, 5.25rem);
+  }
+
+  .focus-status-label {
+    margin-bottom: 1rem;
+  }
+
+  .focus-notes-wrap {
+    margin-top: 1rem;
+  }
+}
+
+/* Pure CSS view entrance: fill-mode is `none`, so resting DOM opacity is ALWAYS 1
+   even if requestAnimationFrame or compositor animations pause during fullscreen launch. */
+@keyframes huntViewEnter {
+  from {
+    opacity: 0.01;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hunt-view-enter {
+  animation: huntViewEnter 150ms cubic-bezier(0.22, 1, 0.36, 1) none;
 }

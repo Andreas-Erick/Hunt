@@ -18,9 +18,9 @@ import { useCommandStore } from "@/store/useCommandStore";
 import {
   buildLocalSyncPayload,
   getClientSyncToken,
-  importAndMergeSnapshotJson,
 } from "@/lib/syncEngine";
 import { hudAudio } from "@/lib/hudAudio";
+import { APP_VERSION } from "@/lib/version";
 import { formatAgo, usePhoneLink, useServerLink } from "./SyncStatus";
 
 interface MobileSyncModalProps {
@@ -367,7 +367,20 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     setStatus(null);
     try {
       const text = await file.text();
-      await importAndMergeSnapshotJson(text, currentFocusState());
+      const res = await useCommandStore.getState().importSnapshot(text);
+      if (!res.ok) {
+        if (aliveRef.current) {
+          setStatus({
+            source: "import",
+            tone: "error",
+            text:
+              res.reason === "bad_format"
+                ? "Invalid snapshot file."
+                : "Could not save the snapshot locally.",
+          });
+        }
+        return;
+      }
       hudAudio.playComplete();
       if (aliveRef.current) {
         setStatus({
@@ -428,22 +441,30 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         pressOnBackdropRef.current = false;
         if (onBackdrop) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm outline-none sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
     >
-      <div className="relative my-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-white/[0.1] bg-[#111318] p-6 sm:p-8 shadow-2xl">
+      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/[0.1] bg-[#111318] p-4 sm:p-8 shadow-2xl">
         {/* Top Modal Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00f0ff]/30 bg-[#00f0ff]/10 text-[#00f0ff]">
+        <div className="flex items-start justify-between gap-3 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#00f0ff]/30 bg-[#00f0ff]/10 text-[#00f0ff]">
               <Smartphone className="h-5 w-5" />
             </div>
-            <div>
-              <h2 className="text-xl font-medium text-white">
-                Phone &amp; Cross-Device Sync
-              </h2>
-              <p className="text-xs text-neutral-400">
-                Use Hunt on your phone and keep Quests, tasks, and timers in
-                sync.
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-medium text-white">
+                  Phone &amp; Cross-Device Sync
+                </h2>
+                <span
+                  data-testid="sync-modal-app-version"
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] font-medium text-hud-muted"
+                >
+                  v{APP_VERSION}
+                </span>
+              </div>
+              <p className="max-w-[60ch] text-xs text-neutral-400">
+                Use Hunt on your phone or tablet and keep Quests, habits, tasks,
+                and timers in sync.
               </p>
             </div>
           </div>
@@ -454,20 +475,20 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             title="Close"
             aria-label="Close"
-            className="rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Main 2-Column Body */}
-        <div className="mt-7 grid grid-cols-1 gap-6 sm:grid-cols-12 items-center">
+        <div className="mt-5 sm:mt-7 grid grid-cols-1 gap-5 sm:gap-6 sm:grid-cols-12 items-center">
           {/* Left: Scannable QR Code */}
-          <div className="sm:col-span-5 flex flex-col items-center rounded-2xl border border-white/[0.08] bg-[#0b0c0e] p-5 text-center">
+          <div className="sm:col-span-5 flex min-w-0 flex-col items-center rounded-2xl border border-white/[0.08] bg-[#0b0c0e] p-4 sm:p-5 text-center">
             {qrSvg ? (
               <div
                 data-testid="pairing-qr"
-                className="h-44 w-44 overflow-hidden rounded-xl bg-white"
+                className="h-36 w-36 sm:h-44 sm:w-44 overflow-hidden rounded-xl bg-white"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -483,7 +504,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                 </svg>
               </div>
             ) : (
-              <div className="flex h-44 w-44 items-center justify-center text-xs text-hud-muted">
+              <div className="flex h-36 w-36 sm:h-44 sm:w-44 items-center justify-center text-xs text-hud-muted">
                 Generating QR...
               </div>
             )}
@@ -522,10 +543,10 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Right: Sync Status + Install Instructions */}
-          <div className="sm:col-span-7 space-y-4">
+          <div className="sm:col-span-7 min-w-0 space-y-4">
             {/* Live Sync Status Card: the phone and this laptop's server, separately */}
             <div className="rounded-xl border border-white/[0.08] bg-[#0d0f14] p-4">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-3">
                   {/* Phone */}
                   <div className="flex items-start gap-2.5">
@@ -636,20 +657,22 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               </button>
             </div>
 
-            {/* How to connect the phone */}
+            {/* How to connect the phone or tablet */}
             <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs leading-relaxed text-neutral-300 space-y-1.5">
               <div className="font-medium text-white">
-                How to connect your phone:
+                How to connect your phone or tablet:
               </div>
               <p className="text-neutral-400">
-                1. In the phone browser: scan the QR code above to open Hunt.
-                To keep it, tap <strong>Share → Add to Home Screen</strong> (iOS
-                Safari) or <strong>Add to Home screen</strong> (Android Chrome).
+                1. In your phone or tablet browser: scan the QR code above to
+                open Hunt. To keep it, tap <strong>Share → Add to Home Screen</strong>{" "}
+                (iOS / iPadOS Safari) or <strong>Add to Home screen</strong>{" "}
+                (Android Chrome).
               </p>
               <p className="text-neutral-400">
-                2. In the Android app: open <strong>Sync</strong> and paste the
-                pairing link (Copy above, or the link your camera reads from the
-                QR code) into <strong>Laptop address</strong>.
+                2. In the Android phone &amp; tablet app: scan the QR code above
+                and tap <strong>Pair Android App</strong>, or open{" "}
+                <strong>Sync</strong> in the app and paste the pairing link
+                (Copy above) into <strong>Laptop address</strong>.
               </p>
               <p className="text-neutral-400">
                 3. Tasks &amp; timers sync automatically over Wi-Fi, continue

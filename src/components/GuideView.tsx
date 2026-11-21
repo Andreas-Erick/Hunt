@@ -39,7 +39,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
   return (
     <article
       data-testid={`principle-${principle.id}`}
-      className="flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-6 sm:p-7"
+      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
     >
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -56,7 +56,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
           {principle.title}
         </h2>
 
-        <p className="mt-2.5 text-sm leading-relaxed text-neutral-300">
+        <p className="mt-2.5 max-w-[68ch] text-sm leading-relaxed text-neutral-300">
           {principle.science}
         </p>
 
@@ -64,14 +64,14 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
           <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-hud-cyan">
             In Hunt
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-neutral-200">
+          <p className="mt-1 max-w-[68ch] text-xs leading-relaxed text-neutral-200">
             {principle.inHunt}
           </p>
         </div>
       </div>
 
-      {/* Side-by-side Avoid vs. Aim For */}
-      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Side-by-side Avoid vs. Aim For (adapts via @container query on PrincipleCard) */}
+      <div className="cq-two-col mt-5">
         <div className="rounded-xl border border-hud-crimson/20 bg-hud-crimson/[0.04] p-3.5">
           <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-hud-crimson">
             <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -131,7 +131,7 @@ export function GuideView() {
   const tabId = (id: GuideTabId) => `${ids}-tab-${id}`;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 py-10 sm:px-10 lg:px-16 lg:py-12">
+    <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Page Heading */}
       <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -139,10 +139,10 @@ export function GuideView() {
             <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Behavioral &amp; Cognitive Science</span>
           </div>
-          <h1 className="text-3xl font-medium tracking-tight text-white sm:text-4xl">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
             Quest &amp; Task Guide
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-hud-muted">
+          <p className="mt-2 max-w-[68ch] text-sm text-hud-muted">
             Learn how to set focused Quests and friction-free tasks grounded in goal-setting,
             attention, and motivation research — then test your own drafts live.
           </p>
@@ -164,7 +164,7 @@ export function GuideView() {
       <div
         role="tablist"
         aria-label="Guide sections"
-        className="mb-8 grid grid-cols-2 gap-2.5 sm:grid-cols-4"
+        className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))] gap-2.5 sm:grid-cols-4"
       >
         {GUIDE_TABS.map((tab, index) => {
           const selected = activeTab === tab.id;
@@ -305,7 +305,7 @@ export function GuideView() {
                         </span>
                       </div>
                       <h2 className="mt-3 text-lg font-medium text-white">{item.title}</h2>
-                      <p className="mt-2 text-sm leading-relaxed text-neutral-300">
+                      <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-neutral-300">
                         {item.summary}
                       </p>
                       <p className="mt-3 rounded-xl border border-white/[0.06] bg-[#0b0c0e] px-3.5 py-2.5 text-xs leading-relaxed text-neutral-200">
