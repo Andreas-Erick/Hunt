@@ -299,10 +299,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 17 (1.9.0) so it installs over the shipped 1.8.0 (16)", () => {
+  it("is versionCode >= 18 (1.10.0) so it installs over the shipped 1.9.0 (17)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(17);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.9.0");
+    expect(code).toBeGreaterThanOrEqual(18);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.10.0");
   });
 
   it("declares tablet screen support and multi-window resizeability", () => {

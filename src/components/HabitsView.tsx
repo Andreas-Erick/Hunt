@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -13,19 +14,14 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  db,
   accentStyle,
   dateKeyFromOffset,
-  habitTaskId,
-  loadSortedQuests,
-  toLocalDateKey,
   type Habit,
   type Quest,
-  type Task,
 } from "@/lib/db";
 import { computeHabitStreak } from "@/lib/dateUtils";
+import { summarizeHabitDays } from "@/lib/habitDay";
 import { useCommandStore } from "@/store/useCommandStore";
-import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
@@ -49,6 +45,7 @@ export function HabitsView() {
     updateHabit,
     deleteHabit,
     materializeDailyHabits,
+    ensureHabitTaskForDay,
     completeTaskById,
     reopenTaskById,
     initializeFocus,
@@ -58,24 +55,19 @@ export function HabitsView() {
       updateHabit: s.updateHabit,
       deleteHabit: s.deleteHabit,
       materializeDailyHabits: s.materializeDailyHabits,
+      ensureHabitTaskForDay: s.ensureHabitTaskForDay,
       completeTaskById: s.completeTaskById,
       reopenTaskById: s.reopenTaskById,
       initializeFocus: s.initializeFocus,
     }))
   );
 
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
-  const habits = useLiveQuery(
-    async () => (await db.habits.toArray()).sort(compareRank),
-    []
-  );
+  const quests = useLiveQuery(reads.quests, []);
+  const habits = useLiveQuery(reads.habits, []);
   // Index range read: tasks without a habitId are not in the habitId index,
   // and habit ids are non-empty strings, so this is every habit task and no
   // full-table scan.
-  const habitTasks = useLiveQuery(
-    () => db.tasks.where("habitId").above("").toArray(),
-    []
-  );
+  const habitTasks = useLiveQuery(reads.habitTasks, []);
 
   const todayKey = useTodayDateKey();
 
@@ -138,40 +130,16 @@ export function HabitsView() {
     [todayKey]
   );
 
-  // Index materialized tasks by habitId -> (todayTask + set of completed dateKeys).
-  const habitStats = useMemo(() => {
-    const todayByHabit = new Map<string, Task>();
-    const completedDatesByHabit = new Map<string, Set<string>>();
-    for (const task of habitTasks ?? []) {
-      if (!task.habitId) continue;
-      if (task.id === habitTaskId(task.habitId, todayKey) || task.scheduledDate === todayKey) {
-        if (!todayByHabit.has(task.habitId) || task.id === habitTaskId(task.habitId, todayKey)) {
-          todayByHabit.set(task.habitId, task);
-        }
-      }
-      if (task.status === "completed") {
-        const dKey =
-          task.scheduledDate ??
-          (task.completedAt ? toLocalDateKey(task.completedAt) : undefined);
-        if (dKey) {
-          let set = completedDatesByHabit.get(task.habitId);
-          if (!set) {
-            set = new Set<string>();
-            completedDatesByHabit.set(task.habitId, set);
-          }
-          set.add(dKey);
-        }
-      }
-    }
-    return { todayByHabit, completedDatesByHabit };
-  }, [habitTasks, todayKey]);
+  // Today's instance, completed days and streak per habit (shared Habit Day rules).
+  const habitDays = useMemo(
+    () => summarizeHabitDays(habitTasks ?? [], todayKey),
+    [habitTasks, todayKey]
+  );
 
   const completedTodayCount = useMemo(() => {
     if (!habits) return 0;
-    return habits.filter(
-      (h) => habitStats.todayByHabit.get(h.id)?.status === "completed"
-    ).length;
-  }, [habits, habitStats]);
+    return habits.filter((h) => habitDays.summaryFor(h.id).doneToday).length;
+  }, [habits, habitDays]);
 
   const editIsDirty = () =>
     editingHabit !== null &&
@@ -256,11 +224,9 @@ export function HabitsView() {
   };
 
   const handleToggleToday = async (habit: Habit) => {
-    let todayTask = habitStats.todayByHabit.get(habit.id);
-    if (!todayTask) {
-      await materializeDailyHabits(todayKey);
-      todayTask = await db.tasks.get(habitTaskId(habit.id, todayKey));
-    }
+    const todayTask =
+      habitDays.summaryFor(habit.id).todayTask ??
+      (await ensureHabitTaskForDay(habit.id, todayKey));
     if (!todayTask) return;
     if (todayTask.status === "completed") {
       hudAudio.playClick();
@@ -272,11 +238,9 @@ export function HabitsView() {
   };
 
   const handleFocusToday = async (habit: Habit) => {
-    let todayTask = habitStats.todayByHabit.get(habit.id);
-    if (!todayTask) {
-      await materializeDailyHabits(todayKey);
-      todayTask = await db.tasks.get(habitTaskId(habit.id, todayKey));
-    }
+    const todayTask =
+      habitDays.summaryFor(habit.id).todayTask ??
+      (await ensureHabitTaskForDay(habit.id, todayKey));
     if (!todayTask) return;
     if (todayTask.status === "completed") {
       await reopenTaskById(todayTask.id);
@@ -427,12 +391,8 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const todayTask = habitStats.todayByHabit.get(habit.id);
-            const doneToday = todayTask?.status === "completed";
-            const completedDates =
-              habitStats.completedDatesByHabit.get(habit.id) ??
-              new Set<string>();
-            const streak = computeHabitStreak(completedDates, todayKey);
+            const { doneToday, completedDates, streak } =
+              habitDays.summaryFor(habit.id);
             const isEditing = editingHabit?.id === habit.id;
 
             return (

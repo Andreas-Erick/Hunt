@@ -2,6 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { motion, AnimatePresence } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -15,13 +16,10 @@ import {
   Repeat,
 } from "lucide-react";
 import {
-  db,
   accentStyle,
   dateFromKey,
-  dateKeyFromOffset,
   formatChronoMMSS,
   isTaskVisibleToday,
-  loadSortedQuests,
   toLocalDateKey,
   type Task,
   type Quest,
@@ -44,13 +42,14 @@ import {
 import { TaskNotesField } from "./TaskNotesField";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTransientHighlight } from "./useTransientHighlight";
+import { useQuestWeekLogs } from "./useQuestWeekLogs";
+import { computeQuestWeekProgress } from "@/lib/questProgress";
 
 /** Clock tick while a timer runs (drives the live counters). */
 const RUNNING_TICK_MS = 1000;
 /** Clock tick otherwise: enough for the date and the timeline's "now" line. */
 const IDLE_TICK_MS = 60_000;
 /** Calendar days in the week KPI, today included. */
-const WEEK_DAYS = 7;
 
 /** Elements where Alt+Arrow keys belong to text editing, not to reordering. */
 function isTextEntryTarget(target: EventTarget): boolean {
@@ -100,9 +99,9 @@ export function CommandCenterView() {
     }))
   );
 
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
+  const quests = useLiveQuery(reads.quests, []);
 
-  const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
+  const allTasks = useLiveQuery(reads.allTasks, []);
 
   // Input State
   const [newTitle, setNewTitle] = useState("");
@@ -200,25 +199,7 @@ export function CommandCenterView() {
     void materializeDailyHabits(todayKey);
   }, [materializeDailyHabits, todayKey]);
 
-  // Today and the 6 days before it, stepped from a noon anchor (DST-safe).
-  const weekDateKeys = React.useMemo(
-    () =>
-      Array.from({ length: WEEK_DAYS }, (_, i) =>
-        dateKeyFromOffset(todayKey, -i)
-      ),
-    [todayKey]
-  );
-  const last7DateKeys = React.useMemo(
-    () => new Set(weekDateKeys),
-    [weekDateKeys]
-  );
-
-  // Only this week's logs are read (dateKey is indexed), never the whole
-  // history. The keys derive from todayKey, so the deps stay primitive.
-  const weekLogs = useLiveQuery(
-    () => db.timeLogs.where("dateKey").anyOf(weekDateKeys).toArray(),
-    [todayKey]
-  );
+  const weekLogs = useQuestWeekLogs(todayKey);
 
   // Active & Queued tasks for today (or overdue regular tasks / unscheduled),
   // sorted by rank (ties by id, as on the phone). Future-scheduled tasks belong
@@ -259,45 +240,27 @@ export function CommandCenterView() {
     [allTasks, activeTaskId]
   );
 
-  // Logged totals only change with the logs or the day; the live burst is added
-  // per tick without re-filtering every log.
-  const todayQuestLoggedSeconds = React.useMemo(
+  const liveBurst = React.useMemo(
     () =>
-      (weekLogs ?? [])
-        .filter((l) => l.dateKey === todayKey && l.questId !== null)
-        .reduce((acc, l) => acc + l.durationSeconds, 0),
-    [weekLogs, todayKey]
+      activeTaskObj && liveDelta > 0
+        ? { questId: activeTaskObj.questId, seconds: liveDelta }
+        : null,
+    [activeTaskObj, liveDelta]
   );
-
-  // Still filtered by key: right after midnight the live query can hold the
-  // previous window for a render.
-  const weekQuestLoggedSeconds = React.useMemo(
+  const questWeek = React.useMemo(
     () =>
-      (weekLogs ?? [])
-        .filter((l) => last7DateKeys.has(l.dateKey) && l.questId !== null)
-        .reduce((acc, l) => acc + l.durationSeconds, 0),
-    [weekLogs, last7DateKeys]
+      computeQuestWeekProgress({
+        quests: activeQuests,
+        logs: weekLogs ?? [],
+        todayKey,
+        live: liveBurst,
+      }).total,
+    [activeQuests, weekLogs, todayKey, liveBurst]
   );
-
-  const liveQuestSeconds =
-    activeTaskObj && activeTaskObj.questId !== null ? liveDelta : 0;
-  const todayQuestSeconds = todayQuestLoggedSeconds + liveQuestSeconds;
-  const weekQuestSeconds = weekQuestLoggedSeconds + liveQuestSeconds;
-
-  const totalWeeklyTargetHours = React.useMemo(() => {
-    return activeQuests.reduce(
-      (acc, q) => acc + (Number(q.targetWeeklyHours) || 0),
-      0
-    );
-  }, [activeQuests]);
-
-  const weeklyProgressPct =
-    totalWeeklyTargetHours > 0
-      ? Math.min(
-          100,
-          Math.round((weekQuestSeconds / 3600 / totalWeeklyTargetHours) * 100)
-        )
-      : 0;
+  const todayQuestSeconds = questWeek.todaySeconds;
+  const weekQuestSeconds = questWeek.weekSeconds;
+  const totalWeeklyTargetHours = questWeek.targetHours;
+  const weeklyProgressPct = questWeek.pct;
 
   // '–' instead of a misleading 0.0h until the logs and targets have loaded.
   const kpisLoading = weekLogs === undefined || quests === undefined;

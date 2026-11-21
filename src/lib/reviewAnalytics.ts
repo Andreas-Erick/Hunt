@@ -5,12 +5,12 @@ import {
   toLocalDateKey,
 } from "./dateUtils";
 import type { Quest, Task, TimeLog } from "./domainTypes";
+import { completionDateKey } from "./habitDay";
 
 export type ReviewHorizon = "day" | "week" | "month" | "quarter" | "year";
 export type ReviewScope = "ALL" | "OTHER" | string;
 export type ReviewChartMetric = "hours" | "tasks";
 
-const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface HorizonWindow {
   horizon: ReviewHorizon;
@@ -268,21 +268,14 @@ function calendarDaysInclusive(startKey: string, endKey: string): number {
   return Math.max(1, diff + 1);
 }
 
-/** Resolves the local YYYY-MM-DD date key on which a completed task finished. */
+/**
+ * The local YYYY-MM-DD day a completed task counts for (the shared
+ * completionDateKey rule: habit instances count for their own day).
+ */
 export function getCompletedTaskDateKey(
-  task: Pick<Task, "status" | "completedAt" | "scheduledDate" | "updatedAt">
+  task: Pick<Task, "status" | "completedAt" | "scheduledDate" | "updatedAt" | "habitId">
 ): string | null {
-  if (task.status !== "completed") return null;
-  if (typeof task.completedAt === "number" && Number.isFinite(task.completedAt) && task.completedAt > 0) {
-    return toLocalDateKey(task.completedAt);
-  }
-  if (typeof task.scheduledDate === "string" && DATE_KEY_RE.test(task.scheduledDate)) {
-    return task.scheduledDate;
-  }
-  if (typeof task.updatedAt === "number" && Number.isFinite(task.updatedAt) && task.updatedAt > 0) {
-    return toLocalDateKey(task.updatedAt);
-  }
-  return null;
+  return completionDateKey(task);
 }
 
 function matchesScope(questId: string | null | undefined, scope: ReviewScope): boolean {

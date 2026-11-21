@@ -1,6 +1,7 @@
 // @vitest-environment node
-// The phone page carries its own copy of the shared merge rules (R1-R6). This suite runs that copy
-// (w.mergePayloads from hunt-mobile.html) against the reference mergeSyncPayloads in syncTypes.ts.
+// The phone's merge (w.mergePayloads in hunt-mobile.html) is the shared mergeSyncPayloads from the
+// HuntCore block plus phone-only steps and the phone's boundary guard. This suite checks that the
+// wrapper adds nothing beyond those steps: on generated inputs both must give the same result.
 //
 // Phone-only steps are kept out of the generated inputs on purpose: flushing this phone's own losing
 // running session (R4, needs a RUNNING base focus) and re-queueing stranded 'active' tasks (needs

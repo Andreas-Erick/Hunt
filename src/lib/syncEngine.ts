@@ -670,12 +670,30 @@ function syncFailed(
 }
 
 /**
- * Performs a 2-way sync with the local Next.js `/api/sync` endpoint and applies
- * the merged result to local IndexedDB (diff-apply, see above).
- * Never throws; never waits longer than SYNC_REQUEST_TIMEOUT_MS on the network.
+ * The transport seam under a sync pass: sends one POST body (the local
+ * SyncPayload as JSON) with the client headers to the sync server and returns
+ * its HTTP response. Must reject only for a network-level failure or an abort
+ * through `signal`.
+ */
+export type SyncTransport = (request: {
+  body: string;
+  headers: Record<string, string>;
+  signal?: AbortSignal;
+}) => Promise<Response>;
+
+/** Production adapter: the local Next.js `/api/sync` endpoint over fetch. */
+export const httpSyncTransport: SyncTransport = ({ body, headers, signal }) =>
+  fetch("/api/sync", { method: "POST", headers, body, cache: "no-store", signal });
+
+/**
+ * Performs a 2-way sync through `transport` (default: the local `/api/sync`
+ * endpoint) and applies the merged result to local IndexedDB (diff-apply, see
+ * above). Never throws; never waits longer than SYNC_REQUEST_TIMEOUT_MS on the
+ * network.
  */
 export async function performServerSync(
-  currentFocus: ActiveFocusState
+  currentFocus: ActiveFocusState,
+  transport: SyncTransport = httpSyncTransport
 ): Promise<ServerSyncResult> {
   if (typeof window === "undefined") {
     return { ok: false, error: "unreachable" };
@@ -705,11 +723,9 @@ export async function performServerSync(
     };
     const token = getClientSyncToken();
     if (token) headers["X-Hunt-Token"] = token;
-    const res = await fetch("/api/sync", {
-      method: "POST",
-      headers,
+    const res = await transport({
       body: JSON.stringify(localPayload),
-      cache: "no-store",
+      headers,
       signal: controller?.signal,
     });
 

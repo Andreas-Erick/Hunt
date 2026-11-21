@@ -174,6 +174,11 @@ describe("Macro Architecture & State Topology Invariants (Prompts 00 & 01)", () 
       const pureDomainFiles = [
         "lib/domainTypes.ts",
         "lib/dateUtils.ts",
+        "lib/habitDay.ts",
+        "lib/questProgress.ts",
+        "lib/focusSession.ts",
+        "lib/taskQueue.ts",
+        "mobile/huntCore.ts",
         "lib/questAccents.ts",
         "lib/reviewAnalytics.ts",
         "lib/questScience.ts",
