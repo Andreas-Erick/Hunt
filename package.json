@@ -1,6 +1,6 @@
 {
   "name": "hunt-command-hud",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "build:mobile-core": "node scripts/build-mobile-core.mjs",
     "start": "next start",
     "lint": "eslint --max-warnings 0 src",
     "typecheck": "tsc --noEmit",
@@ -35,6 +36,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "esbuild": "0.21.5",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.6",
     "fake-indexeddb": "^6.2.8",

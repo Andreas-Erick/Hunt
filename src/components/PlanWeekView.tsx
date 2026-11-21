@@ -2,6 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -14,13 +15,11 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  db,
   accentStyle,
   dateFromKey,
   dateKeyFromOffset,
   formatChronoMMSS,
   isMissedHabitTask,
-  loadSortedQuests,
   toLocalDateKey,
   type Quest,
   type Task,
@@ -138,8 +137,8 @@ export function PlanWeekView() {
     }))
   );
 
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
-  const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
+  const quests = useLiveQuery(reads.quests, []);
+  const allTasks = useLiveQuery(reads.allTasks, []);
 
   // Day offset from Today (0 = centered on Today: [Today-2, Today-1, Today, Today+1, Today+2])
   const [dayOffset, setDayOffset] = useState(0);

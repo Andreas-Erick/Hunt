@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
 import {
   Volume2,
@@ -10,7 +11,7 @@ import {
   Smartphone,
   TriangleAlert,
 } from "lucide-react";
-import { db, formatChronoMMSS } from "@/lib/db";
+import { formatChronoMMSS } from "@/lib/db";
 import { APP_VERSION } from "@/lib/version";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
@@ -46,7 +47,7 @@ function ActiveSessionPill() {
     );
 
   const activeTask = useLiveQuery(
-    () => (activeTaskId ? db.tasks.get(activeTaskId) : undefined),
+    () => reads.task(activeTaskId),
     [activeTaskId]
   );
 

@@ -2,21 +2,13 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { db, loadSortedQuests } from "@/lib/db";
-import {
-  habitTaskId,
-  isMissedHabitTask,
-  isOpenTask,
-  isTaskVisibleToday,
-  toLocalDateKey,
-} from "@/lib/dateUtils";
+import { reads } from "@/lib/reads";
+import { isMissedHabitTask, toLocalDateKey } from "@/lib/dateUtils";
 import {
   fromFocusSession,
   toFocusSession,
   type ActiveFocusState,
   type FocusSession,
-  type Habit,
-  type Quest,
   type QuestAccent,
   type Task,
 } from "@/lib/domainTypes";
@@ -25,29 +17,43 @@ import {
   recordBreadcrumb,
   summarizeError,
 } from "@/lib/diagnostics";
+import { nextFocusStamp, transitionFocus } from "@/lib/focusSession";
+import {
+  localStore,
+  onLocalChange,
+  type HabitChanges,
+  type QuestChanges,
+} from "@/lib/localStore";
 import {
   SnapshotFormatError,
   describeSyncError,
-  hasLocalLogTombstone,
-  hasLocalTaskTombstone,
   importAndMergeSnapshotJson,
+  httpSyncTransport,
   performServerSync,
-  recordDeletedHabitTombstone,
-  recordDeletedLogTombstone,
-  recordDeletedQuestTombstone,
-  recordDeletedTaskTombstone,
   type SyncErrorCode,
+  type SyncTransport,
 } from "@/lib/syncEngine";
+import {
+  createSyncScheduler,
+  DEFAULT_BASE_BACKOFF_MS,
+  DEFAULT_MAX_BACKOFF_MS,
+  DEFAULT_SYNC_DEBOUNCE_MS,
+  type SyncScheduler,
+} from "@/lib/syncScheduler";
 import {
   compareRank,
   isSafeSyncId,
-  losingSessionEndAt,
   MAX_ENTITY_ID_LENGTH,
-  MAX_HABIT_TITLE_LENGTH,
-  MAX_QUEST_TITLE_LENGTH,
-  MAX_TASK_TITLE_LENGTH,
   type SyncPayload,
 } from "@/lib/syncTypes";
+import { pickNextFocusTask } from "@/lib/taskQueue";
+
+export {
+  orderAfterDrop,
+  pickNextFocusTask,
+  planRankMoves,
+  sessionLogId,
+} from "@/lib/taskQueue";
 
 export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "telemetry" | "guide" | "log";
 
@@ -64,13 +70,7 @@ export interface CompletedDirectiveFeedback {
   timestamp: number;
 }
 
-/** Quest fields the edit drawer can change (updateQuest). */
-export type QuestChanges = Partial<
-  Pick<Quest, "title" | "description" | "accentColor" | "targetWeeklyHours">
->;
-
-/** Daily habit fields the edit form can change (updateHabit). */
-export type HabitChanges = Partial<Pick<Habit, "title" | "notes" | "questId">>;
+export type { HabitChanges, QuestChanges } from "@/lib/localStore";
 
 interface CommandStoreState {
   activeView: HudView;
@@ -205,6 +205,12 @@ interface CommandStoreState {
    * Returns the number of newly created tasks.
    */
   materializeDailyHabits: (dateKey?: string) => Promise<number>;
+  /**
+   * Today's (or `dateKey`'s) daily instance of one habit, materializing it first
+   * when missing. Undefined when the habit is gone, the instance is tombstoned,
+   * or the local write failed (actionError is then set).
+   */
+  ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
 
   // Time Log Operations
   /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -212,36 +218,11 @@ interface CommandStoreState {
 }
 
 /** Trailing debounce for mutation-triggered syncs. */
-export const SYNC_DEBOUNCE_MS = 300;
+export const SYNC_DEBOUNCE_MS = DEFAULT_SYNC_DEBOUNCE_MS;
 /** Auto-sync pause after the first consecutive transient failure (before jitter); doubles per failure. */
-export const AUTO_SYNC_BASE_BACKOFF_MS = 5_000;
+export const AUTO_SYNC_BASE_BACKOFF_MS = DEFAULT_BASE_BACKOFF_MS;
 /** Longest auto-sync pause after transient failures (before jitter). */
-export const AUTO_SYNC_MAX_BACKOFF_MS = 60_000;
-/** Max coalesced reruns inside one syncNow() before handing over to requestSync(). */
-const MAX_COALESCED_RERUNS = 3;
-
-/**
- * Deterministic TimeLog id for one focus session. The same session flushed on
- * two devices (or twice on one) yields the same id, so the union merge keeps
- * exactly one log for it.
- */
-export function sessionLogId(taskId: string, sessionStartedAt: number): string {
-  return `log-${sessionStartedAt}-${taskId}`;
-}
-
-/**
- * R6: stamp for a local write to an existing row. Never older than the row it
- * replaces (the row may carry a newer stamp from a device whose clock is ahead),
- * so the edit cannot silently lose last-write-wins on the next sync.
- */
-function nextStamp(row: { updatedAt?: number } | null | undefined): number {
-  return Math.max(Date.now(), (row?.updatedAt || 0) + 1);
-}
-
-/** R6 for the focus state: a local focus change is always newer than the focus it replaces. */
-function nextFocusStamp(get: StoreGet): number {
-  return Math.max(Date.now(), (get().focusUpdatedAt || 0) + 1);
-}
+export const AUTO_SYNC_MAX_BACKOFF_MS = DEFAULT_MAX_BACKOFF_MS;
 
 /** Projects store focus fields into the validated FocusSession state union. */
 function readStoreFocusSession(
@@ -281,296 +262,6 @@ function readStoreActiveFocus(
   >
 ): ActiveFocusState {
   return fromFocusSession(readStoreFocusSession(state));
-}
-
-/**
- * Trimmed `title` cut to at most `max` UTF-16 units without splitting a
- * surrogate pair (the same cut the sync validator applies), so the server
- * never has to change a title this store saved.
- */
-function clampTitle(title: string, max: number): string {
-  const text = title.trim();
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
-/**
- * Writes `changes` to an existing task with an R6 stamp, reading the row in
- * the same rw transaction (so a flush or sync that just wrote it is seen).
- * Returns false when the task does not exist.
- */
-async function writeTask(
-  taskId: string,
-  changes: Partial<Omit<Task, "id" | "updatedAt">>
-): Promise<boolean> {
-  return db.transaction("rw", db.tasks, async () => {
-    const row = await db.tasks.get(taskId);
-    if (!row) return false;
-    await db.tasks.update(taskId, { ...changes, updatedAt: nextStamp(row) });
-    return true;
-  });
-}
-
-/**
- * SHARED "next focus task" rule: among QUEUED tasks that are unscheduled or
- * scheduled for `todayKey` or earlier, the first quest task in rank order
- * (compareRank: rank, ties by id), else the first other task; null when none.
- * Pure: `tasks` is not modified.
- */
-export function pickNextFocusTask(
-  tasks: readonly Task[],
-  todayKey: string
-): Task | null {
-  const today = tasks
-    .filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey))
-    .sort(compareRank);
-  return today.find((t) => t.questId !== null) ?? today[0] ?? null;
-}
-
-/**
- * Pure helper: builds the deterministic daily task row for a habit on `dateKey`.
- * Uses `updatedAt = habit.createdAt || 1` and `rank = habit.rank` so laptop and
- * phone materialize identical rows offline and any real user action wins LWW.
- */
-function buildHabitTaskRow(habit: Habit, dateKey: string): Task {
-  const stamp = Math.max(1, Number(habit.createdAt) || 1);
-  return {
-    id: habitTaskId(habit.id, dateKey),
-    title: habit.title,
-    notes: habit.notes || "",
-    questId: habit.questId,
-    habitId: habit.id,
-    status: "queued",
-    rank: Number.isFinite(habit.rank) ? habit.rank : RANK_STEP,
-    accumulatedSeconds: 0,
-    scheduledDate: dateKey,
-    createdAt: stamp,
-    updatedAt: stamp,
-  };
-}
-
-/**
- * Idempotently materializes today's daily habit tasks into IndexedDB.
- * Skips any habit whose task for `dateKey` already exists or is tombstoned.
- */
-async function materializeHabitsIntoDB(dateKey: string): Promise<number> {
-  if ((await db.habits.count()) === 0) return 0;
-  return db.transaction("rw", db.habits, db.tasks, async () => {
-    const habits = (await db.habits.toArray()).sort(compareRank);
-    if (habits.length === 0) return 0;
-    const candidateIds = habits.map((h) => habitTaskId(h.id, dateKey));
-    const existing = await db.tasks.bulkGet(candidateIds);
-    const toAdd: Task[] = [];
-    habits.forEach((habit, i) => {
-      const taskId = candidateIds[i];
-      if (existing[i] || hasLocalTaskTombstone(taskId)) return;
-      toAdd.push(buildHabitTaskRow(habit, dateKey));
-    });
-    if (toAdd.length > 0) {
-      await db.tasks.bulkPut(toAdd);
-    }
-    return toAdd.length;
-  });
-}
-
-/**
- * Flush current running burst into IndexedDB TimeLog and increment task's accumulatedSeconds.
- * Returns the burst seconds flushed (0 when nothing was flushed, also for a
- * missing or non-finite session start, so a corrupted state never logs NaN).
- *
- * `endAt` is the session's end (default: now). runSyncOnce passes an earlier
- * end when the session was replaced on another device before we found out
- * (shared rule R4, see losingSessionEndAt).
- *
- * Atomic (read-modify-write inside one rw transaction) and idempotent (shared
- * rule R3): nothing is logged or counted when the session's log id exists or is
- * tombstoned, or any log has the same task + startTime (e.g. logged by the
- * phone, or by a concurrent flush here).
- */
-async function flushActiveBurst(
-  taskId: string,
-  sessionStartedAt: number | null,
-  endAt?: number
-): Promise<number> {
-  if (!sessionStartedAt || !Number.isFinite(sessionStartedAt)) return 0;
-  const logId = sessionLogId(taskId, sessionStartedAt);
-  if (hasLocalLogTombstone(logId)) return 0;
-
-  return db.transaction("rw", db.tasks, db.quests, db.timeLogs, async () => {
-    const task = await db.tasks.get(taskId);
-    if (!task) return 0;
-
-    if (await db.timeLogs.get(logId)) return 0;
-    const alreadyLogged = await db.timeLogs
-      .where("taskId")
-      .equals(taskId)
-      .filter((l) => l.startTime === sessionStartedAt)
-      .count();
-    if (alreadyLogged > 0) return 0;
-
-    const end =
-      typeof endAt === "number" && Number.isFinite(endAt) ? endAt : Date.now();
-    const elapsedSeconds = Math.max(1, Math.round((end - sessionStartedAt) / 1000));
-
-    const quest = task.questId ? await db.quests.get(task.questId) : undefined;
-    const questCodeSnapshot = quest ? quest.title : "Other";
-    const accentColorSnapshot: QuestAccent | "slate" = quest
-      ? quest.accentColor
-      : "slate";
-
-    await db.tasks.update(taskId, {
-      accumulatedSeconds: (task.accumulatedSeconds || 0) + elapsedSeconds,
-      updatedAt: nextStamp(task),
-    });
-
-    await db.timeLogs.add({
-      id: logId,
-      taskId: task.id,
-      taskTitleSnapshot: task.title,
-      questId: task.questId,
-      questCodeSnapshot,
-      accentColorSnapshot,
-      startTime: sessionStartedAt,
-      endTime: end,
-      durationSeconds: elapsedSeconds,
-      dateKey: toLocalDateKey(end),
-    });
-
-    return elapsedSeconds;
-  });
-}
-
-/** Sets an 'active' task back to 'queued'. Returns true if a row was written. */
-async function requeueIfActive(taskId: string): Promise<boolean> {
-  return db.transaction("rw", db.tasks, async () => {
-    const task = await db.tasks.get(taskId);
-    if (!task || task.status !== "active") return false;
-    await db.tasks.update(taskId, { status: "queued", updatedAt: nextStamp(task) });
-    return true;
-  });
-}
-
-/** Distance between neighbouring ranks for rows placed at the top/bottom. */
-const RANK_STEP = 1000;
-/** Smallest rank gap per row placed between two kept rows. */
-const MIN_RANK_GAP = 1e-6;
-
-const rankValue = (t: { rank?: unknown }): number => Number(t.rank) || 0;
-
-/**
- * Minimal-move rank plan for showing `rows` in exactly this order (rank order
- * with ties by id, see compareRank). Returns the new rank of every row that has
- * to change; all other rows keep their rank and are not written.
- *
- * Keeps the largest set of rows whose current ranks are already in the desired
- * order (a longest increasing subsequence under compareRank, restricted to
- * choices that leave room for the rows in between) and places each other row
- * strictly between its final neighbours: a run of k rows between kept ranks a
- * and b gets a + (b - a) * j / (k + 1); above the first kept row next - 1000·j;
- * below the last prev + 1000·j. A single drag therefore rewrites one row.
- * `preferMovedId` (the dragged row) is the one rewritten when several minimal
- * plans exist. Only if no valid plan results (exhausted float precision)
- * everything is renumbered (i + 1) * 1000.
- */
-export function planRankMoves(
-  rows: ReadonlyArray<Pick<Task, "id" | "rank">>,
-  preferMovedId?: string
-): Map<string, number> {
-  const n = rows.length;
-  const plan = new Map<string, number>();
-  if (n === 0) return plan;
-
-  const r = rows.map(rankValue);
-  // Score = 2 per kept row, 1 for keeping the preferred-to-move row: the most
-  // kept rows first, then the plan that rewrites the dragged row.
-  const weight: number[] = rows.map((t) => (t.id === preferMovedId ? 1 : 2));
-  const canKeepBoth = (i: number, j: number): boolean => {
-    const between = j - i - 1;
-    if (between === 0) return compareRank(rows[i], rows[j]) < 0;
-    return (r[j] - r[i]) / (between + 1) >= MIN_RANK_GAP;
-  };
-
-  // score[j]: best plan for rows[0..j] that keeps row j (rows above the first
-  // kept row always fit at the top, rows below the last at the bottom).
-  const score = weight.slice();
-  const prev = new Array<number>(n).fill(-1);
-  for (let j = 1; j < n; j++) {
-    for (let i = 0; i < j; i++) {
-      if (score[i] + weight[j] > score[j] && canKeepBoth(i, j)) {
-        score[j] = score[i] + weight[j];
-        prev[j] = i;
-      }
-    }
-  }
-  let last = 0;
-  for (let j = 1; j < n; j++) if (score[j] > score[last]) last = j;
-  const kept: number[] = [];
-  for (let j = last; j !== -1; j = prev[j]) kept.push(j);
-  kept.reverse();
-
-  const finalRank = r.slice();
-  const first = kept[0];
-  for (let idx = first - 1, step = 1; idx >= 0; idx--, step++) {
-    finalRank[idx] = r[first] - RANK_STEP * step;
-  }
-  for (let m = 0; m + 1 < kept.length; m++) {
-    const a = kept[m];
-    const b = kept[m + 1];
-    const between = b - a - 1;
-    for (let j = 1; j <= between; j++) {
-      finalRank[a + j] = r[a] + ((r[b] - r[a]) * j) / (between + 1);
-    }
-  }
-  const tail = kept[kept.length - 1];
-  for (let idx = tail + 1, step = 1; idx < n; idx++, step++) {
-    finalRank[idx] = r[tail] + RANK_STEP * step;
-  }
-
-  const ordered =
-    finalRank.every(Number.isFinite) &&
-    rows.every(
-      (row, i) =>
-        i === 0 ||
-        compareRank(
-          { id: rows[i - 1].id, rank: finalRank[i - 1] },
-          { id: row.id, rank: finalRank[i] }
-        ) < 0
-    );
-  if (!ordered) {
-    for (let i = 0; i < n; i++) finalRank[i] = (i + 1) * RANK_STEP;
-  }
-
-  rows.forEach((row, i) => {
-    if (row.rank !== finalRank[i]) plan.set(row.id, finalRank[i]);
-  });
-  return plan;
-}
-
-/**
- * Global queue order after dropping `draggedId` onto `targetId` in a list that
- * shows a subset (`listIds`, in display order) of all pending tasks
- * (`allPendingIds`, in rank order). The dragged task lands next to the target
- * (before it when dragged upwards in that list, after it when dragged
- * downwards); every other task keeps its place, so reorderTaskQueue rewrites
- * exactly one row and tasks outside the list are never touched.
- * Returns null when the drop changes nothing.
- */
-export function orderAfterDrop(
-  allPendingIds: readonly string[],
-  listIds: readonly string[],
-  draggedId: string,
-  targetId: string
-): string[] | null {
-  const from = listIds.indexOf(draggedId);
-  const to = listIds.indexOf(targetId);
-  if (from === -1 || to === -1 || from === to) return null;
-  const order = allPendingIds.filter((id) => id !== draggedId);
-  let at = order.indexOf(targetId);
-  if (at === -1) return null;
-  if (to > from) at += 1;
-  order.splice(at, 0, draggedId);
-  return order;
 }
 
 type StoreGet = () => CommandStoreState;
@@ -653,68 +344,55 @@ async function runAction(
 }
 
 /**
- * Reconciles a merged payload's `activeFocus` against this device's current focus:
- * flushes any losing local running burst using R4 (`losingSessionEndAt`), requeues
- * a replaced active task, and appends any winning remote focus fields to `patch`.
+ * Applies a merged payload's `activeFocus` to this device (the "remote" focus
+ * transition): a losing local running burst is logged with its R4 end and a
+ * replaced active task requeued, then the winning focus is added to `patch`.
+ * Returns whether local rows were written (they still need to be pushed).
  */
 async function reconcileMergedFocus(
   merged: SyncPayload,
   get: StoreGet,
   patch: Partial<CommandStoreState>
 ): Promise<boolean> {
-  let wroteLocal = false;
   const remote = merged.activeFocus;
-  const before = get();
-  if (remote && (remote.updatedAt || 0) > (before.focusUpdatedAt || 0)) {
-    const beforeSession = readStoreFocusSession(before);
-    const remoteSession = toFocusSession(remote);
-    const sameSession =
-      remote.activeTaskId === before.activeTaskId &&
-      remote.sessionStartedAt === before.sessionStartedAt;
-
-    // A newer focus from a DIFFERENT session replaces ours: first flush our own
-    // running burst (idempotent, so a burst the other device already logged is
-    // not counted twice) and give our task back to the queue. The burst ends
-    // when the other device moved on, not now (R4: we may learn it hours late).
-    if (!sameSession && beforeSession.status !== "idle") {
-      try {
-        if (beforeSession.status === "running") {
-          const endAt = losingSessionEndAt(
-            beforeSession.taskId,
-            beforeSession.sessionStartedAt,
-            remote,
-            merged.timeLogs,
-            Date.now()
-          );
-          if (
-            (await flushActiveBurst(
-              beforeSession.taskId,
-              beforeSession.sessionStartedAt,
-              endAt
-            )) > 0
-          ) {
-            wroteLocal = true;
-          }
-        }
-        if (remote.activeTaskId !== beforeSession.taskId) {
-          if (await requeueIfActive(beforeSession.taskId)) wroteLocal = true;
-        }
-      } catch (err) {
-        logDiagnostic({
-          level: "ERROR",
-          domain: "sync",
-          event: "flush_before_remote_focus_failed",
-          context: summarizeError(err),
-        });
-      }
-    }
-
-    // A local focus change made while we were awaiting is newer than `remote`.
-    if (get().focusUpdatedAt === before.focusUpdatedAt) {
-      Object.assign(patch, focusSessionToStorePatch(remoteSession));
-    }
+  if (!remote) return false;
+  const before = readStoreFocusSession(get());
+  const next = transitionFocus(
+    before,
+    { type: "remote", remote, timeLogs: merged.timeLogs },
+    Date.now()
+  );
+  if (next.session === before) return false;
+  let wroteLocal = false;
+  try {
+    // The sync's own rerun pushes these writes (no debounced extra sync).
+    wroteLocal = await localStore.applyFocusEffects(next.effects, { notify: false });
+  } catch (err) {
+    logDiagnostic({
+      level: "ERROR",
+      domain: "sync",
+      event: "flush_before_remote_focus_failed",
+      context: summarizeError(err),
+    });
+  }
+  // A local focus change made while we were awaiting is newer than `remote`.
+  if (get().focusUpdatedAt === before.updatedAt) {
+    Object.assign(patch, focusSessionToStorePatch(next.session));
   }
   return wroteLocal;
+}
+
+/**
+ * Store fields for a session produced by a LOCAL focus transition, re-stamped
+ * (R6) against the focus as it is now: an await between the transition and
+ * this commit may have let a newer focus arrive.
+ */
+function commitLocalSession(get: StoreGet, session: FocusSession) {
+  const current = readStoreFocusSession(get());
+  return focusSessionToStorePatch({
+    ...session,
+    updatedAt: Math.max(session.updatedAt, nextFocusStamp(current, Date.now())),
+  });
 }
 
 /**
@@ -726,7 +404,7 @@ async function runSyncOnce(
   get: StoreGet,
   set: StoreSet
 ): Promise<{ error: SyncErrorCode | null; wroteLocal: boolean }> {
-  const res = await performServerSync(readStoreActiveFocus(get()));
+  const res = await performServerSync(readStoreActiveFocus(get()), syncTransport);
 
   if (!res.ok) {
     setChanged(get, set, { isSyncOnline: false, syncError: res.error });
@@ -749,7 +427,7 @@ async function runSyncOnce(
   // If sync brought in new habits from another device, ensure today's tasks exist.
   if (res.changed) {
     try {
-      const added = await materializeHabitsIntoDB(toLocalDateKey());
+      const added = await localStore.materializeHabits(toLocalDateKey(), { notify: false });
       if (added > 0) wroteLocal = true;
     } catch (err) {
       recordMaterializeFailure(err);
@@ -768,15 +446,12 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
   const session = readStoreFocusSession(get());
   if (session.status === "idle") return;
   const activeTaskId = session.taskId;
+  const cleared = () =>
+    commitLocalSession(get, transitionFocus(session, { type: "clear" }, Date.now()).session);
 
-  const currentTask = await db.tasks.get(activeTaskId);
+  const currentTask = await reads.task(activeTaskId);
   if (!currentTask) {
-    set(
-      focusSessionToStorePatch({
-        status: "idle",
-        updatedAt: nextFocusStamp(get),
-      })
-    );
+    set(cleared());
     get().requestSync();
     return;
   }
@@ -785,48 +460,43 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
   // this device's running session is still logged and focus still clears.
   const alreadyCompleted = currentTask.status === "completed";
 
-  const now = Date.now();
   let burstSeconds = 0;
   if (session.status === "running") {
-    burstSeconds = await flushActiveBurst(activeTaskId, session.sessionStartedAt);
+    burstSeconds = await localStore.flushBurst(activeTaskId, session.sessionStartedAt);
   } else if (!alreadyCompleted && (currentTask.accumulatedSeconds || 0) === 0) {
-    burstSeconds = await flushActiveBurst(activeTaskId, now - 1000);
+    burstSeconds = await localStore.flushBurst(activeTaskId, Date.now() - 1000);
   }
 
-  const updatedTask = await db.tasks.get(activeTaskId);
+  const updatedTask = await reads.task(activeTaskId);
   const totalTaskSeconds =
     updatedTask?.accumulatedSeconds ||
     currentTask.accumulatedSeconds + burstSeconds;
 
   const quest = currentTask.questId
-    ? await db.quests.get(currentTask.questId)
+    ? await reads.quest(currentTask.questId)
     : undefined;
 
   const doneTs = Date.now();
   if (!alreadyCompleted) {
-    await writeTask(activeTaskId, { status: "completed", completedAt: doneTs });
+    await localStore.completeTask(activeTaskId, doneTs);
   }
 
   const nextTask = pickNextFocusTask(
-    await db.tasks.where("status").equals("queued").toArray(),
+    await reads.queuedTasks(),
     toLocalDateKey(doneTs)
   );
 
-  const nextTs = Date.now();
   const feedback: CompletedDirectiveFeedback = {
     taskTitle: currentTask.title,
     questCode: quest ? quest.title : "Other",
     accent: quest ? quest.accentColor : "slate",
     loggedSeconds: totalTaskSeconds,
     nextTaskTitle: nextTask ? nextTask.title : null,
-    timestamp: nextTs,
+    timestamp: Date.now(),
   };
   const currentView = get().activeView;
   set({
-    ...focusSessionToStorePatch({
-      status: "idle",
-      updatedAt: nextFocusStamp(get),
-    }),
+    ...cleared(),
     activeView:
       currentView === "focus" ? (nextTask ? "focus" : "command") : currentView,
     lastCompletedFeedback: feedback,
@@ -869,24 +539,15 @@ function sanitizePersistedFocus(persisted: Record<string, unknown>): PersistedFo
   };
 }
 
-// Module-level sync scheduler state (one store per page).
-let syncInFlight: Promise<boolean> | null = null;
-let syncAgain = false;
-let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/** Single-flight guard for completeActiveTask (one store per page). */
 let completeInFlight: Promise<void> | null = null;
-/** Failed syncs in a row (reset by a success). */
-let consecutiveSyncFailures = 0;
-/** autoSync() sends nothing before this time (Infinity: until requestSync() or a success). */
-let autoSyncPausedUntil = 0;
-/** A mutation's debounced sync joined a sync already in flight (its coalesced rerun). */
-let editJoinedInFlightSync = false;
 
 /**
  * Failures worth retrying on their own: network/timeout, local IndexedDB,
  * HTTP 408, 429 and 5xx except 507. Every other code (400, 401, 403, 413, 422,
  * 507, a bad response, ...) fails the same way until something changes.
  */
-function isTransientSyncError(code: SyncErrorCode): boolean {
+export function isTransientSyncError(code: SyncErrorCode): boolean {
   if (code === "unreachable" || code === "local_db") return true;
   const m = /^http_(\d+)$/.exec(code);
   if (!m) return false;
@@ -894,658 +555,279 @@ function isTransientSyncError(code: SyncErrorCode): boolean {
   return status === 408 || status === 429 || (status >= 500 && status <= 599 && status !== 507);
 }
 
-/**
- * Auto-sync backoff after a sync attempt (`failure` null = success): transient
- * failures pause for min(60 s, 5 s · 2^(n-1)) with 50–100 % jitter,
- * deterministic ones until requestSync() or a successful sync.
- */
-function recordSyncOutcome(failure: SyncErrorCode | null): void {
-  if (failure === null) {
-    consecutiveSyncFailures = 0;
-    autoSyncPausedUntil = 0;
-    return;
-  }
-  consecutiveSyncFailures += 1;
-  if (!isTransientSyncError(failure)) {
-    autoSyncPausedUntil = Infinity;
-    return;
-  }
-  const backoff = Math.min(
-    AUTO_SYNC_MAX_BACKOFF_MS,
-    AUTO_SYNC_BASE_BACKOFF_MS * 2 ** (consecutiveSyncFailures - 1)
-  );
-  autoSyncPausedUntil = Date.now() + backoff * (0.5 + Math.random() / 2);
+/** Where sync passes are sent; tests swap in an in-memory server. */
+let syncTransport: SyncTransport = httpSyncTransport;
+
+/** Replaces the sync transport (null restores the HTTP adapter). */
+export function setSyncTransport(transport: SyncTransport | null): void {
+  syncTransport = transport ?? httpSyncTransport;
 }
+
+let scheduler: SyncScheduler | null = null;
 
 /** Deterministically cancels any pending debounced sync timer and resets transient scheduler backoff. */
 export function disposeCommandStoreScheduler(): void {
-  if (syncDebounceTimer !== null) {
-    clearTimeout(syncDebounceTimer);
-    syncDebounceTimer = null;
-  }
-  syncAgain = false;
-  consecutiveSyncFailures = 0;
-  autoSyncPausedUntil = 0;
-  editJoinedInFlightSync = false;
+  scheduler?.dispose();
 }
 
 export const useCommandStore = create<CommandStoreState>()(
   persist(
-    (set, get) => ({
-      activeView: "command",
-      activeTaskId: null,
-      isRunning: false,
-      sessionStartedAt: null,
-      focusUpdatedAt: 0,
-      lastCompletedFeedback: null,
-
-      lastSyncedAt: null,
-      isSyncOnline: false,
-      lanUrls: [],
-      phoneLastSeenAt: null,
-      syncError: null,
-      actionError: null,
-      discardGuard: null,
-
-      syncNow: () => {
-        if (syncInFlight) {
-          // Coalesce: the running sync does exactly one more pass afterwards.
-          syncAgain = true;
-          return syncInFlight;
-        }
-        if (syncDebounceTimer) {
-          clearTimeout(syncDebounceTimer);
-          syncDebounceTimer = null;
-        }
-
-        syncInFlight = (async () => {
-          let failure: SyncErrorCode | null = null;
-          try {
-            let passes = 0;
-            do {
-              syncAgain = false;
-              passes += 1;
-              const result = await runSyncOnce(get, set);
-              failure = result.error;
-              if (failure) {
-                // A rerun would fail the same way; autoSync() retries with backoff.
-                syncAgain = false;
-                break;
-              }
-              if (result.wroteLocal) syncAgain = true;
-            } while (syncAgain && passes <= MAX_COALESCED_RERUNS);
-          } catch (err) {
-            logDiagnostic({
-              level: "ERROR",
-              domain: "sync",
-              event: "sync_loop_failed",
-              context: summarizeError(err),
-            });
-            failure = "local_db";
-          } finally {
-            syncInFlight = null;
-          }
-          recordSyncOutcome(failure);
-          // A failed pass drops the coalesced rerun; an edit that joined it
-          // still gets one attempt of its own (it may fix what failed).
-          const retryForEdit = failure !== null && editJoinedInFlightSync;
-          editJoinedInFlightSync = false;
-          if (syncAgain || retryForEdit) {
-            syncAgain = false;
-            get().requestSync();
-          }
-          return failure === null;
-        })();
-        return syncInFlight;
-      },
-
-      autoSync: () =>
-        Date.now() < autoSyncPausedUntil ? Promise.resolve(false) : get().syncNow(),
-
-      requestSync: () => {
-        // A local edit may be what a paused (deterministic) failure was waiting for.
-        autoSyncPausedUntil = 0;
-        if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
-        syncDebounceTimer = setTimeout(() => {
-          syncDebounceTimer = null;
-          if (syncInFlight) editJoinedInFlightSync = true;
-          get()
-            .syncNow()
-            .catch(() => undefined);
-        }, SYNC_DEBOUNCE_MS);
-      },
-
-      importSnapshot: async (jsonText: string): Promise<SnapshotImportResult> => {
-        try {
-          const merged = await importAndMergeSnapshotJson(
-            jsonText,
-            readStoreActiveFocus(get())
-          );
-          const patch: Partial<CommandStoreState> = {};
-          await reconcileMergedFocus(merged, get, patch);
-          setChanged(get, set, patch);
-          try {
-            await materializeHabitsIntoDB(toLocalDateKey());
-          } catch (err) {
-            recordMaterializeFailure(err);
-          }
-          return { ok: true, merged };
-        } catch (err) {
-          if (err instanceof SnapshotFormatError || err instanceof SyntaxError) {
-            return { ok: false, reason: "bad_format", error: err };
-          }
-          recordBreadcrumb({
+    (set, get) => {
+      const sync = createSyncScheduler<SyncErrorCode>({
+        runOnce: () => runSyncOnce(get, set),
+        isTransient: isTransientSyncError,
+        loopErrorCode: "local_db",
+        onLoopError: (err) =>
+          logDiagnostic({
             level: "ERROR",
             domain: "sync",
-            event: "snapshot_import_failed",
+            event: "sync_loop_failed",
             context: summarizeError(err),
-          });
-          console.error("[hunt] snapshot_import_failed", err);
-          return { ok: false, reason: "storage", error: err };
-        }
-      },
+          }),
+        // Through the store, so a replaced requestSync (tests) is honoured.
+        requestFollowUp: () => get().requestSync(),
+        syncFromDebounce: () => get().syncNow(),
+      });
+      scheduler = sync;
+      return {
+        activeView: "command",
+        activeTaskId: null,
+        isRunning: false,
+        sessionStartedAt: null,
+        focusUpdatedAt: 0,
+        lastCompletedFeedback: null,
 
-      clearActionError: () => set({ actionError: null }),
-      setDiscardGuard: (guard) => set({ discardGuard: guard }),
-      setActiveView: (view) => {
-        const { activeView, discardGuard } = get();
-        if (view === activeView) return;
-        if (discardGuard && !discardGuard()) return;
-        set({ activeView: view });
-      },
-      clearFeedback: () => set({ lastCompletedFeedback: null }),
+        lastSyncedAt: null,
+        isSyncOnline: false,
+        lanUrls: [],
+        phoneLastSeenAt: null,
+        syncError: null,
+        actionError: null,
+        discardGuard: null,
 
-      initializeFocus: async (requestedTaskId?: string) => {
-        await runAction(set, "initializeFocus", async () => {
-          const session = readStoreFocusSession(get());
+        syncNow: () => sync.syncNow(),
+        autoSync: () => sync.autoSync(),
+        requestSync: () => sync.request(),
 
-          if (
-            requestedTaskId &&
-            session.status === "running" &&
-            session.taskId === requestedTaskId
-          ) {
-            // Already running on this task: keep the session (restarting it would
-            // silently drop the time since sessionStartedAt).
-            set({ activeView: "focus", lastCompletedFeedback: null });
-            return;
-          }
-
-          if (session.status !== "idle" && session.taskId !== requestedTaskId) {
-            if (session.status === "running") {
-              await flushActiveBurst(session.taskId, session.sessionStartedAt);
-            }
-            await requeueIfActive(session.taskId);
-          }
-
-          let targetId = requestedTaskId;
-          if (!targetId) {
-            const queued = await db.tasks.where("status").equals("queued").toArray();
-            const todayKey = toLocalDateKey();
-            // Nothing for today: start the first queued task of any day, never a
-            // missed daily habit day (that is history, not open work).
-            const chosen =
-              pickNextFocusTask(queued, todayKey) ??
-              queued
-                .filter((t) => !isMissedHabitTask(t, todayKey))
-                .sort(compareRank)[0];
-            if (!chosen) return;
-            targetId = chosen.id;
-          }
-
-          const startedAt = Date.now();
-          await writeTask(targetId, { status: "active" });
-
-          set({
-            ...focusSessionToStorePatch({
-              status: "running",
-              taskId: targetId,
-              sessionStartedAt: startedAt,
-              updatedAt: nextFocusStamp(get),
-            }),
-            activeView: "focus",
-            lastCompletedFeedback: null,
-          });
-
-          get().requestSync();
-        });
-      },
-
-      engageTimer: () => {
-        try {
-          const session = readStoreFocusSession(get());
-          if (session.status !== "paused") return;
-          set(
-            focusSessionToStorePatch({
-              status: "running",
-              taskId: session.taskId,
-              sessionStartedAt: Date.now(),
-              updatedAt: nextFocusStamp(get),
-            })
-          );
-          get().requestSync();
-        } catch (err) {
-          reportActionFailure(set, "engageTimer", err);
-        }
-      },
-
-      suspendTimer: async () => {
-        await runAction(set, "suspendTimer", async () => {
-          const session = readStoreFocusSession(get());
-          if (session.status !== "running") return;
-
-          await flushActiveBurst(session.taskId, session.sessionStartedAt);
-
-          set(
-            focusSessionToStorePatch({
-              status: "paused",
-              taskId: session.taskId,
-              updatedAt: nextFocusStamp(get),
-            })
-          );
-
-          get().requestSync();
-        });
-      },
-
-      completeActiveTask: () => {
-        // Single-flight: a double click (or ten) completes the task once.
-        if (!completeInFlight) {
-          completeInFlight = runAction(set, "completeActiveTask", () =>
-            completeFocusedTask(get, set)
-          ).then(() => {
-            completeInFlight = null;
-          });
-        }
-        return completeInFlight;
-      },
-
-      completeTaskById: async (taskId: string) => {
-        await runAction(set, "completeTaskById", async () => {
-          if (get().activeTaskId === taskId) {
-            await get().completeActiveTask();
-            return;
-          }
-          await writeTask(taskId, { status: "completed", completedAt: Date.now() });
-          get().requestSync();
-        });
-      },
-
-      reopenTaskById: async (taskId: string) => {
-        await runAction(set, "reopenTaskById", async () => {
-          await writeTask(taskId, { status: "queued", completedAt: undefined });
-          get().requestSync();
-        });
-      },
-
-      returnToQueue: async () => {
-        await runAction(set, "returnToQueue", async () => {
-          const session = readStoreFocusSession(get());
-          if (session.status !== "idle") {
-            if (session.status === "running") {
-              await flushActiveBurst(session.taskId, session.sessionStartedAt);
-            }
-            await writeTask(session.taskId, { status: "queued" });
-          }
-          set({
-            ...focusSessionToStorePatch({
-              status: "idle",
-              updatedAt: nextFocusStamp(get),
-            }),
-            activeView: "command",
-          });
-          get().requestSync();
-        });
-      },
-
-      createTask: ({ title, notes = "", questId, promoteToTop = true, scheduledDate }) =>
-        runAction(set, "createTask", async () => {
-          const trimmed = clampTitle(title, MAX_TASK_TITLE_LENGTH);
-          if (!trimmed) return;
-
-          const queued = (
-            await db.tasks.where("status").anyOf(["queued", "active"]).toArray()
-          ).sort(compareRank);
-
-          let newRank = RANK_STEP;
-          if (queued.length > 0) {
-            // Only the new row gets a rank; no other row is touched. Negative
-            // ranks are fine (all sorts and the Dexie index are numeric). A synced
-            // row may lack a rank (it sorts as 0), so rankValue keeps this finite.
-            newRank = promoteToTop
-              ? rankValue(queued[0]) - RANK_STEP
-              : rankValue(queued[queued.length - 1]) + RANK_STEP;
-          }
-
-          const now = Date.now();
-          await db.tasks.add({
-            id: `tsk-${now}-${Math.random().toString(36).slice(2, 6)}`,
-            title: trimmed,
-            notes: notes.trim(),
-            questId,
-            status: "queued",
-            rank: newRank,
-            accumulatedSeconds: 0,
-            scheduledDate: scheduledDate ?? toLocalDateKey(now),
-            createdAt: now,
-            updatedAt: now,
-          });
-
-          get().requestSync();
-        }),
-
-      updateTask: (taskId, updates) =>
-        runAction(set, "updateTask", async () => {
-          const changes = { ...updates };
-          if (typeof updates.title === "string") {
-            const title = clampTitle(updates.title, MAX_TASK_TITLE_LENGTH);
-            if (title) changes.title = title;
-            else delete changes.title;
-          }
-          await writeTask(taskId, changes);
-          get().requestSync();
-        }),
-
-      deleteTask: async (taskId) => {
-        await runAction(set, "deleteTask", async () => {
-          recordDeletedTaskTombstone(taskId);
-          if (get().activeTaskId === taskId) {
-            set(
-              focusSessionToStorePatch({
-                status: "idle",
-                updatedAt: nextFocusStamp(get),
-              })
+        importSnapshot: async (jsonText: string): Promise<SnapshotImportResult> => {
+          try {
+            const merged = await importAndMergeSnapshotJson(
+              jsonText,
+              readStoreActiveFocus(get())
             );
-          }
-          await db.tasks.delete(taskId);
-          get().requestSync();
-        });
-      },
-
-      reorderTaskQueue: async (orderedTaskIds, movedTaskId) => {
-        await runAction(set, "reorderTaskQueue", async () => {
-          // Minimal move (planRankMoves): only the rows that must change rank are
-          // written (and get a new updatedAt). Every rewritten row is a whole-row
-          // last-write-wins over the phone's copy, so touching rows the user did
-          // not move would revert edits made there while apart (e.g. reopen a
-          // task completed on the phone).
-          const changedCount = await db.transaction("rw", db.tasks, async () => {
-            const ids = Array.from(new Set(orderedTaskIds));
-            const rows = (await db.tasks.bulkGet(ids)).filter(
-              (row): row is Task => !!row
-            );
-            const plan = planRankMoves(rows, movedTaskId);
-            const updates = rows.flatMap((row) => {
-              const rank = plan.get(row.id);
-              return rank === undefined
-                ? []
-                : [{ ...row, rank, updatedAt: nextStamp(row) }];
+            const patch: Partial<CommandStoreState> = {};
+            await reconcileMergedFocus(merged, get, patch);
+            setChanged(get, set, patch);
+            try {
+              await localStore.materializeHabits(toLocalDateKey(), { notify: false });
+            } catch (err) {
+              recordMaterializeFailure(err);
+            }
+            return { ok: true, merged };
+          } catch (err) {
+            if (err instanceof SnapshotFormatError || err instanceof SyntaxError) {
+              return { ok: false, reason: "bad_format", error: err };
+            }
+            recordBreadcrumb({
+              level: "ERROR",
+              domain: "sync",
+              event: "snapshot_import_failed",
+              context: summarizeError(err),
             });
-            if (updates.length > 0) await db.tasks.bulkPut(updates);
-            return updates.length;
-          });
-          if (changedCount > 0) get().requestSync();
-        });
-      },
-
-      createQuest: ({ title, description = "", accentColor = "cyan", targetWeeklyHours = 10 }) =>
-        runAction(set, "createQuest", async () => {
-          const trimmed = clampTitle(title, MAX_QUEST_TITLE_LENGTH);
-          if (!trimmed) return;
-          const now = Date.now();
-          const existing = await loadSortedQuests();
-          const activeCount = existing.filter((q) => !q.archived).length;
-          const nextSlot = (activeCount % 3) as 0 | 1 | 2;
-
-          await db.quests.add({
-            id: `quest-${now}-${Math.random().toString(36).slice(2, 6)}`,
-            slotIndex: nextSlot,
-            code: trimmed.slice(0, 10).toUpperCase(),
-            title: trimmed,
-            description: description.trim(),
-            accentColor,
-            targetWeeklyHours: Math.max(1, Number(targetWeeklyHours) || 10),
-            archived: false,
-            createdAt: now,
-            updatedAt: now,
-          });
-          get().requestSync();
-        }),
-
-      updateQuest: (questId, changes) =>
-        runAction(set, "updateQuest", async () => {
-          const patch: QuestChanges = {};
-          if (typeof changes.title === "string") {
-            const title = clampTitle(changes.title, MAX_QUEST_TITLE_LENGTH);
-            if (title) patch.title = title;
+            console.error("[hunt] snapshot_import_failed", err);
+            return { ok: false, reason: "storage", error: err };
           }
-          if (typeof changes.description === "string") {
-            patch.description = changes.description.trim();
-          }
-          if (changes.accentColor !== undefined) patch.accentColor = changes.accentColor;
-          const hours = changes.targetWeeklyHours;
-          if (typeof hours === "number" && Number.isFinite(hours)) {
-            // Same floor as createQuest (and the quest drawer's former direct write).
-            patch.targetWeeklyHours = Math.max(1, hours);
-          }
-          const written = await db.transaction("rw", db.quests, async () => {
-            const row = await db.quests.get(questId);
-            if (!row) return false;
-            await db.quests.update(questId, { ...patch, updatedAt: nextStamp(row) });
-            return true;
-          });
-          if (written) get().requestSync();
-        }),
+        },
 
-      completeQuest: async (questId) => {
-        await runAction(set, "completeQuest", async () => {
-          const now = Date.now();
-          const todayKey = toLocalDateKey(now);
-          const written = await db.transaction(
-            "rw",
-            db.quests,
-            db.tasks,
-            db.habits,
-            async () => {
-              const quest = await db.quests.get(questId);
-              if (!quest) return false;
-              await db.quests.update(questId, {
-                archived: true,
-                completedAt: now,
-                updatedAt: nextStamp(quest),
-              });
-              const linkedTasks = await db.tasks
-                .where("questId")
-                .equals(questId)
-                .toArray();
-              // Open tasks move to Other work; completed tasks and missed
-              // daily habit days keep their quest as history.
-              for (const t of linkedTasks) {
-                if (isOpenTask(t, todayKey)) {
-                  await db.tasks.update(t.id, {
-                    questId: null,
-                    updatedAt: nextStamp(t),
-                  });
-                }
-              }
-              const linkedHabits = await db.habits
-                .where("questId")
-                .equals(questId)
-                .toArray();
-              for (const h of linkedHabits) {
-                await db.habits.update(h.id, {
-                  questId: null,
-                  updatedAt: nextStamp(h),
-                });
-              }
-              return true;
-            }
-          );
-          if (written) get().requestSync();
-        });
-      },
+        clearActionError: () => set({ actionError: null }),
+        setDiscardGuard: (guard) => set({ discardGuard: guard }),
+        setActiveView: (view) => {
+          const { activeView, discardGuard } = get();
+          if (view === activeView) return;
+          if (discardGuard && !discardGuard()) return;
+          set({ activeView: view });
+        },
+        clearFeedback: () => set({ lastCompletedFeedback: null }),
 
-      reopenQuest: async (questId) => {
-        await runAction(set, "reopenQuest", async () => {
-          const written = await db.transaction("rw", db.quests, async () => {
-            const quest = await db.quests.get(questId);
-            if (!quest) return false;
-            await db.quests.update(questId, {
-              archived: false,
-              completedAt: undefined,
-              updatedAt: nextStamp(quest),
-            });
-            return true;
-          });
-          if (written) get().requestSync();
-        });
-      },
+        initializeFocus: async (requestedTaskId?: string) => {
+          await runAction(set, "initializeFocus", async () => {
+            let session = readStoreFocusSession(get());
 
-      deleteQuest: async (questId) => {
-        await runAction(set, "deleteQuest", async () => {
-          recordDeletedQuestTombstone(questId);
-
-          await db.transaction("rw", db.quests, db.tasks, db.habits, async () => {
-            const linkedTasks = await db.tasks
-              .where("questId")
-              .equals(questId)
-              .toArray();
-            for (const t of linkedTasks) {
-              await db.tasks.update(t.id, {
-                questId: null,
-                updatedAt: nextStamp(t),
-              });
-            }
-            const linkedHabits = await db.habits
-              .where("questId")
-              .equals(questId)
-              .toArray();
-            for (const h of linkedHabits) {
-              await db.habits.update(h.id, {
-                questId: null,
-                updatedAt: nextStamp(h),
-              });
-            }
-            await db.quests.delete(questId);
-          });
-
-          get().requestSync();
-        });
-      },
-
-      createHabit: ({ title, notes = "", questId }) =>
-        runAction(set, "createHabit", async () => {
-          const trimmed = clampTitle(title, MAX_HABIT_TITLE_LENGTH);
-          if (!trimmed) return;
-
-          const now = Date.now();
-          const todayKey = toLocalDateKey(now);
-          await db.transaction("rw", db.habits, db.tasks, async () => {
-            const existing = (await db.habits.toArray()).sort(compareRank);
-            const newRank =
-              existing.length > 0
-                ? rankValue(existing[existing.length - 1]) + RANK_STEP
-                : RANK_STEP;
-            const habit: Habit = {
-              id: `hab-${now}-${Math.random().toString(36).slice(2, 6)}`,
-              title: trimmed,
-              notes: notes.trim(),
-              questId,
-              rank: newRank,
-              createdAt: now,
-              updatedAt: now,
-            };
-            await db.habits.add(habit);
-            const todayTaskId = habitTaskId(habit.id, todayKey);
-            if (!hasLocalTaskTombstone(todayTaskId)) {
-              await db.tasks.put(buildHabitTaskRow(habit, todayKey));
-            }
-          });
-          get().requestSync();
-        }),
-
-      updateHabit: (habitId, changes) =>
-        runAction(set, "updateHabit", async () => {
-          const todayKey = toLocalDateKey();
-          const written = await db.transaction("rw", db.habits, db.tasks, async () => {
-            const row = await db.habits.get(habitId);
-            if (!row) return false;
-            const patch: Partial<Habit> = {};
-            if (typeof changes.title === "string") {
-              const title = clampTitle(changes.title, MAX_HABIT_TITLE_LENGTH);
-              if (title) patch.title = title;
-            }
-            if (typeof changes.notes === "string") {
-              patch.notes = changes.notes.trim();
-            }
-            if (changes.questId !== undefined) {
-              patch.questId = changes.questId;
-            }
-            const stamp = nextStamp(row);
-            await db.habits.update(habitId, { ...patch, updatedAt: stamp });
-
-            // Keep today's open materialized task aligned with the updated habit.
-            const todayTaskId = habitTaskId(habitId, todayKey);
-            const todayTask = await db.tasks.get(todayTaskId);
-            if (todayTask && (todayTask.status === "queued" || todayTask.status === "active")) {
-              const taskPatch: Partial<Task> = {};
-              if (patch.title !== undefined) taskPatch.title = patch.title;
-              if (patch.questId !== undefined) taskPatch.questId = patch.questId;
-              if (patch.notes !== undefined && (todayTask.notes || "") === (row.notes || "")) {
-                taskPatch.notes = patch.notes;
-              }
-              if (Object.keys(taskPatch).length > 0) {
-                await db.tasks.update(todayTaskId, {
-                  ...taskPatch,
-                  updatedAt: nextStamp(todayTask),
-                });
-              }
-            }
-            return true;
-          });
-          if (written) get().requestSync();
-        }),
-
-      deleteHabit: async (habitId) => {
-        await runAction(set, "deleteHabit", async () => {
-          recordDeletedHabitTombstone(habitId);
-          const todayTaskId = habitTaskId(habitId, toLocalDateKey());
-          await db.transaction("rw", db.habits, db.tasks, async () => {
-            await db.habits.delete(habitId);
-            const todayTask = await db.tasks.get(todayTaskId);
-            // Remove today's untouched open instance so a deleted habit leaves Home right away;
-            // keep any completed or logged task so history stays intact.
             if (
-              todayTask &&
-              todayTask.status === "queued" &&
-              (todayTask.accumulatedSeconds || 0) === 0
+              requestedTaskId &&
+              session.status === "running" &&
+              session.taskId === requestedTaskId
             ) {
-              // Tombstone first: if it cannot be saved this throws and the
-              // transaction rolls back, so the task cannot come back via sync.
-              recordDeletedTaskTombstone(todayTaskId);
-              await db.tasks.delete(todayTaskId);
+              // Already running on this task: keep the session (restarting it would
+              // silently drop the time since sessionStartedAt).
+              set({ activeView: "focus", lastCompletedFeedback: null });
+              return;
             }
+
+            let targetId = requestedTaskId;
+            if (!targetId) {
+              // Leave the current session first: its requeued task may be the pick.
+              const left = transitionFocus(session, { type: "leave" }, Date.now());
+              await localStore.applyFocusEffects(left.effects);
+              session = { status: "idle", updatedAt: session.updatedAt };
+              const queued = await reads.queuedTasks();
+              const todayKey = toLocalDateKey();
+              // Nothing for today: start the first queued task of any day, never a
+              // missed daily habit day (that is history, not open work).
+              const chosen =
+                pickNextFocusTask(queued, todayKey) ??
+                queued
+                  .filter((t) => !isMissedHabitTask(t, todayKey))
+                  .sort(compareRank)[0];
+              if (!chosen) return;
+              targetId = chosen.id;
+            }
+
+            const next = transitionFocus(session, { type: "start", taskId: targetId }, Date.now());
+            await localStore.applyFocusEffects(next.effects);
+            set({
+              ...commitLocalSession(get, next.session),
+              activeView: "focus",
+              lastCompletedFeedback: null,
+            });
+            get().requestSync();
           });
-          get().requestSync();
-        });
-      },
+        },
 
-      materializeDailyHabits: async (dateKey?: string) => {
-        let added = 0;
-        const ok = await runAction(set, "materializeDailyHabits", async () => {
-          added = await materializeHabitsIntoDB(dateKey ?? toLocalDateKey());
-        });
-        if (ok && added > 0) get().requestSync();
-        return added;
-      },
+        engageTimer: () => {
+          try {
+            const session = readStoreFocusSession(get());
+            const next = transitionFocus(session, { type: "resume" }, Date.now());
+            if (next.session === session) return;
+            set(commitLocalSession(get, next.session));
+            get().requestSync();
+          } catch (err) {
+            reportActionFailure(set, "engageTimer", err);
+          }
+        },
 
-      deleteTimeLog: async (logId) => {
-        await runAction(set, "deleteTimeLog", async () => {
-          recordDeletedLogTombstone(logId);
-          await db.timeLogs.delete(logId);
-          get().requestSync();
-        });
-      },
-    }),
+        suspendTimer: async () => {
+          await runAction(set, "suspendTimer", async () => {
+            const session = readStoreFocusSession(get());
+            const next = transitionFocus(session, { type: "pause" }, Date.now());
+            if (next.session === session) return;
+            await localStore.applyFocusEffects(next.effects);
+            set(commitLocalSession(get, next.session));
+            get().requestSync();
+          });
+        },
+
+        completeActiveTask: () => {
+          // Single-flight: a double click (or ten) completes the task once.
+          if (!completeInFlight) {
+            completeInFlight = runAction(set, "completeActiveTask", () =>
+              completeFocusedTask(get, set)
+            ).then(() => {
+              completeInFlight = null;
+            });
+          }
+          return completeInFlight;
+        },
+
+        completeTaskById: async (taskId: string) => {
+          await runAction(set, "completeTaskById", async () => {
+            if (get().activeTaskId === taskId) {
+              await get().completeActiveTask();
+              return;
+            }
+            await localStore.completeTask(taskId);
+          });
+        },
+
+        reopenTaskById: async (taskId: string) => {
+          await runAction(set, "reopenTaskById", () => localStore.reopenTask(taskId));
+        },
+
+        returnToQueue: async () => {
+          await runAction(set, "returnToQueue", async () => {
+            const next = transitionFocus(readStoreFocusSession(get()), { type: "stop" }, Date.now());
+            await localStore.applyFocusEffects(next.effects);
+            set({ ...commitLocalSession(get, next.session), activeView: "command" });
+            get().requestSync();
+          });
+        },
+
+        createTask: (params) =>
+          runAction(set, "createTask", () => localStore.createTask(params)),
+
+        updateTask: (taskId, updates) =>
+          runAction(set, "updateTask", () => localStore.updateTask(taskId, updates)),
+
+        deleteTask: async (taskId) => {
+          await runAction(set, "deleteTask", async () => {
+            const session = readStoreFocusSession(get());
+            if (session.status !== "idle" && session.taskId === taskId) {
+              set(
+                commitLocalSession(
+                  get,
+                  transitionFocus(session, { type: "clear" }, Date.now()).session
+                )
+              );
+            }
+            await localStore.deleteTask(taskId);
+          });
+        },
+
+        reorderTaskQueue: async (orderedTaskIds, movedTaskId) => {
+          await runAction(set, "reorderTaskQueue", () =>
+            localStore.reorderTasks(orderedTaskIds, movedTaskId)
+          );
+        },
+
+        createQuest: (params) =>
+          runAction(set, "createQuest", () => localStore.createQuest(params)),
+
+        updateQuest: (questId, changes) =>
+          runAction(set, "updateQuest", () => localStore.updateQuest(questId, changes)),
+
+        completeQuest: async (questId) => {
+          await runAction(set, "completeQuest", () => localStore.completeQuest(questId));
+        },
+
+        reopenQuest: async (questId) => {
+          await runAction(set, "reopenQuest", () => localStore.reopenQuest(questId));
+        },
+
+        deleteQuest: async (questId) => {
+          await runAction(set, "deleteQuest", () => localStore.deleteQuest(questId));
+        },
+
+        createHabit: (params) =>
+          runAction(set, "createHabit", () => localStore.createHabit(params)),
+
+        updateHabit: (habitId, changes) =>
+          runAction(set, "updateHabit", () => localStore.updateHabit(habitId, changes)),
+
+        deleteHabit: async (habitId) => {
+          await runAction(set, "deleteHabit", () => localStore.deleteHabit(habitId));
+        },
+
+        materializeDailyHabits: async (dateKey?: string) => {
+          let added = 0;
+          await runAction(set, "materializeDailyHabits", async () => {
+            added = await localStore.materializeHabits(dateKey ?? toLocalDateKey());
+          });
+          return added;
+        },
+
+        ensureHabitTaskForDay: async (habitId, dateKey) => {
+          let task: Task | undefined;
+          await runAction(set, "ensureHabitTaskForDay", async () => {
+            task = await localStore.ensureHabitTaskForDay(habitId, dateKey);
+          });
+          return task;
+        },
+
+        deleteTimeLog: async (logId) => {
+          await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));
+        },
+      };
+    },
     {
       name: "journey-hud-command-store",
       partialize: (state) => ({
@@ -1561,3 +843,6 @@ export const useCommandStore = create<CommandStoreState>()(
     }
   )
 );
+
+// Every Local Store write asks for a (debounced) sync.
+onLocalChange(() => useCommandStore.getState().requestSync());

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
 import {
   AlertTriangle,
@@ -13,10 +14,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
-  db,
   QUEST_ACCENT_KEYS,
   QUEST_ACCENT_STYLES,
-  loadSortedQuests,
   type QuestAccent,
 } from "@/lib/db";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -94,8 +93,8 @@ export function GuideLabSection() {
     }))
   );
 
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
-  const tasks = useLiveQuery(() => db.tasks.toArray(), []);
+  const quests = useLiveQuery(reads.quests, []);
+  const tasks = useLiveQuery(reads.allTasks, []);
   const loadingAudit = quests === undefined || tasks === undefined;
 
   // Recomputed when the day changes (the view can stay open past midnight).

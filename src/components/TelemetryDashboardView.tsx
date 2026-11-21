@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import {
   Calendar,
   CheckCircle2,
@@ -16,9 +17,7 @@ import {
   X,
 } from "lucide-react";
 import {
-  db,
   accentStyle,
-  loadSortedQuests,
   formatChronoMMSS,
 } from "@/lib/db";
 import {
@@ -51,7 +50,7 @@ const HORIZON_OPTIONS: ReadonlyArray<{ id: ReviewHorizon; label: string }> = [
 
 export function TelemetryDashboardView() {
   const deleteTimeLog = useCommandStore((s) => s.deleteTimeLog);
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
+  const quests = useLiveQuery(reads.quests, []);
 
   const [horizon, setHorizon] = useState<ReviewHorizon>("week");
   const [periodOffset, setPeriodOffset] = useState(0);
@@ -104,17 +103,11 @@ export function TelemetryDashboardView() {
 
   const periodId = `${horizon}:${periodOffset}:${windowSpec.startKey}:${windowSpec.endKey}`;
 
-  // Indexed read ONLY on dateKey (never toArray / orderBy / toCollection on db.timeLogs).
   // Each result carries its periodId so stepping to another week/month shows '–' until loaded.
   const periodResult = useLiveQuery(
     async () => ({
       periodId,
-      logs: (
-        await db.timeLogs
-          .where("dateKey")
-          .between(windowSpec.startKey, windowSpec.endKey, true, true)
-          .toArray()
-      ).sort((a, b) => b.startTime - a.startTime),
+      logs: await reads.logsBetween(windowSpec.startKey, windowSpec.endKey),
     }),
     [horizon, periodOffset, todayKey]
   );
@@ -125,18 +118,11 @@ export function TelemetryDashboardView() {
   );
 
   const heatmapLogs = useLiveQuery(
-    () =>
-      db.timeLogs
-        .where("dateKey")
-        .between(heatmapStartKey, todayKey, true, true)
-        .toArray(),
+    () => reads.logsBetween(heatmapStartKey, todayKey),
     [heatmapStartKey, todayKey]
   );
 
-  const completedTasks = useLiveQuery(
-    () => db.tasks.where("status").equals("completed").toArray(),
-    []
-  );
+  const completedTasks = useLiveQuery(reads.completedTasks, []);
 
   const periodLogs =
     periodResult?.periodId === periodId ? periodResult.logs : undefined;

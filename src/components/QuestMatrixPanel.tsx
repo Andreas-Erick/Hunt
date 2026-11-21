@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { LayoutGroup, motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -21,18 +22,14 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  db,
   QUEST_ACCENT_KEYS,
   QUEST_ACCENT_STYLES,
   accentStyle,
-  dateKeyFromOffset,
   isOpenTask,
-  loadSortedQuests,
   formatChronoMMSS,
   type Quest,
   type QuestAccent,
   type Task,
-  type TimeLog,
 } from "@/lib/db";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -47,10 +44,14 @@ import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useTransientHighlight } from "./useTransientHighlight";
+import { useQuestWeekLogs } from "./useQuestWeekLogs";
+import { useLiveBurstSeconds } from "./useLiveBurstSeconds";
+import { computeQuestWeekProgress } from "@/lib/questProgress";
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
-const WEEK_DAYS = 7;
+/** The running burst only moves a progress bar by ~1 % per 36 s at the 1 h minimum target. */
+const LIVE_PROGRESS_TICK_MS = 15_000;
 /**
  * How long (ms) a just-completed quest card stays highlighted in Completed
  * quests. Separate from the task-card COMPLETION_HIGHLIGHT_MS (650).
@@ -193,8 +194,14 @@ export function QuestMatrixPanel() {
     completeQuest,
     reopenQuest,
     deleteQuest,
+    activeTaskId,
+    isRunning,
+    sessionStartedAt,
   } = useCommandStore(
     useShallow((s) => ({
+      activeTaskId: s.activeTaskId,
+      isRunning: s.isRunning,
+      sessionStartedAt: s.sessionStartedAt,
       setActiveView: s.setActiveView,
       initializeFocus: s.initializeFocus,
       createTask: s.createTask,
@@ -207,8 +214,8 @@ export function QuestMatrixPanel() {
     }))
   );
 
-  const quests = useLiveQuery(() => loadSortedQuests(), []);
-  const allTasks = useLiveQuery(() => db.tasks.toArray(), []);
+  const quests = useLiveQuery(reads.quests, []);
+  const allTasks = useLiveQuery(reads.allTasks, []);
 
   const activeQuests = useMemo(
     () => (quests ?? []).filter((q) => !q.archived),
@@ -234,11 +241,7 @@ export function QuestMatrixPanel() {
 
   // Indexed read of total logged hours for completed quests only (zero reads when none).
   const completedQuestLogs = useLiveQuery(
-    () => {
-      const ids = completedQuestIdsKey ? completedQuestIdsKey.split(",") : [];
-      if (ids.length === 0) return Promise.resolve([] as TimeLog[]);
-      return db.timeLogs.where("questId").anyOf(ids).toArray();
-    },
+    () => reads.logsForQuests(completedQuestIdsKey ? completedQuestIdsKey.split(",") : []),
     [completedQuestIdsKey]
   );
 
@@ -259,27 +262,29 @@ export function QuestMatrixPanel() {
     () => groupOpenTasksByQuest(allTasks ?? [], todayKey),
     [allTasks, todayKey]
   );
-  // Today and the 6 days before it, stepped from a noon anchor (DST-safe).
-  const weekDateKeys = useMemo(
+  const weekLogs = useQuestWeekLogs(todayKey);
+  const liveBurstSeconds = useLiveBurstSeconds(
+    isRunning ? sessionStartedAt : null,
+    LIVE_PROGRESS_TICK_MS
+  );
+  const liveQuestId = useMemo(
+    () => (allTasks ?? []).find((t) => t.id === activeTaskId)?.questId ?? null,
+    [allTasks, activeTaskId]
+  );
+  // Same rule as Home (logs of the rolling week plus the running burst).
+  const questWeek = useMemo(
     () =>
-      Array.from({ length: WEEK_DAYS }, (_, i) =>
-        dateKeyFromOffset(todayKey, -i)
-      ),
-    [todayKey]
+      computeQuestWeekProgress({
+        quests: quests ?? [],
+        logs: weekLogs ?? [],
+        todayKey,
+        live:
+          liveBurstSeconds > 0
+            ? { questId: liveQuestId, seconds: liveBurstSeconds }
+            : null,
+      }),
+    [quests, weekLogs, todayKey, liveQuestId, liveBurstSeconds]
   );
-  // Only this week's logs are read (dateKey is indexed), never the whole history.
-  const weekLogs = useLiveQuery(
-    () => db.timeLogs.where("dateKey").anyOf(weekDateKeys).toArray(),
-    [todayKey]
-  );
-  const weeklySecondsByQuest = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const log of weekLogs ?? []) {
-      if (!log.questId) continue;
-      totals.set(log.questId, (totals.get(log.questId) ?? 0) + log.durationSeconds);
-    }
-    return totals;
-  }, [weekLogs]);
 
   const ids = useId();
 
@@ -685,15 +690,8 @@ export function QuestMatrixPanel() {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-6 sm:gap-8">
           {activeQuests.map((quest) => {
             const style = accentStyle(quest.accentColor);
-            const weeklySeconds = weeklySecondsByQuest.get(quest.id) ?? 0;
-
-            const weeklyHours = weeklySeconds / 3600;
-            const pct = Math.min(
-              100,
-              Math.round(
-                (weeklyHours / Math.max(1, quest.targetWeeklyHours)) * 100
-              )
-            );
+            const { weekSeconds: weeklySeconds, pct } =
+              questWeek.forQuest(quest);
             const isEditing = editingQuest?.id === quest.id;
 
             const questTasks = openTasksByQuest.get(quest.id) ?? NO_TASKS;

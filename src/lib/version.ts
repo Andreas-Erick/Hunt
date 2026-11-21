@@ -3,4 +3,4 @@
  * Desktop UI, Sync Modal, Diagnostics, and Mobile/Tablet companion.
  * Keep synchronized with package.json, installer/hunt-desktop.iss, and AndroidManifest.xml.
  */
-export const APP_VERSION = "1.9.0";
+export const APP_VERSION = "1.10.0";

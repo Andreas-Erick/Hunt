@@ -2,10 +2,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import { reads } from "@/lib/reads";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import { Play, Pause, Check, ArrowLeft } from "lucide-react";
-import { db, formatChronoMMSS, accentStyle } from "@/lib/db";
+import { formatChronoMMSS, accentStyle } from "@/lib/db";
 import { pickNextFocusTask, useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { DesktopWindowControls } from "./DesktopWindowControls";
@@ -51,7 +52,7 @@ export function FocusHudView() {
   const focusRead = useLiveQuery(
     async () => ({
       forId: activeTaskId,
-      task: activeTaskId ? (await db.tasks.get(activeTaskId)) ?? null : null,
+      task: (await reads.task(activeTaskId)) ?? null,
     }),
     [activeTaskId]
   );
@@ -59,8 +60,7 @@ export function FocusHudView() {
   const activeTask = focusRead?.task;
 
   const linkedQuest = useLiveQuery(
-    () =>
-      activeTask?.questId ? db.quests.get(activeTask.questId) : undefined,
+    () => reads.quest(activeTask?.questId),
     [activeTask?.questId]
   );
 
@@ -70,15 +70,14 @@ export function FocusHudView() {
   const topQueuedTask = useLiveQuery(
     async () =>
       pickNextFocusTask(
-        await db.tasks.where("status").equals("queued").toArray(),
+        await reads.queuedTasks(),
         todayKey
       ),
     [todayKey]
   );
 
   const topQueuedQuest = useLiveQuery(
-    () =>
-      topQueuedTask?.questId ? db.quests.get(topQueuedTask.questId) : undefined,
+    () => reads.quest(topQueuedTask?.questId),
     [topQueuedTask?.questId]
   );
 

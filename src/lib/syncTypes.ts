@@ -684,7 +684,7 @@ export function mergeSyncPayloads(
     }
   }
   const mergedQuests = Array.from(questMap.values()).sort(
-    (a, b) => a.slotIndex - b.slotIndex
+    (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
   );
 
   // 2b. Merge Daily Habits by ID (excluding deletedHabitSet, unlinking deleted quests)
