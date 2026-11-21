@@ -1,11 +1,5 @@
 "use client";
 
-declare global {
-  interface Window {
-    webkitAudioContext?: typeof AudioContext;
-  }
-}
-
 export const AUDIO_MUTED_STORAGE_KEY = "hunt-audio-muted-v1";
 
 function readPersistedMute(): boolean {
@@ -17,8 +11,11 @@ function readPersistedMute(): boolean {
   }
 }
 
+/**
+ * Interface sound hooks. Every cue is silent by design, so no AudioContext is
+ * ever opened: a live context would hold an audio output for nothing.
+ */
 class HudSoundEngine {
-  private ctx: AudioContext | null = null;
   private _muted: boolean | null = null;
 
   get muted(): boolean {
@@ -48,40 +45,12 @@ class HudSoundEngine {
     return this._muted;
   }
 
-  private getContext(): AudioContext | null {
-    if (typeof window === "undefined" || this.muted) return null;
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext ?? window.webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
-      }
-    }
-    if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume().catch(() => {});
-    }
-    return this.ctx;
-  }
-
-  /** Deterministically closes the underlying AudioContext when shutting down. */
-  async dispose(): Promise<void> {
-    const current = this.ctx;
-    this.ctx = null;
-    if (current && typeof current.close === "function") {
-      try {
-        await current.close();
-      } catch {
-        // Ignore already-closed context errors.
-      }
-    }
-  }
-
   playLockOn() {
     // Silent by design: taps and focus transitions have no synthetic click/chime audio.
   }
 
   playClick() {
-    // Keep lazy AudioContext lifecycle intact for deterministic dispose(), without audible tones.
-    void this.getContext();
+    // Silent by design: navigation and button taps have no click audio.
   }
 
   playComplete() {

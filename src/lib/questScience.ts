@@ -1,4 +1,5 @@
 import type { Quest, Task } from "./domainTypes";
+import { isOpenTask, toLocalDateKey } from "./dateUtils";
 
 export type CheckStatus = "pass" | "warn" | "fail";
 export type DraftVerdict = "empty" | "weak" | "fair" | "strong";
@@ -516,10 +517,12 @@ export function evaluateQuestDraft(input: QuestDraftInput): DraftEvaluation {
 /**
  * Pure workspace audit over the user's real quests and tasks.
  * Never mutates input arrays; caps rendered task suggestions at MAX_SUGGESTIONS.
+ * Open tasks follow isOpenTask on `todayKey` (missed daily habit days excluded).
  */
 export function auditWorkspace(
   quests: readonly Quest[],
-  tasks: readonly Task[]
+  tasks: readonly Task[],
+  todayKey: string = toLocalDateKey()
 ): WorkspaceAudit {
   const activeQuests = quests.filter((q) => !q.archived);
   const activeQuestCount = activeQuests.length;
@@ -562,7 +565,7 @@ export function auditWorkspace(
       ? "Ambitious weekly load — check Review weekly to verify it stays sustainable."
       : "Over 35 h/wk of pure deep work often triggers the Planning Fallacy; consider trimming targets.";
 
-  const openTasks = tasks.filter((t) => t.status === "queued" || t.status === "active");
+  const openTasks = tasks.filter((t) => isOpenTask(t, todayKey));
   const openTaskCount = openTasks.length;
   let questTaskCount = 0;
   let otherTaskCount = 0;

@@ -44,6 +44,38 @@ export function isTaskVisibleToday(
 }
 
 /**
+ * A daily habit instance from a past day that was never done: a missed day.
+ * It stays in the table as history (streaks, Review, its own Plan the week
+ * column) but is never an open task on a later day. A dateless habit row is
+ * not today's instance, so it counts as past. An 'active' instance (focus
+ * still running across midnight) is not missed.
+ */
+export function isMissedHabitTask(
+  task: Pick<Task, "status" | "scheduledDate" | "habitId">,
+  todayKey: string
+): boolean {
+  return (
+    Boolean(task.habitId) &&
+    task.status === "queued" &&
+    (task.scheduledDate ?? "") < todayKey
+  );
+}
+
+/**
+ * SHARED open-task rule for every list, count and picker of open work on
+ * `todayKey`: queued or active, minus missed daily habit days.
+ */
+export function isOpenTask(
+  task: Pick<Task, "status" | "scheduledDate" | "habitId">,
+  todayKey: string
+): boolean {
+  return (
+    (task.status === "queued" || task.status === "active") &&
+    !isMissedHabitTask(task, todayKey)
+  );
+}
+
+/**
  * Formats a timestamp (ms) into local YYYY-MM-DD string
  */
 export function toLocalDateKey(timestamp: number = Date.now()): string {

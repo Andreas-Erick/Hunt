@@ -1,5 +1,25 @@
 import type { Metadata, Viewport } from "next";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+
+// next/font downloads these at build time and serves them from /_next/static,
+// so opening Hunt makes no request to Google. The variables feed globals.css
+// (body) and the Tailwind `font-mono` / `font-display` families.
+const spaceGrotesk = Space_Grotesk({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-space-grotesk",
+  fallback: ["Segoe UI", "system-ui", "sans-serif"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  weight: ["400", "500", "600", "700"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+  fallback: ["Cascadia Code", "Consolas", "ui-monospace", "monospace"],
+});
 
 export const viewport: Viewport = {
   themeColor: "#0b0c0e",
@@ -32,19 +52,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html
+      lang="en"
+      className={`dark ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="min-h-screen min-h-[100dvh] bg-[#0b0c0e] text-slate-100 antialiased selection:bg-[#00f0ff]/20 selection:text-[#00f0ff]">
         {children}
       </body>

@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { toLocalDateKey } from "@/lib/dateUtils";
 import {
   newCorrelationId,
   recordBreadcrumb,
   redactText,
   sanitizeCorrelationId,
+  summarizeError,
 } from "@/lib/diagnostics";
 import {
   authorizeRequestWithSyncKey,
@@ -35,8 +37,8 @@ const SNAPSHOT_RE = /^hunt-sync-\d{4}-\d{2}-\d{2}\.json$/;
 const SNAPSHOTS_TO_KEEP = 14;
 
 // Byte cap for a request body and for the merged state the server stores and
-// returns (clients post their full state). It fits the count caps (20,000 time
-// logs are ~7 MB); the 5000-task count cap in syncTypes.ts is the next binding limit.
+// returns (clients post their full state). It is the binding limit: the count
+// caps in syncTypes.ts (20,000 tasks, 20,000 time logs at ~7 MB) sit above it.
 const MAX_PAYLOAD_BYTES = 16_000_000;
 const PAYLOAD_TOO_LARGE = "Payload exceeds the server size limit";
 const LAN_URL_CACHE_MS = 30_000;
@@ -44,6 +46,12 @@ const LAN_URL_CACHE_MS = 30_000;
 // ---------------------------------------------------------------------------
 // Diagnostics (stable event names; never log tokens or payload content)
 // ---------------------------------------------------------------------------
+
+/** Request-scoped fields every server log line carries when they are known. */
+interface LogMeta {
+  correlationId?: string;
+  durationMs?: number;
+}
 
 type SyncLogEvent =
   | "key_unavailable"
@@ -58,11 +66,12 @@ function logEvent(
   event: SyncLogEvent,
   client: string,
   detail?: unknown,
-  meta?: { correlationId?: string; durationMs?: number }
+  meta?: LogMeta
 ): void {
+  // An Error keeps its (redacted) stack and cause so a 500 can be traced to a line.
   const safeDetail =
     detail instanceof Error
-      ? { name: detail.name, message: redactText(detail.message) }
+      ? summarizeError(detail)
       : typeof detail === "string"
       ? redactText(detail)
       : detail;
@@ -74,7 +83,11 @@ function logEvent(
     durationMs: meta?.durationMs,
     context: { client, detail: safeDetail },
   });
-  const args: unknown[] = [`[hunt-sync] ${event}`, { client }];
+  // The correlation id joins this terminal line to the client's sync_failed log.
+  const fields: { client: string; correlationId?: string; durationMs?: number } = { client };
+  if (meta?.correlationId) fields.correlationId = meta.correlationId;
+  if (typeof meta?.durationMs === "number") fields.durationMs = meta.durationMs;
+  const args: unknown[] = [`[hunt-sync] ${event}`, fields];
   if (safeDetail !== undefined) args.push(safeDetail);
   console.error(...args);
 }
@@ -93,13 +106,31 @@ function clientLabel(request: Request): string {
   return raw.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || "unknown";
 }
 
+/**
+ * Stable machine-readable reason next to the human `error` text. Statuses and
+ * texts are unchanged for older phone builds; `code` tells apart failures that
+ * share a status (507: unreadable server data vs. merged data over the limits).
+ */
+export type SyncErrorResponseCode =
+  | "unauthorized"
+  | "key_unavailable"
+  | "unsupported_media_type"
+  | "payload_too_large"
+  | "malformed_json"
+  | "invalid_payload"
+  | "server_data_unreadable"
+  | "merged_over_limit"
+  | "save_failed"
+  | "internal";
+
 function errorResponse(
   status: number,
+  code: SyncErrorResponseCode,
   error: string,
   correlationId?: string
 ): NextResponse {
   return NextResponse.json(
-    { error },
+    { code, error },
     {
       status,
       headers: correlationId ? { "X-Hunt-Correlation-Id": correlationId } : undefined,
@@ -153,7 +184,7 @@ function peersForResponse() {
 
 let keyFailureLogged = false;
 
-function authorize(request: Request): SyncAuthResult {
+function authorize(request: Request, correlationId: string): SyncAuthResult {
   const client = clientLabel(request);
   const secret = getOrCreateServerSyncKey({
     dataDir: DATA_DIR,
@@ -164,7 +195,7 @@ function authorize(request: Request): SyncAuthResult {
     onError: (err) => {
       if (!keyFailureLogged) {
         keyFailureLogged = true;
-        logEvent("key_unavailable", client, err);
+        logEvent("key_unavailable", client, err, { correlationId });
       }
     },
   });
@@ -172,13 +203,23 @@ function authorize(request: Request): SyncAuthResult {
 }
 
 /** The 401/503 response for a request that may not use the API, else null. */
-function authFailureResponse(request: Request): NextResponse | null {
-  const auth = authorize(request);
+function authFailureResponse(request: Request, correlationId: string): NextResponse | null {
+  const auth = authorize(request, correlationId);
   if (auth === "ok") return null;
   if (auth === "no_key") {
-    return errorResponse(503, "Sync key unavailable on the server");
+    return errorResponse(
+      503,
+      "key_unavailable",
+      "Sync key unavailable on the server",
+      correlationId
+    );
   }
-  return errorResponse(401, "Unauthorized: Invalid or missing X-Hunt-Token");
+  return errorResponse(
+    401,
+    "unauthorized",
+    "Unauthorized: Invalid or missing X-Hunt-Token",
+    correlationId
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +325,7 @@ function readPayloadFile(filePath: string): SyncPayload | null {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     const check = validateSyncPayload(JSON.parse(raw) as unknown);
-    return check.valid && check.payload ? check.payload : null;
+    return check.valid ? check.payload : null;
   } catch {
     return null;
   }
@@ -330,27 +371,20 @@ function readServerSyncFile(): ServerRead {
   return { payload: null, source: "unreadable" };
 }
 
-function localDateKey(ts: number = Date.now()): string {
-  const d = new Date(ts);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
 /**
  * Before the main file is replaced: keep it as `hunt-sync.backup.json` (the
  * previous DISTINCT version, since we only write on change) and, on the first
  * change of each day, as `backups/hunt-sync-YYYY-MM-DD.json` (newest 14 kept).
  */
-function rotateBackups(client: string): void {
+function rotateBackups(client: string, meta: LogMeta): void {
   if (!fs.existsSync(SYNC_FILE)) return;
   try {
     fs.copyFileSync(SYNC_FILE, BACKUP_FILE);
   } catch (err) {
-    logEvent("backup_failed", client, err);
+    logEvent("backup_failed", client, err, meta);
   }
   try {
-    const snapshot = path.join(SNAPSHOT_DIR, `hunt-sync-${localDateKey()}.json`);
+    const snapshot = path.join(SNAPSHOT_DIR, `hunt-sync-${toLocalDateKey()}.json`);
     if (!fs.existsSync(snapshot)) {
       fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
       fs.copyFileSync(SYNC_FILE, snapshot);
@@ -363,28 +397,39 @@ function rotateBackups(client: string): void {
       }
     }
   } catch (err) {
-    logEvent("snapshot_failed", client, err);
+    logEvent("snapshot_failed", client, err, meta);
   }
 }
 
-/** Writes the main file via a temp file + rename; false when it was not stored. */
+/**
+ * Writes the main file via a temp file that is flushed to disk (fsync) before
+ * the rename, so a power cut cannot leave a truncated hunt-sync.json behind;
+ * false when it was not stored.
+ */
 function writeServerSyncFileAtomic(
   payload: SyncPayload,
-  options: { rotate: boolean; client: string }
+  options: { rotate: boolean; client: string; correlationId: string }
 ): boolean {
+  const meta: LogMeta = { correlationId: options.correlationId };
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     // Only a VALID main file is rotated into the backups; a corrupt main file
     // must not overwrite the good backup we just recovered from.
-    if (options.rotate) rotateBackups(options.client);
+    if (options.rotate) rotateBackups(options.client, meta);
     const serialized = JSON.stringify(payload, null, 2);
-    fs.writeFileSync(TMP_FILE, serialized, "utf8");
+    const fd = fs.openSync(TMP_FILE, "w");
+    try {
+      fs.writeFileSync(fd, serialized, "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(TMP_FILE, SYNC_FILE);
     return true;
   } catch (err) {
-    logEvent("write_failed", options.client, err);
+    logEvent("write_failed", options.client, err, meta);
     try {
       fs.rmSync(TMP_FILE, { force: true });
     } catch {
@@ -394,10 +439,7 @@ function writeServerSyncFileAtomic(
   }
 }
 
-function unreadableResponse(
-  client: string,
-  meta?: { correlationId?: string; durationMs?: number }
-) {
+function unreadableResponse(client: string, meta: LogMeta & { correlationId: string }) {
   logEvent(
     "unreadable",
     client,
@@ -406,8 +448,9 @@ function unreadableResponse(
   );
   return errorResponse(
     507,
+    "server_data_unreadable",
     "Server sync data is unreadable; refusing to overwrite it",
-    meta?.correlationId
+    meta.correlationId
   );
 }
 
@@ -418,11 +461,8 @@ function unreadableResponse(
 export async function GET(request: Request) {
   const correlationId = requestCorrelationId(request);
   const startedAt = Date.now();
-  const denied = authFailureResponse(request);
-  if (denied) {
-    denied.headers.set("X-Hunt-Correlation-Id", correlationId);
-    return denied;
-  }
+  const denied = authFailureResponse(request, correlationId);
+  if (denied) return denied;
 
   const current = readServerSyncFile();
   if (!current.payload) {
@@ -446,38 +486,38 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const correlationId = requestCorrelationId(request);
   const startedAt = Date.now();
-  const denied = authFailureResponse(request);
-  if (denied) {
-    denied.headers.set("X-Hunt-Correlation-Id", correlationId);
-    return denied;
-  }
+  const denied = authFailureResponse(request, correlationId);
+  if (denied) return denied;
 
   if (mediaType(request.headers.get("content-type")) !== "application/json") {
-    return errorResponse(415, "Content-Type must be application/json", correlationId);
+    return errorResponse(
+      415,
+      "unsupported_media_type",
+      "Content-Type must be application/json",
+      correlationId
+    );
   }
 
   const client = clientLabel(request);
   try {
     const rawBody = await readBodyWithinLimit(request);
-    if (rawBody === null) return errorResponse(413, PAYLOAD_TOO_LARGE, correlationId);
+    if (rawBody === null) {
+      return errorResponse(413, "payload_too_large", PAYLOAD_TOO_LARGE, correlationId);
+    }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(rawBody) as unknown;
     } catch (err) {
       if (err instanceof SyntaxError) {
-        return errorResponse(400, "Malformed JSON payload", correlationId);
+        return errorResponse(400, "malformed_json", "Malformed JSON payload", correlationId);
       }
       throw err;
     }
 
     const validation = validateSyncPayload(parsed);
-    if (!validation.valid || !validation.payload) {
-      return errorResponse(
-        400,
-        validation.error ?? "Invalid sync payload schema",
-        correlationId
-      );
+    if (!validation.valid) {
+      return errorResponse(400, "invalid_payload", validation.error, correlationId);
     }
 
     // Everything from here to the response is synchronous, so merges of
@@ -495,13 +535,14 @@ export async function POST(request: Request) {
     // Never persist a merged state the server itself could not read back
     // (store exactly what a later read will return, e.g. newest 5000 tombstones).
     const mergedCheck = validateSyncPayload(merged);
-    if (!mergedCheck.valid || !mergedCheck.payload) {
+    if (!mergedCheck.valid) {
       logEvent("merged_over_limit", client, mergedCheck.error, {
         correlationId,
         durationMs: Date.now() - startedAt,
       });
       return errorResponse(
         507,
+        "merged_over_limit",
         `Merged data exceeds server limits: ${mergedCheck.error}`,
         correlationId
       );
@@ -514,6 +555,7 @@ export async function POST(request: Request) {
       });
       return errorResponse(
         507,
+        "merged_over_limit",
         "Merged data exceeds server limits: size limit reached",
         correlationId
       );
@@ -526,9 +568,15 @@ export async function POST(request: Request) {
       const stored = writeServerSyncFileAtomic(toStore, {
         rotate: current.source === "main",
         client,
+        correlationId,
       });
       if (!stored) {
-        return errorResponse(503, "Server could not save sync data", correlationId);
+        return errorResponse(
+          503,
+          "save_failed",
+          "Server could not save sync data",
+          correlationId
+        );
       }
     }
 
@@ -546,6 +594,6 @@ export async function POST(request: Request) {
       correlationId,
       durationMs: Date.now() - startedAt,
     });
-    return errorResponse(500, "Internal sync error", correlationId);
+    return errorResponse(500, "internal", "Internal sync error", correlationId);
   }
 }

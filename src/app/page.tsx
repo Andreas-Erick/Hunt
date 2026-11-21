@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, type ComponentType } from "react";
 import { MotionConfig } from "framer-motion";
 import { db } from "@/lib/db";
 import {
@@ -10,10 +10,10 @@ import {
   summarizeError,
 } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
-import { hudAudio } from "@/lib/hudAudio";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
+  type HudView,
 } from "@/store/useCommandStore";
 import { TopTelemetryBar } from "@/components/TopTelemetryBar";
 import { CommandCenterView } from "@/components/CommandCenterView";
@@ -30,6 +30,33 @@ const AUTO_SYNC_INTERVAL_MS = 5000;
 const RESUME_SYNC_MIN_GAP_MS = 1000;
 
 type BootPhase = "booting" | "ready" | "db_error";
+
+interface ViewEntry {
+  /** React key of the view wrapper; a change replays `.hunt-view-enter`. */
+  key: string;
+  /** Region name shown by the view's error boundary. */
+  region: string;
+  Component: ComponentType;
+}
+
+const REVIEW_VIEW: ViewEntry = {
+  key: "view-telemetry",
+  region: "Review",
+  Component: TelemetryDashboardView,
+};
+
+/** Every HudView must map to a view: adding a member without an entry fails tsc. */
+const VIEWS: Record<HudView, ViewEntry> = {
+  command: { key: "view-command", region: "Home", Component: CommandCenterView },
+  plan: { key: "view-plan", region: "Plan", Component: PlanWeekView },
+  focus: { key: "view-focus", region: "Focus", Component: FocusHudView },
+  quests: { key: "view-quests", region: "Quests", Component: QuestMatrixPanel },
+  habits: { key: "view-habits", region: "Habits", Component: HabitsView },
+  telemetry: REVIEW_VIEW,
+  // Legacy alias of the Review view.
+  log: REVIEW_VIEW,
+  guide: { key: "view-guide", region: "Guide", Component: GuideView },
+};
 
 const NOTICE_BUTTON_CLASS =
   "shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:opacity-80";
@@ -79,7 +106,6 @@ export default function HomePage() {
       alive = false;
       disposeFaultTraps();
       disposeCommandStoreScheduler();
-      void hudAudio.dispose();
     };
   }, []);
 
@@ -128,6 +154,8 @@ export default function HomePage() {
     );
   }
 
+  const view = VIEWS[activeView];
+
   // Pure CSS `.hunt-view-enter` wrappers guarantee resting DOM opacity is ALWAYS 1
   // (eliminating the Framer Motion inline `style="opacity: 0"` rAF stall on fullscreen launch).
   return (
@@ -162,61 +190,11 @@ export default function HomePage() {
         )}
 
         <main>
-          {activeView === "command" && (
-            <div key="view-command" className="hunt-view-enter">
-              <RegionErrorBoundary region="Home">
-                <CommandCenterView />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {activeView === "plan" && (
-            <div key="view-plan" className="hunt-view-enter">
-              <RegionErrorBoundary region="Plan">
-                <PlanWeekView />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {activeView === "focus" && (
-            <div key="view-focus" className="hunt-view-enter">
-              <RegionErrorBoundary region="Focus">
-                <FocusHudView />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {activeView === "quests" && (
-            <div key="view-quests" className="hunt-view-enter">
-              <RegionErrorBoundary region="Quests">
-                <QuestMatrixPanel />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {activeView === "habits" && (
-            <div key="view-habits" className="hunt-view-enter">
-              <RegionErrorBoundary region="Habits">
-                <HabitsView />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {(activeView === "telemetry" || activeView === "log") && (
-            <div key="view-telemetry" className="hunt-view-enter">
-              <RegionErrorBoundary region="Review">
-                <TelemetryDashboardView />
-              </RegionErrorBoundary>
-            </div>
-          )}
-
-          {activeView === "guide" && (
-            <div key="view-guide" className="hunt-view-enter">
-              <RegionErrorBoundary region="Guide">
-                <GuideView />
-              </RegionErrorBoundary>
-            </div>
-          )}
+          <div key={view.key} className="hunt-view-enter">
+            <RegionErrorBoundary region={view.region}>
+              <view.Component />
+            </RegionErrorBoundary>
+          </div>
         </main>
       </div>
     </MotionConfig>

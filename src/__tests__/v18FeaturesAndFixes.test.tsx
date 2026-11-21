@@ -339,9 +339,9 @@ describe("Desktop launch reliability & fullscreen taskbar hiding", () => {
 // ---------------------------------------------------------------------------
 // 2. App Version Display & Cross-File Sync
 // ---------------------------------------------------------------------------
-describe("App version v1.8.0 display & cross-artifact parity", () => {
+describe("App version v1.9.0 display & cross-artifact parity", () => {
   it("keeps APP_VERSION synchronized across package.json, installer, AndroidManifest, and hunt-mobile.html", () => {
-    expect(APP_VERSION).toBe("1.8.0");
+    expect(APP_VERSION).toBe("1.9.0");
 
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as {
       version: string;
@@ -361,7 +361,7 @@ describe("App version v1.8.0 display & cross-artifact parity", () => {
     expect(mobileHtml).toMatch(new RegExp(`const\\s+APP_VERSION\\s*=\\s*['"]${APP_VERSION}['"]`));
   });
 
-  it("displays v1.8.0 in Desktop TopTelemetryBar, MobileSyncModal, and Mobile/Tablet header + Sync sheet", async () => {
+  it("displays v1.9.0 in Desktop TopTelemetryBar, MobileSyncModal, and Mobile/Tablet header + Sync sheet", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>

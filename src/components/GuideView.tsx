@@ -139,7 +139,7 @@ export function GuideView() {
             <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Behavioral &amp; Cognitive Science</span>
           </div>
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             Quest &amp; Task Guide
           </h1>
           <p className="mt-2 max-w-[68ch] text-sm text-hud-muted">

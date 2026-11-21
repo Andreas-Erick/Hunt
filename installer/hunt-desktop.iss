@@ -1,8 +1,8 @@
 ; Hunt Desktop Windows Installer (Inno Setup 6)
-; Compiled in GitHub Actions via: iscc /DAppVersion=1.8.0 /DStageDir=... installer/hunt-desktop.iss
+; Compiled in GitHub Actions via: iscc /DAppVersion=1.9.0 /DStageDir=... installer/hunt-desktop.iss
 
 #ifndef AppVersion
-  #define AppVersion "1.8.0"
+  #define AppVersion "1.9.0"
 #endif
 
 #ifndef StageDir
@@ -41,6 +41,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+; Clear the previous version's server bundle so an upgrade matches a fresh install.
+; User data lives in IndexedDB and {app}\data, which are not touched.
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\.next"
+Type: filesandordirs; Name: "{app}\node_modules"
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

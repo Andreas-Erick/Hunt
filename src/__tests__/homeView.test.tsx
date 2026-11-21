@@ -786,7 +786,8 @@ describe("CommandCenterView (Home)", () => {
       render(<CommandCenterView />);
       await screen.findByRole("button", { name: "Alpha" });
       const group = screen.getByRole("group", { name: "Quest for new task" });
-      const launch = within(group).getByRole("button", { name: "Launch my idea" });
+      // (quests load in their own live query, so they can render after the tasks)
+      const launch = await within(group).findByRole("button", { name: "Launch my idea" });
       const write = within(group).getByRole("button", { name: "Write every week" });
       const other = within(group).getByRole("button", { name: "Other work" });
 
@@ -809,7 +810,8 @@ describe("CommandCenterView (Home)", () => {
       await screen.findByRole("button", { name: "Wordsmith" });
       const filters = screen.getByRole("group", { name: "Filter by quest" });
       const all = within(filters).getByRole("button", { name: "All" });
-      const write = within(filters).getByRole("button", {
+      // (quests load in their own live query, so they can render after the tasks)
+      const write = await within(filters).findByRole("button", {
         name: "Write every week",
       });
 
@@ -911,7 +913,8 @@ describe("CommandCenterView (Home)", () => {
       expect(title).toHaveClass("block", "w-full", "text-left", "break-words");
 
       const taskRow = row("tsk-long");
-      const pill = within(taskRow).getByTitle(longQuest);
+      // Quests load in their own live query, so the pill can render after the task.
+      const pill = await within(taskRow).findByTitle(longQuest);
       expect(pill).toHaveClass("truncate");
       expect(pill).toHaveTextContent(longQuest);
       expect(pill.parentElement).toHaveClass("min-w-0", "max-w-full");
@@ -957,19 +960,23 @@ describe("CommandCenterView (Home)", () => {
       });
       render(<CommandCenterView />);
       expect(screen.queryByText(/No quest tasks queued/)).toBeNull();
+      expect(screen.queryByText(/No active quests/)).toBeNull();
       expect(screen.getByText("–")).toBeInTheDocument();
       expect(screen.getByText("– this week")).toBeInTheDocument();
       expect(screen.queryByText("0.0h")).toBeNull();
 
       await screen.findByRole("button", { name: "Alpha" });
       expect(screen.queryByText(/No quest tasks queued/)).toBeNull();
+      expect(screen.queryByText(/No active quests/)).toBeNull();
       expect(await screen.findByText("0.0h")).toBeInTheDocument();
     });
 
+    // An empty database has no active quest, so the empty card points to
+    // Quests (quick-add would file new work under Other work).
     it("shows the empty-queue copy once an empty database has loaded", async () => {
       render(<CommandCenterView />);
       expect(
-        await screen.findByText(/No quest tasks queued/)
+        await screen.findByText(/No active quests\. Create a quest/)
       ).toBeInTheDocument();
       expect(await screen.findByText("0.0h / 0h this week")).toBeInTheDocument();
     });
@@ -1218,8 +1225,9 @@ describe("CommandCenterView (Home)", () => {
       await screen.findByRole("button", { name: "Active work" });
 
       // Filter pills and new-task quest pills only list active quests
+      // (quests load in their own live query, so they can render after the tasks)
       const filters = screen.getByRole("group", { name: "Filter by quest" });
-      expect(within(filters).getByRole("button", { name: "Active Quest" })).toBeInTheDocument();
+      expect(await within(filters).findByRole("button", { name: "Active Quest" })).toBeInTheDocument();
       expect(within(filters).queryByRole("button", { name: "Retired Quest" })).toBeNull();
 
       const newTaskQuests = screen.getByRole("group", { name: "Quest for new task" });
@@ -1284,7 +1292,8 @@ describe("CommandCenterView (Home)", () => {
       // Step 2 confirms deletion and records the tombstone for cross-device sync
       fireEvent.click(del);
       await waitFor(async () => expect(await db.tasks.get("tsk-done-del")).toBeUndefined());
-      expect(screen.queryByTestId("completed-task-row")).toBeNull();
+      // The live query re-renders the list after the delete lands.
+      await waitFor(() => expect(screen.queryByTestId("completed-task-row")).toBeNull());
 
       const tombstones = JSON.parse(window.localStorage.getItem(TOMBSTONE_KEY) ?? "{}") as {
         deletedTaskIds?: string[];

@@ -16,7 +16,7 @@
   <a href="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml">
     <img alt="CI" src="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml/badge.svg" />
   </a>
-  <img alt="Next.js 14" src="https://img.shields.io/badge/Next.js-14-0B0C0E?style=flat-square&logo=nextdotjs&logoColor=white" />
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-0B0C0E?style=flat-square&logo=nextdotjs&logoColor=white" />
   <img alt="TypeScript 5.7" src="https://img.shields.io/badge/TypeScript-5.7-0B0C0E?style=flat-square&logo=typescript&logoColor=00F0FF" />
   <img alt="Android API 26-36" src="https://img.shields.io/badge/Android-API%2026--36-0B0C0E?style=flat-square&logo=android&logoColor=00FF9D" />
 </p>
@@ -51,7 +51,7 @@ All data lives locally on your devices — IndexedDB (Dexie) on desktop and atom
 
 ```mermaid
 flowchart LR
-    subgraph Desktop["Desktop App (Next.js 14 + React 18)"]
+    subgraph Desktop["Desktop App (Next.js 16 + React 19)"]
         UI["Views: Home · Habits · Plan · Quests · Focus · Review · Guide"]
         Store["Zustand Store + Dexie IndexedDB v3"]
         DiagD["Structured Diagnostics & Breadcrumb Ring Buffer"]
@@ -74,8 +74,8 @@ flowchart LR
         Shell <--> Keystore
     end
 
-    Store <-->|"HTTPS/LAN POST + X-Hunt-Correlation-Id"| Auth
-    Shell <-->|"Native HttpURLConnection + Backoff"| Auth
+    Store <-->|"Same-origin HTTP POST (localhost) + X-Hunt-Correlation-Id"| Auth
+    Shell <-->|"LAN/Tailscale HTTP + X-Hunt-Token (HttpURLConnection + Backoff)"| Auth
 ```
 
 ### Engineering Highlights
@@ -85,7 +85,7 @@ flowchart LR
 - **Multi-Horizon Review Telemetry & Activity Heatmap:** [`src/lib/reviewAnalytics.ts`](src/lib/reviewAnalytics.ts), [`TelemetryDashboardView.tsx`](src/components/TelemetryDashboardView.tsx), and the Android Review view provide DST-safe analytics across **Day, Week, Month, Quarter, and Year** horizons — counting both **focus hours** and **completed tasks** (split by regular steps vs. daily habits), session bout duration, active-day consistency, Quest "X" drill-down filtering, and a Monday–Sunday **Activity Heatmap** with streak and peak-rhythm insights.
 - **Zero-Gradle Direct Android Build & Zero-Shift Mobile UX:** [`android-app/build-apk.sh`](android-app/build-apk.sh) compiles and signs the Android companion directly with `aapt2`, `javac`, `d8`, `zipalign`, and `apksigner` (verifying the pinned signing certificate and scanning for leaked secrets). [`MainActivity.java`](android-app/app/src/main/java/com/hunt/companion/MainActivity.java) stores pairing tokens exclusively in AndroidKeyStore AES-256-GCM envelopes, locks WebView navigation to an explicit origin allowlist, and pairs `SOFT_INPUT_ADJUST_NOTHING` inside a safe-area-padded `FrameLayout` with top-anchored floating composer sheets, a spacious 5-tab navigation bar (**Today · Plan · Focus · Quests · Habits**) + 1-tap **Review** header access, and compact bottom-anchored confirmation/Undo capsules.
 - **Structured Observability & Root-Cause Diagnostics:** [`src/lib/diagnostics.ts`](src/lib/diagnostics.ts) propagates `X-Hunt-Correlation-Id` end-to-end across desktop, `/api/sync`, and mobile, records `durationMs` I/O telemetry, maintains bounded circular breadcrumb flight recorders, wires global unhandled fault traps (`error` / `unhandledrejection`), and recursively redacts bearer tokens and 64-hex keys (`[REDACTED]`).
-- **Adversarial Security & Chaos Test Suite:** 32 Vitest suites (1,069+ tests) exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, 150-step mobile delete/Undo/sync chaos fuzzing, 100-seed multi-horizon telemetry property checks, Europe/Berlin DST rollover fuzzing, architectural DAG topology & intrinsic fluid layout audits, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
+- **Adversarial Security & Chaos Test Suite:** 1,069+ Vitest tests exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, 150-step mobile delete/Undo/sync chaos fuzzing, 100-seed multi-horizon telemetry property checks, Europe/Berlin DST rollover fuzzing, architectural DAG topology & intrinsic fluid layout audits, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
 
 ---
 
@@ -108,7 +108,7 @@ flowchart LR
 │   │   ├── syncTypes.ts            # Strict runtime schema validators & LWW CRDT merge
 │   │   └── taskCompletionMotion.ts # Two-beat Things 3 / Linear task completion choreography
 │   ├── store/useCommandStore.ts    # Zustand state machine, focus sessions & habit engine
-│   └── __tests__/                  # 29 test suites (1,015+ unit, property, fuzz & security tests)
+│   └── __tests__/                  # Vitest unit, property, fuzz & security suites
 ├── public/
 │   └── hunt-mobile.html            # Self-contained mobile web & Android WebView UI
 ├── android-app/
@@ -118,7 +118,7 @@ flowchart LR
 │       ├── assets/hunt-mobile.html # Byte-identical mirror verified by mobileMirror.test.ts
 │       └── java/com/hunt/companion/MainActivity.java
 ├── .github/workflows/
-│   ├── ci.yml                      # Automated Vitest, tsc & Next.js build verification
+│   ├── ci.yml                      # Vitest, tsc, ESLint & Next.js build verification
 │   └── release.yml                 # Builds & publishes Windows .exe/.zip + Android .apk
 ├── installer/hunt-desktop.iss      # Inno Setup script for Hunt-Desktop-Setup.exe
 ├── docs/screenshots/               # Desktop & Pixel 9 Pro XL app screenshots
@@ -134,7 +134,7 @@ flowchart LR
 
 ### Prerequisites
 
-- **Node.js** 22+ (tested on Node 24) and **npm**
+- **Node.js** 22+ and **npm** (CI and the release installer use the version pinned in [`.nvmrc`](.nvmrc))
 - *(Optional, for Android APK builds)* **JDK 11+** and **Android SDK** (`build-tools` + `platforms` + `adb`)
 
 ### Installation
@@ -164,14 +164,17 @@ npm run start
 
 Open `http://localhost:3000` in your browser. On Windows, you can also run `Start-Hunt.bat` to launch Hunt in a standalone desktop app window.
 
-### Running Tests & Typechecking
+### Running Tests, Lint & Typechecking
+
+These are the same gates CI runs:
 
 ```bash
+npm run lint
+npm run typecheck
 npm test
-npx tsc --noEmit
 ```
 
-All 32 test suites (1,069+ tests) are deterministic and hermetic (virtual clocks, seeded PRNGs, `fake-indexeddb`, and isolated temp directories).
+All test suites are deterministic and hermetic (virtual clocks, seeded PRNGs, `fake-indexeddb`, and isolated temp directories).
 
 ### Building & Installing the Android Companion APK
 
@@ -190,13 +193,17 @@ adb install -r "./Hunt-Mobile.apk"
 
 Pair the phone once by opening **Phone & Sync** on desktop and scanning/entering the local LAN URL and pairing token stored in `data/hunt-sync.key`.
 
+To revoke a paired phone (lost or compromised), delete `data/hunt-sync.key`. The server generates a new key on the next request and the old key stops working at once. Then re-open Hunt with the launcher and re-pair the phone from **Phone & Sync**.
+
 ---
 
 ## Releases & Automated Installers
 
-Pushing a version tag (e.g., `git tag v1.8.0 && git push origin v1.8.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,069+ tests, ESLint, and TypeScript and publishes a GitHub Release containing:
+Pushing a version tag (e.g., `git tag v1.9.0 && git push origin v1.9.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,069+ tests, ESLint, and TypeScript and publishes a GitHub Release containing:
 
 - **`Hunt-Desktop-Setup-<version>.exe`** — Windows Inno Setup installer (bundles Node.js + standalone Next.js server + Desktop/Start Menu shortcuts with `HUNT.ico`; no Node.js install required).
 - **`Hunt-Desktop-Windows-<version>.zip`** — Self-contained portable Windows bundle.
 - **`Hunt-Mobile-<version>.apk`** — Signed Android companion APK built via `build-apk.sh` (installs in-place over prior releases without wiping app data).
 - **`SHA256SUMS.txt`** — Verification checksums for all release assets.
+
+The release always builds the tagged commit. It fails if the tag does not exist, or if the `package.json` version or the `AndroidManifest.xml` `versionName` differs from the tag, so bump both before tagging.

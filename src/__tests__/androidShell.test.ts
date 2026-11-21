@@ -299,10 +299,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 16 (1.8.0) so it installs over the shipped 1.7.0 (15)", () => {
+  it("is versionCode >= 17 (1.9.0) so it installs over the shipped 1.8.0 (16)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(16);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.8.0");
+    expect(code).toBeGreaterThanOrEqual(17);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.9.0");
   });
 
   it("declares tablet screen support and multi-window resizeability", () => {
@@ -366,8 +366,15 @@ describe("build hygiene (ARC-12, AND-09, SRV-09)", () => {
     expect(stale).toEqual([]);
   });
 
-  it("keeps the pinned signing keystore", () => {
-    expect(fs.existsSync(path.join(APP, "keystore", "hunt-debug.keystore"))).toBe(true);
+  it("keeps the pinned signing keystore out of git, and release CI requires it from a secret", () => {
+    const gitignore = fs.readFileSync(path.join(ROOT, ".gitignore"), "utf8");
+    expect(gitignore.split(/\r?\n/)).toContain("android-app/keystore/");
+    const script = fs.readFileSync(path.join(APP, "build-apk.sh"), "utf8");
+    expect(script).toContain('"$SCRIPT_DIR/keystore/hunt-debug.keystore"');
+    const release = fs.readFileSync(path.join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+    expect(release).not.toContain("keystore=android-app/keystore/hunt-debug.keystore");
+    expect(release).toContain("cert_pin=0d15a3169448449637e71bba9e5e22ed4bd951f78970de42d06fad8def1d111d");
+    expect(release).not.toContain("cert_pin=skip");
   });
 
   const ARCHIVE_DIR = path.join(ROOT, "_archive", "pre-audit-2026-11-18");
@@ -589,7 +596,7 @@ const JAVA_CASES: Array<[JavaProbe, string | null, boolean]> = [
   ["isAllowedRequest", "https://fonts.googleapis.com:8443/css", false],
   ["isAllowedRequest", "http://fonts.googleapis.com/css", false],
   ["isAllowedRequest", "https://evil.example/https://fonts.googleapis.com/", false],
-  ["isAllowedRequest", "http://192.168.2.136:3000/api/sync", false],
+  ["isAllowedRequest", "http://192.168.1.5:3000/api/sync", false],
   ["isAllowedRequest", "javascript:alert(1)", false],
   ["isAllowedRequest", "intent://scan/#Intent;scheme=zxing;end", false],
   ["isAllowedRequest", "", false],
@@ -611,17 +618,17 @@ const JAVA_CASES: Array<[JavaProbe, string | null, boolean]> = [
   // Pairing deep-link route allowlist: only private LAN, Tailscale CGNAT, or loopback HTTP(S) origins.
   ["isAllowedSyncRouteUrl", null, false],
   ["isAllowedSyncRouteUrl", "", false],
-  ["isAllowedSyncRouteUrl", "http://192.168.2.136:3000", true],
+  ["isAllowedSyncRouteUrl", "http://192.168.1.5:3000", true],
   ["isAllowedSyncRouteUrl", "http://10.0.0.5:3000", true],
   ["isAllowedSyncRouteUrl", "http://172.16.4.2:3000", true],
-  ["isAllowedSyncRouteUrl", "http://100.78.24.69:3000", true],
+  ["isAllowedSyncRouteUrl", "http://100.64.1.2:3000", true],
   ["isAllowedSyncRouteUrl", "http://localhost:3000", true],
   ["isAllowedSyncRouteUrl", "http://127.0.0.1:3000", true],
-  ["isAllowedSyncRouteUrl", "http://192.168.2.136:3000@evil.example", false],
+  ["isAllowedSyncRouteUrl", "http://192.168.1.5:3000@evil.example", false],
   ["isAllowedSyncRouteUrl", "https://evil.example:3000", false],
   ["isAllowedSyncRouteUrl", "http://8.8.8.8:3000", false],
   ["isAllowedSyncRouteUrl", "http://172.32.0.1:3000", false],
-  ["isAllowedSyncRouteUrl", "ftp://192.168.2.136:3000", false],
+  ["isAllowedSyncRouteUrl", "ftp://192.168.1.5:3000", false],
 ];
 
 describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK (AND-01, AND-02, AND-04)", () => {
@@ -636,4 +643,109 @@ describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK (AND-01, AN
       expect(r.stdout[i] === "1", `${fn}(${JSON.stringify(arg).slice(0, 80)})`).toBe(want);
     });
   }, 60_000);
+});
+
+// P23-01: MainActivity is exported with a BROWSABLE hunt://pair filter, so any web page or app can
+// fire a pairing link. The first pairing stays one tap; replacing an existing pairing (another key
+// or another laptop) must save nothing until the user taps Pair in a native dialog.
+describe("pairing deep link cannot silently replace an existing pairing (P23-01)", () => {
+  it("handlePairingIntent only validates and decides; the save happens in applyPairing, behind the dialog", () => {
+    const handler = blockAfter(javaCode, /private\s+void\s+handlePairingIntent\s*\(/);
+    expect(handler).not.toMatch(/saveSyncTokenInternal|saveLaptopUrlInternal|notifyPagePaired|pendingPairedToastUrl/);
+    expect(handler).toContain("isAllowedSyncRouteUrl(baseUrl)");
+    expect(handler).toContain("isValidSyncToken(key)");
+    // the saved key is read (Keystore work) on ioExec, never on the UI thread
+    expect(handler).toMatch(/executeQuietly\(ioExec,[\s\S]*needsPairingConfirmation\(syncToken\(\), laptopUrl\(\), key, baseUrl\)/);
+    expect(handler).toMatch(/if \(confirm\) \{\s*confirmReplacePairing\(key, baseUrl\);\s*\} else \{\s*applyPairing\(key, baseUrl\);\s*\}/);
+
+    const confirm = blockAfter(javaCode, /private\s+void\s+confirmReplacePairing\s*\(/);
+    expect(confirm).not.toMatch(/saveSyncTokenInternal|saveLaptopUrlInternal|notifyPagePaired/);
+    expect(confirm.match(/applyPairing\(/g)).toHaveLength(1);
+    expect(confirm).toMatch(/setPositiveButton\("Pair", \(\w+, \w+\) -> applyPairing\(key, baseUrl\)\)/);
+    expect(confirm).toContain('setNegativeButton("Cancel", null)');
+    expect(confirm).toContain('"Pair with " + host + "?"');
+
+    const apply = blockAfter(javaCode, /private\s+void\s+applyPairing\s*\(/);
+    expect(apply).toContain("saveSyncTokenInternal(key)");
+    expect(apply).toContain("saveLaptopUrlInternal(baseUrl)");
+    // applyPairing is reached only from those two places (first pairing, or the Pair button)
+    expect(javaCode.match(/applyPairing\(key, baseUrl\)/g)).toHaveLength(2);
+
+    // framework dialog only (javac --release 11 against android.jar, no AndroidX), dismissed on destroy
+    expect(javaCode).toContain("import android.app.AlertDialog;");
+    expect(javaCode).not.toMatch(/\bandroidx\./);
+    expect(blockAfter(javaCode, /protected\s+void\s+onDestroy\s*\(\s*\)/)).toContain("pairingDialog.dismiss()");
+  });
+});
+
+/** Reads "<savedToken>\t<savedUrl>\t<newToken>\t<newUrl>" (base64 or "-" for null) lines, prints 1/0 each. */
+function pairingProbeSource(): string {
+  return [
+    "import java.nio.charset.StandardCharsets;",
+    "import java.util.Base64;",
+    "public class PairingDecisionProbe {",
+    javaMember("needsPairingConfirmation"),
+    "  static String arg(String s) {",
+    '    return s.equals("-") ? null : new String(Base64.getDecoder().decode(s), StandardCharsets.UTF_8);',
+    "  }",
+    "  public static void main(String[] args) throws Exception {",
+    "    java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, StandardCharsets.UTF_8));",
+    "    StringBuilder out = new StringBuilder();",
+    "    for (String line; (line = in.readLine()) != null; ) {",
+    '      String[] p = line.split("\t", -1);',
+    "      out.append(needsPairingConfirmation(arg(p[0]), arg(p[1]), arg(p[2]), arg(p[3])) ? '1' : '0');",
+    "    }",
+    "    System.out.print(out);",
+    "  }",
+    "}",
+  ].join("\n");
+}
+
+describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK (P23-01)", () => {
+  const key = "k".repeat(40);
+  const other = "z".repeat(40);
+  const lan = "http://192.168.1.5:3000";
+  const attacker = "http://192.168.2.99:3000";
+  const cases: Array<[string | null, string | null, string, string, boolean, string]> = [
+    ["", lan, key, lan, false, "first pairing (no key saved): one tap"],
+    [null, lan, key, attacker, false, "first pairing, any allowed laptop"],
+    [key, lan, key, lan, false, "the same pairing again"],
+    [key, lan, other, lan, true, "another key for the same laptop"],
+    [key, lan, key, attacker, true, "the same key pointed at another laptop"],
+    [key, lan, other, attacker, true, "a whole new pairing"],
+    [key, null, key, lan, true, "no saved laptop URL to compare with"],
+  ];
+
+  it("asks only when an existing pairing would be replaced", () => {
+    const file = path.join(tmpRoot, "PairingDecisionProbe.java");
+    fs.writeFileSync(file, pairingProbeSource(), "utf8");
+    const enc = (v: string | null) => (v === null ? "-" : Buffer.from(v, "utf8").toString("base64"));
+    const input = cases.map(([a, b, c, d]) => [a, b, c, d].map(enc).join("\t"));
+    const r = spawnSync(javaExe ?? "java", [file], { cwd: tmpRoot, input: input.join("\n"), encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toHaveLength(cases.length);
+    cases.forEach(([, , , , want, label], i) => expect(r.stdout[i] === "1", label).toBe(want));
+  }, 60_000);
+});
+
+// P33-01 / P33-03: the build script's final hand-off and its help text.
+describe("build-apk.sh output and help (P33-01, P33-03)", () => {
+  it("writes the APK atomically: a temp file next to the output (git-ignored *.apk), renamed over it", () => {
+    const script = read(BUILD_SCRIPT_FILE);
+    expect(script).toContain('OUT_TMP="$(dirname "$OUT_APK")/.$(basename "$OUT_APK" .apk).partial-$$.apk"');
+    expect(script).toContain(`trap 'rm -f "$OUT_TMP"' EXIT`);
+    expect(script).toMatch(/cp -f "\$WORK_DIR\/signed\.apk" "\$OUT_TMP"\nmv -f "\$OUT_TMP" "\$OUT_APK"\n/);
+    expect(script).not.toMatch(/cp -f "\$WORK_DIR\/signed\.apk" "\$OUT_APK"/);
+    expect(read(path.join(ROOT, ".gitignore")).split(/\r?\n/)).toContain("*.apk");
+  });
+
+  it.skipIf(!bashUsable)("--help prints the header comment block only (no stray 'set -euo pipefail')", () => {
+    const r = spawnSync("bash", [posixPath(BUILD_SCRIPT_FILE), "--help"], { encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    const lines = r.stdout.replace(/\r\n/g, "\n").trimEnd().split("\n");
+    expect(r.stdout).not.toContain("set -euo pipefail");
+    expect(lines[0]).toMatch(/^=+$/);
+    expect(lines[lines.length - 1]).toMatch(/^=+$/);
+    expect(r.stdout).toContain("Usage (Git Bash on Windows");
+  }, 15_000);
 });

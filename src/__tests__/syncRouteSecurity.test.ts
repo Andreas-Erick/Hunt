@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type MockInstance } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { createEmptySyncPayload, mergeSyncPayloads, type SyncPayload } from "@/lib/syncTypes";
+import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
 import type { Task, TimeLog } from "@/lib/db";
 
 // Partial mock: everything is the real module, but the merge can be forced to
@@ -17,7 +17,7 @@ type Route = typeof import("@/app/api/sync/route");
 
 const MAX_PAYLOAD_BYTES = 16_000_000;
 const SEED = 0x5eed01;
-const BASE_URL = "http://192.168.2.136:3000/api/sync";
+const BASE_URL = "http://192.168.1.5:3000/api/sync";
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -41,6 +41,8 @@ const KEY = hexToken(rand);
 
 let dir = "";
 let route: Route;
+/** The (spied) merge of the syncTypes instance the current route module uses. */
+let mergeMock: MockInstance<typeof import("@/lib/syncTypes").mergeSyncPayloads>;
 
 const keyFile = () => path.join(dir, "hunt-sync.key");
 const syncFile = () => path.join(dir, "hunt-sync.json");
@@ -102,16 +104,17 @@ function loggedText(spy: MockInstance): string {
     .join("\n");
 }
 
-/** A client-facing error body: exactly `{ error }`, with no stack, path, env value or key. */
+/** A client-facing error body: exactly `{ code, error }`, with no stack, path, env value or key. */
 async function expectSafeError(
   res: Response,
   status: number,
+  code: string,
   message: string,
   label?: string
 ): Promise<string> {
   expect(res.status, label).toBe(status);
   const text = await res.text();
-  expect(JSON.parse(text)).toEqual({ error: message });
+  expect(JSON.parse(text)).toEqual({ code, error: message });
   expect(text).not.toContain(KEY);
   expect(text).not.toContain(dir);
   expect(text).not.toContain("\\");
@@ -141,18 +144,20 @@ function realisticLogs(count: number, taskIds: string[]): TimeLog[] {
 }
 
 describe("/api/sync security", () => {
-  beforeAll(async () => {
+  // Every test gets its own data directory and a freshly imported route: the
+  // route resolves its directory and keeps keyFailureLogged at module level, so
+  // a shared instance made the outcome depend on test order.
+  beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "hunt-sync-security-test-"));
     fs.writeFileSync(keyFile(), KEY, "utf8");
     process.env.HUNT_DATA_DIR = dir;
+    vi.resetModules();
     route = await import("@/app/api/sync/route");
+    mergeMock = vi.mocked((await import("@/lib/syncTypes")).mergeSyncPayloads);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  afterAll(() => {
     delete process.env.HUNT_DATA_DIR;
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -269,7 +274,7 @@ describe("/api/sync security", () => {
 
       for (const { token, label } of tokens()) {
         const res = await route.GET(get({ "X-Hunt-Token": token }));
-        await expectSafeError(res, 503, "Sync key unavailable on the server", label);
+        await expectSafeError(res, 503, "key_unavailable", "Sync key unavailable on the server", label);
         const posted = await route.POST(post(authed({ "X-Hunt-Token": token }), body({})));
         expect(posted.status, label).toBe(503);
       }
@@ -278,7 +283,7 @@ describe("/api/sync security", () => {
       // label of the request that hit it, and never the key.
       const keyEvents = errors.mock.calls.filter((c) => c[0] === "[hunt-sync] key_unavailable");
       expect(keyEvents).toHaveLength(1);
-      expect(keyEvents[0][1]).toEqual({ client: "unknown" });
+      expect(keyEvents[0][1]).toEqual({ client: "unknown", correlationId: expect.any(String) });
       expect(loggedText(errors)).not.toContain(KEY);
 
       // The key file is left alone (no silent regeneration) and works again.
@@ -350,7 +355,7 @@ describe("/api/sync security", () => {
         "",
       ]) {
         const res = await route.POST(post(authed({ "Content-Type": type }), change));
-        await expectSafeError(res, 415, "Content-Type must be application/json");
+        await expectSafeError(res, 415, "unsupported_media_type", "Content-Type must be application/json");
       }
       const noType = await route.POST(
         new Request(BASE_URL, { method: "POST", headers: { "X-Hunt-Token": KEY } })
@@ -388,7 +393,7 @@ describe("/api/sync security", () => {
         const res = await route.POST(post(authed({ "Content-Length": declared }), body({})));
         expect(res.status, `content-length ${declared}`).toBe(status);
         if (status === 413) {
-          await expectSafeError(res, 413, "Payload exceeds the server size limit");
+          await expectSafeError(res, 413, "payload_too_large", "Payload exceeds the server size limit");
         }
       }
     });
@@ -416,7 +421,7 @@ describe("/api/sync security", () => {
             duplex: "half",
           } as RequestInit)
         );
-        await expectSafeError(res, 413, "Payload exceeds the server size limit");
+        await expectSafeError(res, 413, "payload_too_large", "Payload exceeds the server size limit");
         expect(cancelled).toBe(true);
         expect(pulls).toBeLessThanOrEqual(Math.ceil(MAX_PAYLOAD_BYTES / chunk.byteLength) + 4);
       },
@@ -495,7 +500,12 @@ describe("/api/sync security", () => {
           const stored = fs.readFileSync(path.join(freshDir, "hunt-sync.json"), "utf8");
 
           const res = await fresh.POST(post(authed(), second));
-          await expectSafeError(res, 507, "Merged data exceeds server limits: size limit reached");
+          await expectSafeError(
+            res,
+            507,
+            "merged_over_limit",
+            "Merged data exceeds server limits: size limit reached"
+          );
           expect(fs.readFileSync(path.join(freshDir, "hunt-sync.json"), "utf8")).toBe(stored);
           expect(errors.mock.calls.some((c) => c[0] === "[hunt-sync] merged_over_limit")).toBe(true);
         } finally {
@@ -523,7 +533,7 @@ describe("/api/sync security", () => {
       const res = await route.POST(
         post(authed({ "X-Hunt-Client": hostileClient }), body({ tasks: [task("w-2")] }))
       );
-      const text = await expectSafeError(res, 503, "Server could not save sync data");
+      const text = await expectSafeError(res, 503, "save_failed", "Server could not save sync data");
       expect(text).not.toMatch(/[\\/]/);
 
       expect(fs.readFileSync(syncFile(), "utf8")).toBe(previous);
@@ -549,11 +559,11 @@ describe("/api/sync security", () => {
 
     it("answers 500 without details when the merge throws", async () => {
       const errors = silenceConsoleError();
-      vi.mocked(mergeSyncPayloads).mockImplementationOnce(() => {
+      mergeMock.mockImplementationOnce(() => {
         throw new TypeError(`Cannot read properties of undefined (reading 'id') at ${dir}`);
       });
       const res = await route.POST(post(authed(), body({ tasks: [task("m-1")] })));
-      const text = await expectSafeError(res, 500, "Internal sync error");
+      const text = await expectSafeError(res, 500, "internal", "Internal sync error");
       expect(text).not.toMatch(/[\\/]/);
       expect(errors.mock.calls.some((c) => c[0] === "[hunt-sync] post_error")).toBe(true);
       expect(loggedText(errors)).not.toContain(KEY);
@@ -570,7 +580,7 @@ describe("/api/sync security", () => {
         "{ <script>alert(1)</script>",
       ]) {
         const res = await route.POST(post(authed(), raw));
-        await expectSafeError(res, 400, "Malformed JSON payload");
+        await expectSafeError(res, 400, "malformed_json", "Malformed JSON payload");
       }
       for (const raw of ["null", "42", "[]", '"text"']) {
         const res = await route.POST(post(authed(), raw));

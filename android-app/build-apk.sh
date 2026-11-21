@@ -49,7 +49,7 @@ info() { printf '[build-apk]   %s\n' "$*"; }
 die()  { printf '\n[build-apk] ERROR: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,/^# ====/p' "$0" | sed 's/^# \{0,1\}//' # the header comment block, banner to banner
   exit "${1:-1}"
 }
 
@@ -189,6 +189,11 @@ STALE_BUILD_FILES=$(find "$APP_ROOT" -type f \( -name '*.kt' -o -name '*.gradle.
 $STALE_BUILD_FILES"
 
 WORK_DIR=$(wp "${WORK_DIR:-$(dirname "$OUT_APK")/.build-$(basename "$OUT_APK" .apk)}")
+# The finished APK is copied next to OUT_APK under this temp name and then renamed over it, so an
+# interrupted run (Ctrl+C, full disk) never leaves a truncated APK under the final name. The name
+# ends in .apk (git-ignored); the EXIT trap removes a leftover one.
+OUT_TMP="$(dirname "$OUT_APK")/.$(basename "$OUT_APK" .apk).partial-$$.apk"
+trap 'rm -f "$OUT_TMP"' EXIT
 case "$WORK_DIR" in
   "$MAIN_DIR"|"$MAIN_DIR"/*|"$APP_ROOT"|"$APP_ROOT"/app|"$APP_ROOT"/app/src*)
     die "refusing to use WORK_DIR inside the source tree: $WORK_DIR";;
@@ -393,7 +398,8 @@ if [ -f "$KEY_FILE" ]; then
   fi
 fi
 
-cp -f "$WORK_DIR/signed.apk" "$OUT_APK"
+cp -f "$WORK_DIR/signed.apk" "$OUT_TMP"
+mv -f "$OUT_TMP" "$OUT_APK"
 log "OK -> $OUT_APK ($(wc -c < "$OUT_APK") bytes)"
 info "install WITHOUT losing app data:  adb install -r \"$OUT_APK\""
 info "(never 'adb uninstall' first; keep versionCode >= the installed one, else INSTALL_FAILED_VERSION_DOWNGRADE)"

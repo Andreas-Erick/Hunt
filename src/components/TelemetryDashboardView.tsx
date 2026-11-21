@@ -61,6 +61,8 @@ export function TelemetryDashboardView() {
   const [showSessionHistory, setShowSessionHistory] = useState(false);
   const [visibleLogLimit, setVisibleLogLimit] = useState(SESSION_LOG_PAGE_SIZE);
   const scopeMenuRef = useRef<HTMLDivElement | null>(null);
+  const scopeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const scopeListboxRef = useRef<HTMLDivElement | null>(null);
 
   const todayKey = useTodayDateKey();
 
@@ -72,7 +74,10 @@ export function TelemetryDashboardView() {
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowScopeMenu(false);
+      if (e.key !== "Escape") return;
+      setShowScopeMenu(false);
+      // The focused option unmounts with the list: hand focus back to the trigger.
+      scopeTriggerRef.current?.focus();
     };
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
@@ -80,6 +85,16 @@ export function TelemetryDashboardView() {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
+  }, [showScopeMenu]);
+
+  // Opening the list moves focus to the selected option (or the first one).
+  useEffect(() => {
+    if (!showScopeMenu) return;
+    const listbox = scopeListboxRef.current;
+    const target =
+      listbox?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]') ??
+      listbox?.querySelector<HTMLElement>('[role="option"]');
+    target?.focus();
   }, [showScopeMenu]);
 
   const windowSpec = React.useMemo(
@@ -211,6 +226,37 @@ export function TelemetryDashboardView() {
     setShowScopeMenu(false);
   };
 
+  /** Picking an option closes the list; focus returns to the trigger instead of <body>. */
+  const handleScopeOptionSelect = (next: ReviewScope) => {
+    handleScopeChange(next);
+    scopeTriggerRef.current?.focus();
+  };
+
+  /** ArrowUp / ArrowDown (wrapping), Home and End move focus between the options. */
+  const handleScopeListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    const options = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')
+    );
+    if (options.length === 0) return;
+    e.preventDefault();
+    const current = options.findIndex((el) => el === document.activeElement);
+    const last = options.length - 1;
+    const next =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+        ? last
+        : e.key === "ArrowDown"
+        ? current < 0 || current === last
+          ? 0
+          : current + 1
+        : current <= 0
+        ? last
+        : current - 1;
+    options[next].focus();
+  };
+
   const handleDeleteLog = async (id: string) => {
     hudAudio.playClick();
     await deleteTimeLog(id);
@@ -236,7 +282,7 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       <div className="mb-8 flex flex-col justify-between gap-5 sm:gap-6 lg:flex-row lg:items-end">
         <div>
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             {windowSpec.heading}
           </h1>
           <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
@@ -248,6 +294,7 @@ export function TelemetryDashboardView() {
           {/* Quest Scope Filter Dropdown */}
           <div ref={scopeMenuRef} className="relative max-w-full">
             <button
+              ref={scopeTriggerRef}
               type="button"
               onClick={() => setShowScopeMenu((v) => !v)}
               aria-haspopup="listbox"
@@ -268,15 +315,18 @@ export function TelemetryDashboardView() {
 
             {showScopeMenu && (
               <div
+                ref={scopeListboxRef}
                 role="listbox"
                 aria-label="Quest filter options"
-                className="absolute left-0 sm:left-auto sm:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1.5 shadow-2xl"
+                onKeyDown={handleScopeListKeyDown}
+                className="absolute left-0 sm:left-auto sm:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1 shadow-2xl"
               >
                 <button
                   type="button"
                   role="option"
                   aria-selected={effectiveScope === "ALL"}
-                  onClick={() => handleScopeChange("ALL")}
+                  tabIndex={effectiveScope === "ALL" ? 0 : -1}
+                  onClick={() => handleScopeOptionSelect("ALL")}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
                     effectiveScope === "ALL"
                       ? "bg-white/10 font-medium text-white"
@@ -296,7 +346,8 @@ export function TelemetryDashboardView() {
                       type="button"
                       role="option"
                       aria-selected={active}
-                      onClick={() => handleScopeChange(q.id)}
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => handleScopeOptionSelect(q.id)}
                       className={`mt-0.5 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs ${
                         active
                           ? "bg-white/10 font-medium text-white"
@@ -319,7 +370,8 @@ export function TelemetryDashboardView() {
                   type="button"
                   role="option"
                   aria-selected={effectiveScope === "OTHER"}
-                  onClick={() => handleScopeChange("OTHER")}
+                  tabIndex={effectiveScope === "OTHER" ? 0 : -1}
+                  onClick={() => handleScopeOptionSelect("OTHER")}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
                     effectiveScope === "OTHER"
                       ? "bg-white/10 font-medium text-white"
@@ -380,6 +432,7 @@ export function TelemetryDashboardView() {
               type="button"
               onClick={() => setPeriodOffset((w) => w - 1)}
               aria-label={windowSpec.prevLabel}
+              title={windowSpec.prevLabel}
               className={`rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white ${PRESSABLE}`}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -392,6 +445,7 @@ export function TelemetryDashboardView() {
               onClick={() => setPeriodOffset((w) => Math.min(0, w + 1))}
               disabled={periodOffset === 0}
               aria-label={windowSpec.nextLabel}
+              title={windowSpec.nextLabel}
               className={`rounded-lg p-2 text-neutral-400 enabled:hover:bg-white/[0.05] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${PRESSABLE}`}
             >
               <ChevronRight className="h-4 w-4" />

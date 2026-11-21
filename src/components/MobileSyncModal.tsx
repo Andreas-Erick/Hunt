@@ -20,6 +20,7 @@ import {
   getClientSyncToken,
 } from "@/lib/syncEngine";
 import { hudAudio } from "@/lib/hudAudio";
+import { toLocalDateKey } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { formatAgo, usePhoneLink, useServerLink } from "./SyncStatus";
 
@@ -38,6 +39,11 @@ const STATUS_OK_MS = 3000;
 const COPY_FAILED_TEXT = "Copy failed. Select the link manually.";
 /** The visible address has no key, so selecting it would not pair the phone. */
 const COPY_FAILED_PAIRED_TEXT = "Copy failed. Scan the QR code with your phone instead.";
+const QR_FAILED_TEXT = "Couldn't draw the QR code. Use Copy to get the pairing link instead.";
+const EXPORT_FAILED_TEXT = "Could not export the snapshot. Reload Hunt and try again.";
+const IMPORT_BAD_FILE_TEXT = "Invalid snapshot file. Choose a .json snapshot exported from Hunt.";
+const IMPORT_SAVE_FAILED_TEXT = "Could not save the snapshot locally. Reload Hunt and try again.";
+const IMPORT_OK_TEXT = "Snapshot merged · syncing";
 
 interface FooterStatus {
   source: "copy" | "export" | "import";
@@ -83,6 +89,12 @@ interface ParsedQrSvg {
   paths: Array<{ d: string; fill?: string; stroke?: string }>;
 }
 
+/** The pairing QR: still drawing, drawn, or failed (never shown as endless loading). */
+type QrState =
+  | { status: "pending" }
+  | { status: "ready"; svg: ParsedQrSvg }
+  | { status: "failed" };
+
 /**
  * Extracts only `viewBox` and `<path d fill stroke>` from QRCode.toString's
  * SVG output so the QR renders as React elements with zero dangerouslySetInnerHTML.
@@ -125,7 +137,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
 
   const [token] = useState(getClientSyncToken);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
-  const [qrSvg, setQrSvg] = useState<ParsedQrSvg | null>(null);
+  const [qr, setQr] = useState<QrState>({ status: "pending" });
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<"ok" | "error" | null>(null);
   const [copied, setCopied] = useState(false);
@@ -253,11 +265,15 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         light: "#ffffff",
       },
     })
-      .then((svg) => {
-        if (alive) setQrSvg(parseQrSvg(svg));
+      .then((svgText) => {
+        if (!alive) return;
+        const svg = parseQrSvg(svgText);
+        if (!svg) console.error("[hunt] qr_render_failed", "unexpected SVG output");
+        setQr(svg ? { status: "ready", svg } : { status: "failed" });
       })
-      .catch(() => {
-        if (alive) setQrSvg(null);
+      .catch((err: unknown) => {
+        console.error("[hunt] qr_render_failed", err);
+        if (alive) setQr({ status: "failed" });
       });
     return () => {
       alive = false;
@@ -335,7 +351,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       try {
         const a = document.createElement("a");
         a.href = url;
-        a.download = `hunt-sync-${new Date().toISOString().slice(0, 10)}.json`;
+        // Local calendar date, like the server's own snapshot files.
+        a.download = `hunt-sync-${toLocalDateKey()}.json`;
         a.click();
       } finally {
         URL.revokeObjectURL(url);
@@ -347,7 +364,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         setStatus({
           source: "export",
           tone: "error",
-          text: "Could not export the snapshot.",
+          text: EXPORT_FAILED_TEXT,
         });
       }
     } finally {
@@ -375,8 +392,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             tone: "error",
             text:
               res.reason === "bad_format"
-                ? "Invalid snapshot file."
-                : "Could not save the snapshot locally.",
+                ? IMPORT_BAD_FILE_TEXT
+                : IMPORT_SAVE_FAILED_TEXT,
           });
         }
         return;
@@ -386,7 +403,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         setStatus({
           source: "import",
           tone: "ok",
-          text: "Snapshot merged successfully!",
+          text: IMPORT_OK_TEXT,
         });
       }
       // Push the merged rows to the server in the background (never rejects).
@@ -398,9 +415,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         setStatus({
           source: "import",
           tone: "error",
-          text: badFile
-            ? "Invalid snapshot file."
-            : "Could not save the snapshot locally.",
+          text: badFile ? IMPORT_BAD_FILE_TEXT : IMPORT_SAVE_FAILED_TEXT,
         });
       }
     } finally {
@@ -475,7 +490,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             title="Close"
             aria-label="Close"
-            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors"
+            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -485,23 +500,30 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         <div className="mt-5 sm:mt-7 grid grid-cols-1 gap-5 sm:gap-6 sm:grid-cols-12 items-center">
           {/* Left: Scannable QR Code */}
           <div className="sm:col-span-5 flex min-w-0 flex-col items-center rounded-2xl border border-white/[0.08] bg-[#0b0c0e] p-4 sm:p-5 text-center">
-            {qrSvg ? (
+            {qr.status === "ready" ? (
               <div
                 data-testid="pairing-qr"
                 className="h-36 w-36 sm:h-44 sm:w-44 overflow-hidden rounded-xl bg-white"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  viewBox={qrSvg.viewBox}
+                  viewBox={qr.svg.viewBox}
                   shapeRendering="crispEdges"
                   role="img"
                   aria-label="Phone pairing QR code"
                   className="h-full w-full"
                 >
-                  {qrSvg.paths.map((p, idx) => (
+                  {qr.svg.paths.map((p, idx) => (
                     <path key={idx} d={p.d} fill={p.fill} stroke={p.stroke} />
                   ))}
                 </svg>
+              </div>
+            ) : qr.status === "failed" ? (
+              <div
+                role="alert"
+                className="flex h-36 w-36 sm:h-44 sm:w-44 items-center justify-center text-xs text-hud-amber"
+              >
+                {QR_FAILED_TEXT}
               </div>
             ) : (
               <div className="flex h-36 w-36 sm:h-44 sm:w-44 items-center justify-center text-xs text-hud-muted">
@@ -605,7 +627,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                   onClick={handleManualSync}
                   disabled={syncing}
                   aria-busy={syncing}
-                  className="flex min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-colors"
+                  className="flex min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-all duration-150 ease-out active:scale-[0.98]"
                 >
                   {syncing ? (
                     <>
@@ -641,7 +663,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={handleCopyUrl}
                 title={token ? "Copy the pairing link" : "Copy the address"}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-neutral-300 hover:text-white"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-neutral-300 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
               >
                 {copied ? (
                   <>
@@ -699,7 +721,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             <a
               href="/Hunt-Mobile.apk"
               download="Hunt-Mobile.apk"
-              className="flex items-center gap-1.5 rounded-lg border border-[#00f0ff]/35 bg-[#00f0ff]/10 px-3 py-1.5 font-medium text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-[#00f0ff]/35 bg-[#00f0ff]/10 px-3 py-1.5 font-medium text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all duration-150 ease-out active:scale-[0.98]"
             >
               <Smartphone className="h-3.5 w-3.5" />
               <span>Download Android APK</span>
@@ -710,7 +732,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={handleExportJson}
               disabled={busy}
               aria-busy={exporting}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-all duration-150 ease-out active:scale-[0.98]"
             >
               {exported ? (
                 <>
@@ -739,7 +761,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={() => fileInputRef.current?.click()}
               disabled={busy}
               aria-busy={importing}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-all duration-150 ease-out active:scale-[0.98]"
             >
               <Upload className="h-3.5 w-3.5" />
               <span>Merge Snapshot</span>

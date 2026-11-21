@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -7,7 +7,9 @@ import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
 import type { Task } from "@/lib/db";
 
 // The route resolves its data directory at import time; point it at a
-// throwaway directory so the real data/hunt-sync.json is never touched.
+// throwaway directory so the real data/hunt-sync.json is never touched. Each
+// test gets its own directory and route import, and seeds what it relies on,
+// so the suite passes in any order (vitest --sequence.shuffle).
 const KEY = "k".repeat(64);
 let dir = "";
 let route: typeof import("@/app/api/sync/route");
@@ -37,7 +39,7 @@ function request(method: "GET" | "POST", client: string | null, payload?: unknow
     "X-Hunt-Token": KEY,
   };
   if (client) headers["X-Hunt-Client"] = client;
-  return new Request("http://192.168.2.136:3000/api/sync", {
+  return new Request("http://192.168.1.5:3000/api/sync", {
     method,
     headers,
     body: payload === undefined ? undefined : JSON.stringify(payload),
@@ -53,15 +55,25 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+/** Posts a change from the desktop and asserts it was stored. */
+async function postTasks(...tasks: Task[]) {
+  const res = await route.POST(request("POST", "desktop", body({ tasks })));
+  expect(res.status).toBe(200);
+}
+
 describe("/api/sync route", () => {
-  beforeAll(async () => {
+  beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "hunt-sync-route-test-"));
     fs.writeFileSync(path.join(dir, "hunt-sync.key"), KEY, "utf8");
     process.env.HUNT_DATA_DIR = dir;
+    // Peers live on globalThis (they survive dev recompiles), so reset them too.
+    delete (globalThis as { __huntSyncPeers?: unknown }).__huntSyncPeers;
+    vi.resetModules();
     route = await import("@/app/api/sync/route");
   });
 
-  afterAll(() => {
+  afterEach(() => {
+    vi.restoreAllMocks();
     delete process.env.HUNT_DATA_DIR;
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -74,7 +86,7 @@ describe("/api/sync route", () => {
 
   it("rejects requests without a valid token", async () => {
     const res = await route.POST(
-      new Request("http://192.168.2.136:3000/api/sync", {
+      new Request("http://192.168.1.5:3000/api/sync", {
         method: "POST",
         headers: { "X-Hunt-Token": "wrong" },
         body: "{}",
@@ -102,6 +114,8 @@ describe("/api/sync route", () => {
   });
 
   it("does not rewrite hunt-sync.json when a sync brings nothing new", async () => {
+    await postTasks(task("t1"));
+    await postTasks(task("t2"));
     const contentBefore = read(syncFile());
     const backupBefore = fs.existsSync(backupFile()) ? read(backupFile()) : null;
 
@@ -120,7 +134,9 @@ describe("/api/sync route", () => {
   });
 
   it("on a real change keeps the previous version as backup plus a daily snapshot", async () => {
+    await postTasks(task("t1"));
     const previous = read(syncFile());
+    expect(fs.existsSync(backupFile())).toBe(false);
 
     const res = await route.POST(
       request("POST", "desktop", body({ tasks: [task("t2", { createdAt: 2000, updatedAt: 2000 })] }))
@@ -141,7 +157,8 @@ describe("/api/sync route", () => {
   });
 
   it("keeps only the newest 14 daily snapshots", async () => {
-    fs.rmSync(path.join(snapshotDir(), `hunt-sync-${today()}.json`));
+    await postTasks(task("t1"));
+    fs.mkdirSync(snapshotDir(), { recursive: true });
     for (let day = 1; day <= 20; day++) {
       fs.writeFileSync(
         path.join(snapshotDir(), `hunt-sync-2020-01-${String(day).padStart(2, "0")}.json`),
@@ -159,7 +176,10 @@ describe("/api/sync route", () => {
   });
 
   it("recovers from a corrupt main file via the backup without clobbering the backup", async () => {
+    await postTasks(task("t1"));
+    await postTasks(task("t2"));
     const goodBackup = read(backupFile());
+    expect((JSON.parse(goodBackup) as SyncPayload).tasks.map((t) => t.id)).toEqual(["t1"]);
     fs.writeFileSync(syncFile(), "{ corrupt", "utf8");
 
     const res = await route.POST(request("POST", "desktop", body({ tasks: [task("t5")] })));
@@ -187,10 +207,9 @@ describe("/api/sync route", () => {
 
     expect(errors).toHaveBeenCalledWith(
       "[hunt-sync] unreadable",
-      { client: "desktop" },
+      { client: "desktop", correlationId: expect.any(String), durationMs: expect.any(Number) },
       expect.any(String)
     );
     expect(JSON.stringify(errors.mock.calls)).not.toContain(KEY);
-    errors.mockRestore();
   });
 });

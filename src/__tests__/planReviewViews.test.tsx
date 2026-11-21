@@ -1313,7 +1313,8 @@ describe("long unbroken text", () => {
     expect(title).toHaveClass("break-words", "block", "w-full", "text-left");
     expect(screen.getByText(longDone)).toHaveClass("break-words");
 
-    const selector = screen.getByRole("button", { name: longQuest, pressed: true });
+    // Quests load in their own live query, so they can render after the tasks.
+    const selector = await screen.findByRole("button", { name: longQuest, pressed: true });
     expect(selector).toHaveClass("min-w-0", "max-w-full");
     const selectorLabel = within(selector).getByText(longQuest);
     expect(selectorLabel).toHaveClass("truncate");

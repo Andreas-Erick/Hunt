@@ -242,6 +242,14 @@ const SOURCE_HASH = crypto
 
 let compileInFlight: Promise<string | null> | null = null;
 
+/**
+ * After a failed compile, window actions skip csc.exe for this long and answer
+ * helper_unavailable at once, so the client falls back to the DOM APIs instead of
+ * waiting out its deadline on every click.
+ */
+export const WINCTL_COMPILE_FAILURE_COOLDOWN_MS = 60_000;
+let compileFailedAt: number | null = null;
+
 function findCscCompiler(): string | null {
   const windir = process.env.WINDIR || "C:\\Windows";
   const candidates = [
@@ -281,6 +289,53 @@ function execFilePromise(
   });
 }
 
+async function compileWinCtlHelper(exePath: string): Promise<string | null> {
+  try {
+    const csc = findCscCompiler();
+    if (!csc) return null;
+    const csPath = path.join(
+      os.tmpdir(),
+      `hunt-winctl-${SOURCE_HASH}-${process.pid}.cs`
+    );
+    const tmpExe = path.join(
+      os.tmpdir(),
+      `hunt-winctl-${SOURCE_HASH}-${process.pid}.exe`
+    );
+    fs.writeFileSync(csPath, WINCTL_CS_SOURCE, "utf8");
+    try {
+      const res = await execFilePromise(
+        csc,
+        ["/nologo", "/optimize+", "/target:exe", `/out:${tmpExe}`, csPath],
+        8000
+      );
+      if (res.code !== 0 || !fs.existsSync(tmpExe)) {
+        return null;
+      }
+      try {
+        fs.renameSync(tmpExe, exePath);
+      } catch {
+        if (!fs.existsSync(exePath)) {
+          fs.copyFileSync(tmpExe, exePath);
+        }
+      }
+      return fs.existsSync(exePath) ? exePath : null;
+    } finally {
+      try {
+        if (fs.existsSync(csPath)) fs.unlinkSync(csPath);
+      } catch {
+        // Best-effort temp cleanup
+      }
+      try {
+        if (fs.existsSync(tmpExe)) fs.unlinkSync(tmpExe);
+      } catch {
+        // Best-effort temp cleanup
+      }
+    }
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureCompiledWinCtlHelper(): Promise<string | null> {
   if (process.platform !== "win32") return null;
   const exePath = path.join(os.tmpdir(), `hunt-winctl-${SOURCE_HASH}.exe`);
@@ -288,50 +343,18 @@ export async function ensureCompiledWinCtlHelper(): Promise<string | null> {
 
   if (compileInFlight) return compileInFlight;
 
+  if (
+    compileFailedAt !== null &&
+    Date.now() - compileFailedAt < WINCTL_COMPILE_FAILURE_COOLDOWN_MS
+  ) {
+    return null;
+  }
+
   compileInFlight = (async () => {
     try {
-      const csc = findCscCompiler();
-      if (!csc) return null;
-      const csPath = path.join(
-        os.tmpdir(),
-        `hunt-winctl-${SOURCE_HASH}-${process.pid}.cs`
-      );
-      const tmpExe = path.join(
-        os.tmpdir(),
-        `hunt-winctl-${SOURCE_HASH}-${process.pid}.exe`
-      );
-      fs.writeFileSync(csPath, WINCTL_CS_SOURCE, "utf8");
-      try {
-        const res = await execFilePromise(
-          csc,
-          ["/nologo", "/optimize+", "/target:exe", `/out:${tmpExe}`, csPath],
-          8000
-        );
-        if (res.code !== 0 || !fs.existsSync(tmpExe)) {
-          return null;
-        }
-        try {
-          fs.renameSync(tmpExe, exePath);
-        } catch {
-          if (!fs.existsSync(exePath)) {
-            fs.copyFileSync(tmpExe, exePath);
-          }
-        }
-        return fs.existsSync(exePath) ? exePath : null;
-      } finally {
-        try {
-          if (fs.existsSync(csPath)) fs.unlinkSync(csPath);
-        } catch {
-          // Best-effort temp cleanup
-        }
-        try {
-          if (fs.existsSync(tmpExe)) fs.unlinkSync(tmpExe);
-        } catch {
-          // Best-effort temp cleanup
-        }
-      }
-    } catch {
-      return null;
+      const compiled = await compileWinCtlHelper(exePath);
+      compileFailedAt = compiled ? null : Date.now();
+      return compiled;
     } finally {
       compileInFlight = null;
     }

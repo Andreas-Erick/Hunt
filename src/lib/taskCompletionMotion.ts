@@ -1,5 +1,27 @@
 "use client";
 
+import { QUEST_ACCENT_STYLES, type QuestAccentStyle } from "./questAccents";
+
+/** How long (ms) a freshly completed task card keeps its arrival highlight. */
+export const COMPLETION_HIGHLIGHT_MS = 650;
+
+/**
+ * Surface of a completed card while it settles in (`COMPLETION_HIGHLIGHT_MS`):
+ * raised above its siblings with an emerald border and one shared shadow, the
+ * same on Home and Plan the week.
+ */
+export const SETTLING_COMPLETED_CARD_CLASS =
+  "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]";
+
+/**
+ * Fill of a completed card's dimmed (opacity-65) Reopen dot. The slate "Other"
+ * accent (slate-500) falls to about 2.3:1 at that opacity, so it uses slate-400
+ * (about 3.8:1); every other accent keeps its own fill.
+ */
+export function reopenDotBgClass(accent: QuestAccentStyle): string {
+  return accent === QUEST_ACCENT_STYLES.slate ? "bg-slate-400" : accent.bg;
+}
+
 export interface TaskCompletionScene {
   taskId: string;
   ghost: HTMLElement;

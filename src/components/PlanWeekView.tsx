@@ -19,6 +19,7 @@ import {
   dateFromKey,
   dateKeyFromOffset,
   formatChronoMMSS,
+  isMissedHabitTask,
   loadSortedQuests,
   toLocalDateKey,
   type Quest,
@@ -28,12 +29,16 @@ import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import {
+  COMPLETION_HIGHLIGHT_MS,
+  SETTLING_COMPLETED_CARD_CLASS,
   captureTaskCompletionScene,
   playTwoBeatTaskCompletion,
+  reopenDotBgClass,
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
+import { useTransientHighlight } from "./useTransientHighlight";
 
 interface DayColumn {
   dateKey: string;
@@ -68,7 +73,49 @@ function buildDayColumns(todayKey: string, dayOffset: number): DayColumn[] {
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const ADD_BUTTON = `rounded border border-white/10 bg-white/[0.03] p-1 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
-const COMPLETION_HIGHLIGHT_MS = 650;
+
+interface DayTasks {
+  pending: Task[];
+  completed: Task[];
+}
+
+/** Shared value for a day with no tasks. */
+const NO_DAY_TASKS: Readonly<DayTasks> = Object.freeze({
+  pending: [],
+  completed: [],
+});
+
+/**
+ * Groups tasks by the day column they render in (`scheduledDate`, or today
+ * when unscheduled), split into pending and completed, each in rank order.
+ * One pass over the table instead of a scan per column.
+ */
+function groupTasksByDay(
+  tasks: readonly Task[],
+  todayKey: string
+): Map<string, DayTasks> {
+  const byDay = new Map<string, DayTasks>();
+  for (const t of tasks) {
+    const pending = t.status === "queued" || t.status === "active";
+    if (!pending && t.status !== "completed") continue;
+    // A dateless daily habit row has no day of its own, so it would land in
+    // today's column: as a missed day (isMissedHabitTask) it is not open work.
+    // Dated missed days stay under their own (past) column as history.
+    if (!t.scheduledDate && isMissedHabitTask(t, todayKey)) continue;
+    const dateKey = t.scheduledDate ?? todayKey;
+    let day = byDay.get(dateKey);
+    if (!day) {
+      day = { pending: [], completed: [] };
+      byDay.set(dateKey, day);
+    }
+    (pending ? day.pending : day.completed).push(t);
+  }
+  byDay.forEach((day) => {
+    day.pending.sort(compareRank);
+    day.completed.sort(compareRank);
+  });
+  return byDay;
+}
 
 export function PlanWeekView() {
   const {
@@ -105,18 +152,9 @@ export function PlanWeekView() {
   const [notesByDay, setNotesByDay] = useState<Record<string, string>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverDateKey, setDragOverDateKey] = useState<string | null>(null);
-  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
-  const completeHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+  const [justCompletedId, flashJustCompleted] = useTransientHighlight(
+    COMPLETION_HIGHLIGHT_MS
   );
-
-  useEffect(() => {
-    return () => {
-      if (completeHighlightTimerRef.current !== null) {
-        clearTimeout(completeHighlightTimerRef.current);
-      }
-    };
-  }, []);
 
   // Days with an add in flight; set synchronously, so a double click or a
   // repeated Enter cannot create the task twice before React re-renders.
@@ -185,9 +223,6 @@ export function PlanWeekView() {
   } | null>(null);
 
   const handleCompleteTask = (taskId: string, colDateKey: string) => {
-    if (completeHighlightTimerRef.current !== null) {
-      clearTimeout(completeHighlightTimerRef.current);
-    }
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
     const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
@@ -197,11 +232,7 @@ export function PlanWeekView() {
       accentHex
     );
     pendingSceneRef.current = scene ? { colDateKey, scene } : null;
-    setJustCompletedId(taskId);
-    completeHighlightTimerRef.current = setTimeout(() => {
-      setJustCompletedId((cur) => (cur === taskId ? null : cur));
-      completeHighlightTimerRef.current = null;
-    }, COMPLETION_HIGHLIGHT_MS);
+    flashJustCompleted(taskId);
     hudAudio.playComplete();
     void completeTaskById(taskId);
   };
@@ -303,10 +334,15 @@ export function PlanWeekView() {
     }
   };
 
-  const hasVisiblePendingTasks = (allTasks ?? []).some(
-    (t) =>
-      (t.status === "queued" || t.status === "active") &&
-      columns.some((c) => c.dateKey === (t.scheduledDate ?? todayKey))
+  // Regrouped only when the tasks or the day change, not on every keystroke
+  // in an add box or every drag-over.
+  const tasksByDay = React.useMemo(
+    () => groupTasksByDay(allTasks ?? [], todayKey),
+    [allTasks, todayKey]
+  );
+
+  const hasVisiblePendingTasks = columns.some(
+    (c) => (tasksByDay.get(c.dateKey)?.pending.length ?? 0) > 0
   );
 
   return (
@@ -314,7 +350,7 @@ export function PlanWeekView() {
       {/* Header Row: "Plan the week" + Active Quest Selector + Month / Today Controls */}
       <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:gap-6 lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             Plan the week
           </h1>
 
@@ -322,7 +358,7 @@ export function PlanWeekView() {
           <div
             role="group"
             aria-label="Quest for new tasks"
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#111318] p-1"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-2xl border border-white/[0.07] bg-[#111318] p-1 sm:rounded-full"
           >
             {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
@@ -405,19 +441,8 @@ export function PlanWeekView() {
         className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 xl:grid-cols-5"
       >
         {columns.map((col) => {
-          const dayTasks = (allTasks ?? [])
-            .filter((t) => {
-              const sDate = t.scheduledDate ?? todayKey;
-              return sDate === col.dateKey;
-            })
-            .sort(compareRank);
-
-          const pendingDayTasks = dayTasks.filter(
-            (t) => t.status === "queued" || t.status === "active"
-          );
-          const completedDayTasks = dayTasks.filter(
-            (t) => t.status === "completed"
-          );
+          const { pending: pendingDayTasks, completed: completedDayTasks } =
+            tasksByDay.get(col.dateKey) ?? NO_DAY_TASKS;
           const isDragTarget = dragOverDateKey === col.dateKey;
           const dayInput = inputsByDay[col.dateKey] ?? "";
 
@@ -573,7 +598,7 @@ export function PlanWeekView() {
                         setDragOverDateKey(null);
                       }}
                       onKeyDown={(e) => void handleCardKeyDown(e, task, col.dateKey)}
-                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-colors duration-200 cursor-grab ${
+                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-colors duration-200 cursor-grab active:cursor-grabbing ${
                         isHero
                           ? "border-[#ffb800]/40 bg-[#151820] shadow-[0_0_24px_-10px_rgba(255,184,0,0.2)]"
                           : "border-white/[0.08] bg-[#13151b] hover:border-white/20"
@@ -618,7 +643,7 @@ export function PlanWeekView() {
                             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
-                                : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                                : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
                             }`}
                           >
                             <Check className="h-2.5 w-2.5" />
@@ -643,7 +668,7 @@ export function PlanWeekView() {
                           )}
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-2">
                           {task.accumulatedSeconds > 0 && (
                             <span className="font-mono text-[11px] tabular-nums text-neutral-400">
                               {formatChronoMMSS(task.accumulatedSeconds).formatted}
@@ -695,7 +720,7 @@ export function PlanWeekView() {
                       data-date-key={col.dateKey}
                       className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
                         isJustCompleted
-                          ? "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_10px_24px_-10px_rgba(0,255,157,0.3)]"
+                          ? SETTLING_COMPLETED_CARD_CLASS
                           : "border-white/[0.05] bg-[#101217]/50"
                       }`}
                     >
@@ -712,7 +737,7 @@ export function PlanWeekView() {
                             onClick={() => reopenTaskById(task.id)}
                             title="Reopen task"
                             aria-label="Reopen task"
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
                           >
                             {isJustCompleted ? (
                               <motion.span
