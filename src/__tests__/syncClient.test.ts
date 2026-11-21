@@ -362,7 +362,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
               tasks: [task("tsk-3000-new1")],
               lastSyncedAt: 4242,
             },
-            lanUrls: ["http://192.168.2.136:3000", 7],
+            lanUrls: ["http://192.168.1.5:3000", 7],
             peers: { phone: { lastSeenAt: 99 } },
           })
         )
@@ -373,7 +373,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
       expect(res.ok).toBe(true);
       expect(res.changed).toBe(true);
       expect(res.merged?.lastSyncedAt).toBe(4242);
-      expect(res.lanUrls).toEqual(["http://192.168.2.136:3000"]);
+      expect(res.lanUrls).toEqual(["http://192.168.1.5:3000"]);
       expect(res.peers).toEqual({ phone: { lastSeenAt: 99 } });
       expect(await db.tasks.get("tsk-3000-new1")).toMatchObject({ title: "Task tsk-3000-new1" });
     });
@@ -585,10 +585,12 @@ describe("desktop sync client (syncEngine.ts)", () => {
       for (let i = 0; i < responses.length; i++) codes.push((await performServerSync(NO_FOCUS)).error);
 
       expect(codes).toEqual(["auth", "auth", undefined, "auth", "http_503", "http_503"]);
+      // Each line carries the request's correlation id (sent as X-Hunt-Correlation-Id) and duration.
+      const logged = { correlationId: expect.any(String), durationMs: expect.any(Number) };
       expect(syncFailureLogs(errors).map((c) => c[1])).toEqual([
-        { phase: "response", code: "auth", status: 401, name: undefined, message: undefined },
-        { phase: "response", code: "auth", status: 401, name: undefined, message: undefined },
-        { phase: "response", code: "http_503", status: 503, name: undefined, message: undefined },
+        { phase: "response", code: "auth", status: 401, name: undefined, message: undefined, ...logged },
+        { phase: "response", code: "auth", status: 401, name: undefined, message: undefined, ...logged },
+        { phase: "response", code: "http_503", status: 503, name: undefined, message: undefined, ...logged },
       ]);
     });
 
@@ -633,7 +635,15 @@ describe("desktop sync client (syncEngine.ts)", () => {
       expect(syncFailureLogs(errors)).toEqual([
         [
           "[hunt-sync] sync_failed",
-          { phase: "response", code: "bad_response", status: undefined, name: undefined, message: reason },
+          {
+            phase: "response",
+            code: "bad_response",
+            status: undefined,
+            name: undefined,
+            message: reason,
+            correlationId: expect.any(String),
+            durationMs: expect.any(Number),
+          },
         ],
       ]);
     });
@@ -688,7 +698,10 @@ describe("desktop sync client (syncEngine.ts)", () => {
       ["too_large", "Data is larger than the sync server accepts"],
       ["http_503", "Sync server could not save data; retrying (see %TEMP%\\hunt-server.log)"],
       ["http_507", "Server refused to overwrite its data file (see %TEMP%\\hunt-server.log)"],
-      ["http_418", "Sync server error (HTTP 418)"],
+      [
+        "http_418",
+        "Sync server hit an error. Restart Hunt from the desktop launcher (details in %TEMP%\\hunt-server.log, HTTP 418)",
+      ],
       ["something_else", "Sync failed"],
       ["", ""],
       [null, ""],

@@ -42,3 +42,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Android signing key (never commit; release CI reads it from the ANDROID_KEYSTORE_BASE64 secret)
+android-app/keystore/

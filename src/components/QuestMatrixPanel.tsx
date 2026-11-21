@@ -1,7 +1,6 @@
 "use client";
 
 import React, {
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -27,10 +26,12 @@ import {
   QUEST_ACCENT_STYLES,
   accentStyle,
   dateKeyFromOffset,
+  isOpenTask,
   loadSortedQuests,
   formatChronoMMSS,
   type Quest,
   type QuestAccent,
+  type Task,
   type TimeLog,
 } from "@/lib/db";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
@@ -43,11 +44,40 @@ import {
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { useDiscardGuard } from "./useDiscardGuard";
 import { useTodayDateKey } from "./useTodayDateKey";
+import { useTransientHighlight } from "./useTransientHighlight";
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
 const WEEK_DAYS = 7;
+/**
+ * How long (ms) a just-completed quest card stays highlighted in Completed
+ * quests. Separate from the task-card COMPLETION_HIGHLIGHT_MS (650).
+ */
+const QUEST_COMPLETION_HIGHLIGHT_MS = 700;
+/** Shared value for a quest with no open tasks. */
+const NO_TASKS: readonly Task[] = Object.freeze([]);
+
+/**
+ * Open tasks (isOpenTask: queued or active, minus missed daily habit days)
+ * grouped by quest, each in rank order: one pass over the table instead of a
+ * scan per quest card.
+ */
+function groupOpenTasksByQuest(
+  tasks: readonly Task[],
+  todayKey: string
+): Map<string, Task[]> {
+  const byQuest = new Map<string, Task[]>();
+  for (const t of tasks) {
+    if (!t.questId || !isOpenTask(t, todayKey)) continue;
+    const list = byQuest.get(t.questId);
+    if (list) list.push(t);
+    else byQuest.set(t.questId, [t]);
+  }
+  byQuest.forEach((list) => list.sort(compareRank));
+  return byQuest;
+}
 /** Native `pattern` (matched against the whole value): at least one non-space character. */
 const NON_BLANK_PATTERN = ".*\\S.*";
 
@@ -75,6 +105,9 @@ function deleteQuestConfirmLabel(openTaskCount: number): string {
 function confirmDiscard(dirty: boolean): boolean {
   return !dirty || window.confirm(DISCARD_PROMPT);
 }
+
+/** Discard guard for leaving the Quests view with unsaved form edits. */
+const confirmLeaveDirty = () => confirmDiscard(true);
 
 function AccentPills({
   value,
@@ -220,6 +253,12 @@ export function QuestMatrixPanel() {
 
   // Recomputed when the day changes (the view can stay open past midnight).
   const todayKey = useTodayDateKey();
+  // Regrouped only when the tasks or the day change, not on every keystroke in
+  // the quick-add, edit or new-quest fields.
+  const openTasksByQuest = useMemo(
+    () => groupOpenTasksByQuest(allTasks ?? [], todayKey),
+    [allTasks, todayKey]
+  );
   // Today and the 6 days before it, stepped from a noon anchor (DST-safe).
   const weekDateKeys = useMemo(
     () =>
@@ -284,6 +323,8 @@ export function QuestMatrixPanel() {
 
   const newQuestIsDirty = () =>
     newTitle.trim() !== "" || newDesc.trim() !== "";
+
+  useDiscardGuard(editIsDirty() || newQuestIsDirty(), confirmLeaveDirty);
 
   const startEdit = (q: Quest, toggle: HTMLButtonElement) => {
     hudAudio.playClick();
@@ -377,30 +418,12 @@ export function QuestMatrixPanel() {
     );
   }, [allTasks]);
 
-  const [justCompletedQuestId, setJustCompletedQuestId] = useState<string | null>(
-    null
+  const [justCompletedQuestId, flashJustCompletedQuest] = useTransientHighlight(
+    QUEST_COMPLETION_HIGHLIGHT_MS
   );
-  const questHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-
-  useEffect(() => {
-    return () => {
-      if (questHighlightTimerRef.current !== null) {
-        clearTimeout(questHighlightTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleCompleteQuest = async (questId: string) => {
-    if (questHighlightTimerRef.current !== null) {
-      clearTimeout(questHighlightTimerRef.current);
-    }
-    setJustCompletedQuestId(questId);
-    questHighlightTimerRef.current = setTimeout(() => {
-      setJustCompletedQuestId((cur) => (cur === questId ? null : cur));
-      questHighlightTimerRef.current = null;
-    }, 700);
+    flashJustCompletedQuest(questId);
     hudAudio.playComplete();
     setEditingQuest((current) => (current?.id === questId ? null : current));
     await completeQuest(questId);
@@ -506,7 +529,7 @@ export function QuestMatrixPanel() {
       {/* Page Heading + New Quest Button */}
       <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             Quests
           </h1>
           <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
@@ -673,13 +696,7 @@ export function QuestMatrixPanel() {
             );
             const isEditing = editingQuest?.id === quest.id;
 
-            const questTasks = (allTasks ?? [])
-              .filter(
-                (t) =>
-                  t.questId === quest.id &&
-                  (t.status === "queued" || t.status === "active")
-              )
-              .sort(compareRank);
+            const questTasks = openTasksByQuest.get(quest.id) ?? NO_TASKS;
 
             return (
               <motion.div
@@ -710,7 +727,7 @@ export function QuestMatrixPanel() {
                       </h2>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-2">
                       <ConfirmDeleteButton
                         label={`Complete quest ${quest.title}`}
                         confirmLabel={completeQuestConfirmLabel(
@@ -857,9 +874,12 @@ export function QuestMatrixPanel() {
                       </span>
                     </div>
                     <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                      {/* Full-width fill slid in from the left (compositor-only);
+                          the track's overflow-hidden clips it, keeping the rounded end. */}
                       <div
-                        className={`h-full rounded-full ${style.bg} transition-all duration-500`}
-                        style={{ width: `${pct}%` }}
+                        data-testid="quest-progress-fill"
+                        className={`h-full w-full rounded-full ${style.bg} transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]`}
+                        style={{ transform: `translateX(${pct - 100}%)` }}
                       />
                     </div>
                   </div>

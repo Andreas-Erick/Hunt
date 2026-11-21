@@ -18,6 +18,9 @@ import {
   mergeSyncPayloads,
   pickLogWinner,
   pickRowWinner,
+  questOrHabitRowStamp,
+  syncPayloadHasContent,
+  taskRowStamp,
   validateSyncPayload,
   type SyncPayload,
 } from "./syncTypes";
@@ -35,7 +38,8 @@ export const SYNC_CLIENT_ID = "desktop";
  * Why a sync attempt failed.
  * - `unreachable`  network error / timeout talking to the local server
  * - `auth`         HTTP 401 (pairing key missing or rejected)
- * - `too_large`    HTTP 413 (payload over the server's size cap)
+ * - `too_large`    HTTP 413 (payload over the server's size cap), or a 507
+ *                  whose body code is `merged_over_limit` (merged data over it)
  * - `bad_response` the server answered 2xx but the body was not a sync payload
  * - `local_db`     reading or writing this browser's IndexedDB failed
  * - `http_<code>`  any other non-2xx status
@@ -53,39 +57,56 @@ export interface SyncPeers {
   phone: { lastSeenAt: number | null };
 }
 
-export interface ServerSyncResult {
-  ok: boolean;
-  merged?: SyncPayload;
-  lanUrls?: string[];
-  /** True when applying the merged payload changed any local IndexedDB row. */
-  changed?: boolean;
-  peers?: SyncPeers;
-  error?: SyncErrorCode;
+export type ServerSyncResult =
+  | {
+      ok: true;
+      merged: SyncPayload;
+      /** True when applying the merged payload changed any local IndexedDB row. */
+      changed: boolean;
+      lanUrls?: string[];
+      peers?: SyncPeers;
+      error?: undefined;
+    }
+  | {
+      ok: false;
+      error: SyncErrorCode;
+      merged?: undefined;
+      changed?: undefined;
+      lanUrls?: undefined;
+      peers?: undefined;
+    };
+
+type NamedSyncErrorCode = Exclude<SyncErrorCode, `http_${number}`>;
+
+/** Text for every named code: a new SyncErrorCode literal must get one here. */
+const SYNC_ERROR_TEXT: Readonly<Record<NamedSyncErrorCode, string>> = {
+  unreachable: "Local sync server not reachable",
+  auth: "Pairing key missing or rejected. Open Hunt with the desktop launcher to load the key.",
+  too_large: "Data is larger than the sync server accepts",
+  bad_response: "Unexpected response from the sync server",
+  local_db: "Could not read or save local data in this browser",
+};
+
+/** HTTP statuses with their own text; any other one gets the generic fallback. */
+const HTTP_STATUS_TEXT: Readonly<Partial<Record<number, string>>> = {
+  503: "Sync server could not save data; retrying (see %TEMP%\\hunt-server.log)",
+  507: "Server refused to overwrite its data file (see %TEMP%\\hunt-server.log)",
+};
+
+function isNamedSyncErrorCode(code: string): code is NamedSyncErrorCode {
+  return Object.prototype.hasOwnProperty.call(SYNC_ERROR_TEXT, code);
 }
 
 /** Human-readable text for a sync error code (for status lines / tooltips). */
 export function describeSyncError(code: string | null | undefined): string {
   if (!code) return "";
-  switch (code) {
-    case "unreachable":
-      return "Local sync server not reachable";
-    case "auth":
-      return "Pairing key missing or rejected. Open Hunt with the desktop launcher to load the key.";
-    case "too_large":
-      return "Data is larger than the sync server accepts";
-    case "bad_response":
-      return "Unexpected response from the sync server";
-    case "local_db":
-      return "Could not read or save local data in this browser";
-    case "http_503":
-      return "Sync server could not save data; retrying (see %TEMP%\\hunt-server.log)";
-    case "http_507":
-      return "Server refused to overwrite its data file (see %TEMP%\\hunt-server.log)";
-    default: {
-      const m = /^http_(\d+)$/.exec(code);
-      return m ? `Sync server error (HTTP ${m[1]})` : "Sync failed";
-    }
-  }
+  if (isNamedSyncErrorCode(code)) return SYNC_ERROR_TEXT[code];
+  const m = /^http_(\d+)$/.exec(code);
+  if (!m) return "Sync failed";
+  return (
+    HTTP_STATUS_TEXT[Number(m[1])] ??
+    `Sync server hit an error. Restart Hunt from the desktop launcher (details in %TEMP%\\hunt-server.log, HTTP ${m[1]})`
+  );
 }
 
 /** The trimmed pairing key, or '' when `raw` is not a valid one. */
@@ -144,82 +165,134 @@ export function getClientSyncToken(): string {
   }
 }
 
-interface TombstoneStore {
-  deletedQuestIds: string[];
-  deletedTaskIds: string[];
-  deletedLogIds: string[];
-  deletedHabitIds: string[];
+/** The tombstone lists of a SyncPayload, one per deletable kind. */
+const TOMBSTONE_KINDS = [
+  "deletedQuestIds",
+  "deletedTaskIds",
+  "deletedLogIds",
+  "deletedHabitIds",
+] as const satisfies readonly (keyof SyncPayload)[];
+
+type TombstoneKind = (typeof TOMBSTONE_KINDS)[number];
+type TombstoneStore = Record<TombstoneKind, string[]>;
+
+/** Builds a store from one list per kind (the compiler requires every kind here). */
+function buildTombstones(listFor: (kind: TombstoneKind) => string[]): TombstoneStore {
+  return {
+    deletedQuestIds: listFor("deletedQuestIds"),
+    deletedTaskIds: listFor("deletedTaskIds"),
+    deletedLogIds: listFor("deletedLogIds"),
+    deletedHabitIds: listFor("deletedHabitIds"),
+  };
+}
+
+function emptyTombstones(): TombstoneStore {
+  return buildTombstones(() => []);
 }
 
 function getLocalTombstones(): TombstoneStore {
-  if (typeof window === "undefined") {
-    return { deletedQuestIds: [], deletedTaskIds: [], deletedLogIds: [], deletedHabitIds: [] };
-  }
+  if (typeof window === "undefined") return emptyTombstones();
   try {
     const raw = window.localStorage.getItem(TOMBSTONE_STORAGE_KEY);
-    if (!raw) {
-      return { deletedQuestIds: [], deletedTaskIds: [], deletedLogIds: [], deletedHabitIds: [] };
-    }
-    const parsed = JSON.parse(raw) as Partial<TombstoneStore>;
-    const ids = (arr: unknown): string[] =>
-      Array.isArray(arr)
-        ? arr.filter((x): x is string => typeof x === "string").slice(-MAX_TOMBSTONES_PER_KIND)
+    if (!raw) return emptyTombstones();
+    const parsed = asRecord(JSON.parse(raw));
+    return buildTombstones((kind) => {
+      const list: unknown = parsed[kind];
+      return Array.isArray(list)
+        ? list.filter((x): x is string => typeof x === "string").slice(-MAX_TOMBSTONES_PER_KIND)
         : [];
-    return {
-      deletedQuestIds: ids(parsed.deletedQuestIds),
-      deletedTaskIds: ids(parsed.deletedTaskIds),
-      deletedLogIds: ids(parsed.deletedLogIds),
-      deletedHabitIds: ids(parsed.deletedHabitIds),
-    };
+    });
   } catch {
-    return { deletedQuestIds: [], deletedTaskIds: [], deletedLogIds: [], deletedHabitIds: [] };
+    return emptyTombstones();
   }
 }
 
-function saveLocalTombstones(store: TombstoneStore): void {
-  if (typeof window === "undefined") return;
-  const bounded: TombstoneStore = {
-    deletedQuestIds: store.deletedQuestIds.slice(-MAX_TOMBSTONES_PER_KIND),
-    deletedTaskIds: store.deletedTaskIds.slice(-MAX_TOMBSTONES_PER_KIND),
-    deletedLogIds: store.deletedLogIds.slice(-MAX_TOMBSTONES_PER_KIND),
-    deletedHabitIds: store.deletedHabitIds.slice(-MAX_TOMBSTONES_PER_KIND),
-  };
+/** Persists the (bounded) store; false when localStorage refused it (quota, blocked). */
+function saveLocalTombstones(store: TombstoneStore): boolean {
+  if (typeof window === "undefined") return false;
+  const bounded = buildTombstones((kind) => store[kind].slice(-MAX_TOMBSTONES_PER_KIND));
   try {
     window.localStorage.setItem(TOMBSTONE_STORAGE_KEY, JSON.stringify(bounded));
+    return true;
   } catch {
-    // Ignore storage quota errors
+    return false;
+  }
+}
+
+/**
+ * Records a local deletion. Throws when the tombstone cannot be saved: the
+ * caller must then NOT delete the row, or the next sync would bring it back
+ * from the server (no row and no tombstone are sent).
+ */
+function recordTombstone(kind: TombstoneKind, id: string): void {
+  const current = getLocalTombstones();
+  if (current[kind].includes(id)) return;
+  current[kind].push(id);
+  if (!saveLocalTombstones(current)) {
+    throw new Error("Could not record the deletion in this browser's storage");
   }
 }
 
 export function recordDeletedQuestTombstone(questId: string): void {
-  const current = getLocalTombstones();
-  if (!current.deletedQuestIds.includes(questId)) {
-    current.deletedQuestIds.push(questId);
-    saveLocalTombstones(current);
-  }
+  recordTombstone("deletedQuestIds", questId);
 }
 
 export function recordDeletedTaskTombstone(taskId: string): void {
-  const current = getLocalTombstones();
-  if (!current.deletedTaskIds.includes(taskId)) {
-    current.deletedTaskIds.push(taskId);
-    saveLocalTombstones(current);
-  }
+  recordTombstone("deletedTaskIds", taskId);
 }
 
 export function recordDeletedLogTombstone(logId: string): void {
-  const current = getLocalTombstones();
-  if (!current.deletedLogIds.includes(logId)) {
-    current.deletedLogIds.push(logId);
-    saveLocalTombstones(current);
-  }
+  recordTombstone("deletedLogIds", logId);
 }
 
 export function recordDeletedHabitTombstone(habitId: string): void {
-  const current = getLocalTombstones();
-  if (!current.deletedHabitIds.includes(habitId)) {
-    current.deletedHabitIds.push(habitId);
-    saveLocalTombstones(current);
+  recordTombstone("deletedHabitIds", habitId);
+}
+
+export const SEED_SERVER_CHECK_TIMEOUT_MS = 1500;
+
+/**
+ * True when this browser or the local sync server already holds sync data, so
+ * demo rows must NOT be seeded into an empty local DB (fresh browser profile,
+ * cleared site data, another origin such as 127.0.0.1 or the LAN URL): seeding
+ * then would push fake rows into the synced dataset and on to the phone.
+ *
+ * Local deletion tombstones count without asking the server. Otherwise returns
+ * false (seed) ONLY after a successful 2xx whose sync payload holds no rows and
+ * no tombstones. Everything else returns true (do NOT seed): rows or tombstones
+ * on the server, an HTTP error (it exists but its data could not be read), and
+ * also a timeout/abort, a network error or a body that is not a sync payload.
+ * The desktop page is served by this same server, so a failed check means
+ * "slow" (cold compile, resume, antivirus), not "no server".
+ */
+export async function syncDataExistsElsewhere(): Promise<boolean> {
+  const local = getLocalTombstones();
+  if (TOMBSTONE_KINDS.some((kind) => local[kind].length > 0)) return true;
+  if (typeof fetch !== "function") return true;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), SEED_SERVER_CHECK_TIMEOUT_MS)
+    : null;
+  try {
+    const headers: Record<string, string> = { "X-Hunt-Client": SYNC_CLIENT_ID };
+    const token = getClientSyncToken();
+    if (token) headers["X-Hunt-Token"] = token;
+    const res = await fetch("/api/sync", {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      signal: controller?.signal,
+    });
+    if (!res.ok) return true;
+    const check = validateSyncPayload(asRecord(await res.json()).payload);
+    if (!check.valid) return true;
+    return syncPayloadHasContent(check.payload);
+  } catch {
+    // Abort (timeout), network error or unparsable body: unknown → do not seed.
+    return true;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -254,27 +327,15 @@ export async function buildLocalSyncPayload(
         db.habits.toArray(),
       ])
   );
-  const tombstones = getLocalTombstones();
-
   return {
     quests,
     tasks,
     timeLogs,
     habits,
-    deletedQuestIds: tombstones.deletedQuestIds,
-    deletedTaskIds: tombstones.deletedTaskIds,
-    deletedLogIds: tombstones.deletedLogIds,
-    deletedHabitIds: tombstones.deletedHabitIds,
+    ...getLocalTombstones(),
     activeFocus,
     lastSyncedAt: Date.now(),
   };
-}
-
-type Timestamped = { updatedAt?: number; completedAt?: number; createdAt?: number };
-
-/** Last-write-wins timestamp of a row (same rule as the server merge). */
-function rowTs(row: Timestamped): number {
-  return row.updatedAt ?? row.completedAt ?? row.createdAt ?? 0;
 }
 
 /** Field-wise equality; a missing field equals an `undefined` one. */
@@ -315,7 +376,8 @@ function hasStringId<T extends { id: unknown }>(row: T | null | undefined): row 
  *
  * The payload reflects a snapshot taken BEFORE the request went out, so it is
  * diff-merged against the CURRENT local rows inside one rw transaction:
- * - quests/tasks: the newer row wins; EQUAL timestamps are resolved by the
+ * - quests/tasks/habits: the newer row wins by the server's per-kind stamp
+ *   (questOrHabitRowStamp / taskRowStamp); EQUAL timestamps are resolved by the
  *   shared rule R1 (pickRowWinner: smaller canonical content wins, identical
  *   keeps the local row), compared after nulling a `questId` that points at a
  *   tombstoned quest (that nulling is also applied to the result);
@@ -333,18 +395,9 @@ export async function applyMergedPayloadToLocalDB(
   merged: SyncPayload
 ): Promise<boolean> {
   const local = getLocalTombstones();
-  const tomb: TombstoneStore = {
-    deletedQuestIds: unionIds(local.deletedQuestIds, merged.deletedQuestIds),
-    deletedTaskIds: unionIds(local.deletedTaskIds, merged.deletedTaskIds),
-    deletedLogIds: unionIds(local.deletedLogIds, merged.deletedLogIds),
-    deletedHabitIds: unionIds(local.deletedHabitIds, merged.deletedHabitIds),
-  };
-  if (
-    tomb.deletedQuestIds !== local.deletedQuestIds ||
-    tomb.deletedTaskIds !== local.deletedTaskIds ||
-    tomb.deletedLogIds !== local.deletedLogIds ||
-    tomb.deletedHabitIds !== local.deletedHabitIds
-  ) {
+  const tomb = buildTombstones((kind) => unionIds(local[kind], merged[kind]));
+  if (TOMBSTONE_KINDS.some((kind) => tomb[kind] !== local[kind])) {
+    // Best effort: the server already holds these tombstones and sends them again.
     saveLocalTombstones(tomb);
   }
 
@@ -407,7 +460,12 @@ export async function applyMergedPayloadToLocalDB(
         return;
       }
       // R1: newer wins; equal stamps → deterministic content tie-break.
-      const winner = pickRowWinner(current, rowTs(current), remote, rowTs(remote));
+      const winner = pickRowWinner(
+        current,
+        questOrHabitRowStamp(current),
+        remote,
+        questOrHabitRowStamp(remote)
+      );
       if (winner !== current && !sameRow(winner, current)) questPuts.push(winner);
     });
 
@@ -421,7 +479,12 @@ export async function applyMergedPayloadToLocalDB(
       // R1 compares the rows AFTER questId sanitising (as the server does).
       const localRow = unlinkDeletedQuest(current);
       const remoteRow = unlinkDeletedQuest(remote);
-      const winner = pickRowWinner(localRow, rowTs(localRow), remoteRow, rowTs(remoteRow));
+      const winner = pickRowWinner(
+        localRow,
+        taskRowStamp(localRow),
+        remoteRow,
+        taskRowStamp(remoteRow)
+      );
       const seconds = Math.max(
         current.accumulatedSeconds || 0,
         remote.accumulatedSeconds || 0
@@ -455,7 +518,12 @@ export async function applyMergedPayloadToLocalDB(
       }
       const localRow = unlinkDeletedQuest(current);
       const remoteRow = unlinkDeletedQuest(remote);
-      const winner = pickRowWinner(localRow, rowTs(localRow), remoteRow, rowTs(remoteRow));
+      const winner = pickRowWinner(
+        localRow,
+        questOrHabitRowStamp(localRow),
+        remoteRow,
+        questOrHabitRowStamp(remoteRow)
+      );
       if (winner !== current && !sameRow(winner, current)) habitPuts.push(winner);
     });
 
@@ -486,6 +554,28 @@ function mapHttpStatus(status: number): SyncErrorCode {
   if (status === 401) return "auth";
   if (status === 413) return "too_large";
   return `http_${status}`;
+}
+
+/**
+ * The error code of a non-2xx answer. Only a 507 body is read: its `code`
+ * tells merged data over the server limits (shown as too_large) apart from an
+ * unreadable server file (http_507). Any other body is cancelled unread.
+ */
+async function failedResponseCode(res: Response): Promise<SyncErrorCode> {
+  if (res.status === 507) {
+    try {
+      if (asRecord(await res.json()).code === "merged_over_limit") return "too_large";
+    } catch {
+      // No readable envelope (older server): the status is all there is.
+    }
+    return mapHttpStatus(res.status);
+  }
+  try {
+    await res.body?.cancel();
+  } catch {
+    // The status code is all this result needs.
+  }
+  return mapHttpStatus(res.status);
 }
 
 function normalizePeers(raw: unknown): SyncPeers {
@@ -553,12 +643,15 @@ function logSyncFailure(
   });
   if (code === lastLoggedFailureCode) return;
   lastLoggedFailureCode = code;
+  // The correlation id matches the server's X-Hunt-Correlation-Id log line.
   console.error("[hunt-sync] sync_failed", {
     phase,
     code,
     status,
     name: typeof e.name === "string" ? e.name : undefined,
     message: safeMessage,
+    correlationId,
+    durationMs,
   });
 }
 
@@ -621,14 +714,9 @@ export async function performServerSync(
     });
 
     if (!res.ok) {
-      try {
-        await res.body?.cancel();
-      } catch {
-        // The status code is all this result needs.
-      }
       return syncFailed(
         "response",
-        mapHttpStatus(res.status),
+        await failedResponseCode(res),
         undefined,
         res.status,
         correlationId,
@@ -657,7 +745,7 @@ export async function performServerSync(
 
   const data = asRecord(body);
   const check = validateSyncPayload(data.payload);
-  if (!check.valid || !check.payload) {
+  if (!check.valid) {
     return syncFailed(
       "response",
       "bad_response",
@@ -723,8 +811,8 @@ export async function importAndMergeSnapshotJson(
     throw new SnapshotFormatError("Not valid JSON");
   }
   const check = validateSyncPayload(parsed);
-  if (!check.valid || !check.payload) {
-    throw new SnapshotFormatError(check.error ?? "Invalid snapshot");
+  if (!check.valid) {
+    throw new SnapshotFormatError(check.error);
   }
   const local = await buildLocalSyncPayload(currentFocus);
   const merged = mergeSyncPayloads(local, check.payload);

@@ -31,7 +31,7 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
 function serverBody(p: Partial<SyncPayload>, extra: Record<string, unknown> = {}) {
   return {
     payload: { ...createEmptySyncPayload(), lastSyncedAt: 4242, ...p },
-    lanUrls: ["http://192.168.2.136:3000", "http://100.78.24.69:3000"],
+    lanUrls: ["http://192.168.1.5:3000", "http://100.64.1.2:3000"],
     peers: { phone: { lastSeenAt: 1234 } },
     ...extra,
   };
@@ -112,7 +112,7 @@ describe("Store sync scheduler (syncNow / requestSync)", () => {
     expect(s.syncError).toBeNull();
     expect(s.phoneLastSeenAt).toBe(1234);
     expect(s.lastSyncedAt).toBe(4242);
-    expect(s.lanUrls).toEqual(["http://192.168.2.136:3000", "http://100.78.24.69:3000"]);
+    expect(s.lanUrls).toEqual(["http://192.168.1.5:3000", "http://100.64.1.2:3000"]);
   });
 
   it("an identical follow-up sync does not call set() at all", async () => {

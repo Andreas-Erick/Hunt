@@ -4,17 +4,22 @@ import {
   toLocalDateKey,
   formatChronoMMSS,
   formatTacticalDuration,
-  seedInitialDataIfNeeded,
+  seedInitialDataIfNeeded as seedWithCheck,
   QUEST_ACCENT_STYLES,
-  SEED_SERVER_CHECK_TIMEOUT_MS,
 } from "@/lib/db";
-import { MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH, isSafeSyncId } from "@/lib/syncTypes";
+import { SEED_SERVER_CHECK_TIMEOUT_MS, syncDataExistsElsewhere } from "@/lib/syncEngine";
+import { MAX_ENTITY_ID_LENGTH, isSafeSyncId } from "@/lib/syncTypes";
+
+/** The seed as bootSequence wires it: with the real sync-side check. */
+const seedInitialDataIfNeeded = () => seedWithCheck(syncDataExistsElsewhere);
 
 describe("Database & Formatting Utilities (db.ts)", () => {
   beforeEach(async () => {
     await db.quests.clear();
     await db.tasks.clear();
     await db.timeLogs.clear();
+    await db.habits.clear();
+    window.localStorage.clear();
   });
 
   describe("toLocalDateKey()", () => {
@@ -104,7 +109,9 @@ describe("Database & Formatting Utilities (db.ts)", () => {
       vi.unstubAllGlobals();
     });
 
-    it("seeds 3 quests, initial tasks, and time logs on an empty database", async () => {
+    // Spec (P07-01): a starter template, not fabricated history. Review and the
+    // heatmap must start empty, and nothing fake may sync to the phone.
+    it("seeds 3 quests and queued starter tasks, with no history, on an empty database", async () => {
       await seedInitialDataIfNeeded();
 
       const quests = await db.quests.orderBy("slotIndex").toArray();
@@ -115,9 +122,27 @@ describe("Database & Formatting Utilities (db.ts)", () => {
 
       const tasks = await db.tasks.toArray();
       expect(tasks.length).toBeGreaterThan(5);
+      for (const t of tasks) {
+        expect(t.status, t.id).toBe("queued");
+        expect(t.accumulatedSeconds, t.id).toBe(0);
+        expect(t.completedAt, t.id).toBeUndefined();
+      }
 
-      const logs = await db.timeLogs.toArray();
-      expect(logs.length).toBeGreaterThan(5);
+      expect(await db.timeLogs.count()).toBe(0);
+    });
+
+    it("dates the starter tasks today, tomorrow and the day after by calendar days", async () => {
+      // 00:30 on the day after the 2026 EU spring-forward: now - 24 h lands two
+      // calendar days back in DST zones; calendar stepping must not.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(2026, 2, 30, 0, 30));
+      try {
+        await seedInitialDataIfNeeded();
+      } finally {
+        vi.useRealTimers();
+      }
+      const dates = Array.from(new Set((await db.tasks.toArray()).map((t) => t.scheduledDate)));
+      expect(dates.sort()).toEqual(["2026-03-30", "2026-03-31", "2026-04-01"]);
     });
 
     it("is idempotent and does not duplicate quests when called twice", async () => {
@@ -149,21 +174,21 @@ describe("Database & Formatting Utilities (db.ts)", () => {
       await seedInitialDataIfNeeded();
       const quests = await db.quests.toArray();
       const tasks = await db.tasks.toArray();
-      const logs = await db.timeLogs.toArray();
       expect(quests.length).toBeGreaterThan(0);
       expect(tasks.length).toBeGreaterThan(0);
-      expect(logs.length).toBeGreaterThan(0);
 
       const entityIds = [
         ...quests.map((q) => q.id),
         ...tasks.map((t) => t.id),
-        ...logs.map((l) => l.taskId),
+        ...tasks.flatMap((t) => (t.questId ? [t.questId] : [])),
       ];
       for (const id of entityIds) {
         expect(isSafeSyncId(id, MAX_ENTITY_ID_LENGTH), id).toBe(true);
       }
-      for (const { id } of logs) {
-        expect(isSafeSyncId(id, MAX_LOG_ID_LENGTH), id).toBe(true);
+      // Every task's quest link points at a seeded quest.
+      const questIds = new Set(quests.map((q) => q.id));
+      for (const t of tasks) {
+        if (t.questId) expect(questIds.has(t.questId), t.id).toBe(true);
       }
     });
   });

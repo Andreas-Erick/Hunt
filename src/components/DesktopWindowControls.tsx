@@ -56,7 +56,7 @@ export function DesktopWindowControls({
     <div
       role="group"
       aria-label="Window controls"
-      className={`hidden sm:inline-flex items-center gap-1 ${className}`.trim()}
+      className={`hidden sm:inline-flex items-center gap-2 ${className}`.trim()}
     >
       <button
         type="button"
@@ -64,7 +64,7 @@ export function DesktopWindowControls({
         onClick={handleMinimize}
         title="Minimize window"
         aria-label="Minimize window"
-        className="inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white transition-colors"
+        className="inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
       >
         <Minus className="h-4 w-4" />
       </button>
@@ -80,7 +80,7 @@ export function DesktopWindowControls({
         }
         aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
         aria-pressed={isFullscreen}
-        className="inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white transition-colors"
+        className="inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
       >
         {isFullscreen ? (
           <Minimize2 className="h-4 w-4" />
@@ -95,7 +95,7 @@ export function DesktopWindowControls({
         onClick={handleClose}
         title="Exit Hunt"
         aria-label="Exit Hunt"
-        className="inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 transition-colors"
+        className="ml-1 inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 transition-all duration-150 ease-out active:scale-[0.98]"
       >
         <X className="h-4 w-4" />
       </button>

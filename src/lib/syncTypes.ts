@@ -141,6 +141,22 @@ export function pickRowWinner<T extends object>(
   return kb < ka ? incoming : existing;
 }
 
+/** Timestamp fields R1 reads (all optional: synced rows may lack any of them). */
+type StampedRow = { updatedAt?: number; completedAt?: number | null; createdAt?: number };
+
+/**
+ * SHARED RULE R1 stamp of a quest or habit row: `updatedAt ?? createdAt ?? 0`.
+ * A quest's completedAt is NOT part of it (the phone uses the same rule).
+ */
+export function questOrHabitRowStamp(row: StampedRow): number {
+  return row.updatedAt ?? row.createdAt ?? 0;
+}
+
+/** SHARED RULE R1 stamp of a task row: `updatedAt ?? completedAt ?? createdAt ?? 0`. */
+export function taskRowStamp(row: StampedRow): number {
+  return row.updatedAt ?? row.completedAt ?? row.createdAt ?? 0;
+}
+
 function logEndKey(log: TimeLog): number {
   const end = Number(log.endTime);
   return Number.isFinite(end) ? end : Infinity;
@@ -273,7 +289,10 @@ export function isSafeSyncId(
 
 const MAX_SYNC_QUESTS = 100;
 const MAX_SYNC_HABITS = 200;
-const MAX_SYNC_TASKS = 5000;
+// Tasks are never pruned and habits add one row per habit per day, so a 5000 cap
+// would be reached by normal use. Same count as logs: the server's 16 MB byte
+// cap (MAX_PAYLOAD_BYTES in the sync route) is the limit that binds.
+const MAX_SYNC_TASKS = 20000;
 const MAX_SYNC_LOGS = 20000;
 const MAX_LONG_TEXT_LENGTH = 20_000; // task notes, quest description
 const MAX_EXTRA_TEXT_LENGTH = 10_000; // string values of fields not listed below
@@ -560,19 +579,18 @@ function sanitizeFocus(raw: unknown): ActiveFocusState {
  * Zero-trust check of a sync payload (a POST body, or a file the server stored).
  *
  * Only STRUCTURAL problems reject the whole payload: not a JSON object, quests
- * / tasks / timeLogs not arrays, or more than 100 / 5000 / 20000 of them. Rows
+ * / tasks / timeLogs not arrays, or more than 100 / 20000 / 20000 of them. Rows
  * are rebuilt field by field by sanitizeQuest / sanitizeTask / sanitizeLog: a
  * row that cannot be legitimate is dropped (counted in `dropped`), every other
  * field is coerced, so a stored file always stays readable.
  *
  * When `valid`, `payload` is a NEW sanitized copy: use it, never the input.
  */
-export function validateSyncPayload(input: unknown): {
-  valid: boolean;
-  error?: string;
-  payload?: SyncPayload;
-  dropped?: number;
-} {
+export type SyncPayloadValidation =
+  | { valid: true; payload: SyncPayload; dropped: number; error?: undefined }
+  | { valid: false; error: string; payload?: undefined; dropped?: undefined };
+
+export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   if (!isRecord(input)) {
     return { valid: false, error: "Payload must be a JSON object" };
   }
@@ -656,8 +674,8 @@ export function mergeSyncPayloads(
     if (!existing) {
       questMap.set(incQ.id, incQ);
     } else {
-      const existingTs = existing.updatedAt ?? existing.createdAt ?? 0;
-      const incomingTs = incQ.updatedAt ?? incQ.createdAt ?? 0;
+      const existingTs = questOrHabitRowStamp(existing);
+      const incomingTs = questOrHabitRowStamp(incQ);
       // R1: newer wins; equal stamps → deterministic content tie-break.
       questMap.set(
         incQ.id,
@@ -690,8 +708,8 @@ export function mergeSyncPayloads(
     if (!existing) {
       habitMap.set(incH.id, sanitizedInc);
     } else {
-      const existingTs = existing.updatedAt ?? existing.createdAt ?? 0;
-      const incomingTs = sanitizedInc.updatedAt ?? sanitizedInc.createdAt ?? 0;
+      const existingTs = questOrHabitRowStamp(existing);
+      const incomingTs = questOrHabitRowStamp(sanitizedInc);
       habitMap.set(
         incH.id,
         pickRowWinner(existing, existingTs, sanitizedInc, incomingTs)
@@ -722,13 +740,8 @@ export function mergeSyncPayloads(
     if (!existing) {
       taskMap.set(incT.id, sanitizedInc);
     } else {
-      const existingTs =
-        existing.updatedAt ?? existing.completedAt ?? existing.createdAt ?? 0;
-      const incomingTs =
-        sanitizedInc.updatedAt ??
-        sanitizedInc.completedAt ??
-        sanitizedInc.createdAt ??
-        0;
+      const existingTs = taskRowStamp(existing);
+      const incomingTs = taskRowStamp(sanitizedInc);
 
       // R1 (both rows are questId-sanitised at this point).
       const winner = pickRowWinner(existing, existingTs, sanitizedInc, incomingTs);

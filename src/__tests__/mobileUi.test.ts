@@ -1704,7 +1704,7 @@ describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing",
   it("shows 1-tap Pair Android App banner on Android browser QR scan without exposing the secret in DOM HTML, and handles __huntNativePaired", async () => {
     const fakeKey = "k".repeat(48);
     const p = load({
-      url: `http://192.168.2.136:3000/hunt-mobile.html?token=${fakeKey}`,
+      url: `http://192.168.1.5:3000/hunt-mobile.html?token=${fakeKey}`,
       beforeBoot(win) {
         Object.defineProperty(win.navigator, "userAgent", {
           value: "Mozilla/5.0 (Linux; Android 15; SM-X936B) AppleWebKit/537.36 Chrome/131.0 Safari/537.36",
@@ -1731,7 +1731,7 @@ describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing",
       bridge: {
         loadState: () => "",
         saveState: () => undefined,
-        getLaptopUrl: () => "http://192.168.2.136:3000",
+        getLaptopUrl: () => "http://192.168.1.5:3000",
         saveLaptopUrl: () => undefined,
         syncWithLaptopAsync: (id, candidatesJson) => {
           lastSyncId = id;
@@ -1744,10 +1744,10 @@ describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing",
     apk.__huntSyncDone({ id: lastSyncId, ok: false, reason: "auth", url: null, code: 401, ms: 5, attempts: [], body: "" });
     await vi.advanceTimersByTimeAsync(20);
     const before = syncCalls.length;
-    apk.eval(`window.__huntNativePaired({ url: "http://192.168.2.136:3000" })`);
+    apk.eval(`window.__huntNativePaired({ url: "http://192.168.1.5:3000" })`);
     await vi.advanceTimersByTimeAsync(50);
     expect(syncCalls.length).toBeGreaterThan(before);
-    expect(syncCalls[syncCalls.length - 1][0]).toBe("http://192.168.2.136:3000");
+    expect(syncCalls[syncCalls.length - 1][0]).toBe("http://192.168.1.5:3000");
     expect(toastTexts(apk)).toContain("Paired with laptop · syncing…");
     expect(pageErrors(apk)).toEqual([]);
   });

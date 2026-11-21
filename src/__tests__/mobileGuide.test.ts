@@ -78,11 +78,18 @@ describe("mobile Quest & Task Guide", () => {
     expect(p.document.querySelector("#mainContainer h1")?.textContent).toContain("Quest & Task Guide");
     expect(p.document.getElementById("mainContainer")?.textContent).toContain("Cap active Quests at 1 to 3");
 
-    const tabs = () => Array.from(p.document.querySelectorAll('[role="tab"]'));
+    // A segmented control (role=group + aria-pressed, like the app's other pill groups), not a
+    // half-implemented ARIA tablist (P10-05).
+    const group = p.document.querySelector('[role="group"][aria-label="Guide sections"]');
+    expect(group).not.toBeNull();
+    expect(p.document.querySelector('[role="tablist"], [role="tab"]')).toBeNull();
+    const tabs = () => Array.from(p.document.querySelectorAll('[aria-label="Guide sections"] .seg-option'));
     expect(tabs().map((t) => t.textContent?.trim())).toEqual(["Quests", "Tasks", "System", "Workshop"]);
+    expect(tabs().map((t) => t.getAttribute("aria-pressed"))).toEqual(["true", "false", "false", "false"]);
 
     click(p, tabs()[1]);
     expect(p.document.getElementById("mainContainer")?.textContent).toContain("Start with a concrete physical verb");
+    expect(tabs().map((t) => t.getAttribute("aria-pressed"))).toEqual(["false", "true", "false", "false"]);
 
     click(p, tabs()[2]);
     expect(p.document.getElementById("mainContainer")?.textContent).toContain("30-Second Pre-Flight Checklist");

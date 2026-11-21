@@ -630,7 +630,7 @@
       height: 22px;
       margin-top: 1px;
       border-radius: 50%;
-      border: 1.75px solid rgba(255, 255, 255, 0.28);
+      border: 1.75px solid rgba(255, 255, 255, 0.42); /* the only edge of "Mark complete": >= 3:1 on --surface */
       background: transparent;
       color: transparent;
       display: flex;
@@ -1202,6 +1202,7 @@
       display: grid;
       grid-template-columns: repeat(16, minmax(0, 1fr));
       gap: 3px;
+      touch-action: pan-y; /* a sideways drag scrubs the days (scrubHeatmap); a vertical one still scrolls */
     }
     .heatmap-col {
       display: grid;
@@ -1386,6 +1387,21 @@
       max-width: 340px;
       margin-left: auto;
       margin-right: auto;
+    }
+    .focus-notes-input {
+      width: 100%;
+      resize: none;
+      border-radius: 13px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 10px 14px;
+      text-align: center;
+      font-size: 16px; /* same as .sheet-input: a smaller field is hard to edit */
+      color: var(--text-2);
+      outline: none;
+    }
+    .focus-notes-input:focus {
+      border-color: var(--cyan);
     }
 
     /* Focus view: small sync indicator (the header is hidden there) */
@@ -2566,6 +2582,12 @@
       .queue-item-card.completed.just-completed .task-check-ring.done polyline {
         animation: none !important;
       }
+      /* transitions too (e.g. the FAB's 48 px slide above a toast), as on desktop */
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
@@ -2581,7 +2603,7 @@
         </svg>
         <span class="brand-word">Hunt</span>
       </button>
-      <span id="headerVersionBadge" class="brand-version-badge">v1.8.0</span>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.9.0</span>
     </div>
 
     <div class="app-bar-actions">
@@ -2661,7 +2683,7 @@
       }
     } catch (e) {}
 
-    const APP_VERSION = "1.8.0";
+    const APP_VERSION = "1.9.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -2694,8 +2716,6 @@
     };
 
     // Crisp Vector SVG Icons
-    const SVG_VOL_ON = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
-    const SVG_VOL_OFF = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
     const SVG_PLAY = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
     const SVG_PAUSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
     const SVG_CHECK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
@@ -2703,33 +2723,11 @@
     const SVG_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
     const SVG_BACK = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>`;
 
-    let audioMuted = false;
-    let audioCtx = null;
-
     // Silent, clean tap interactions: vibrations and synthetic oscillator clicks/chimes are disabled.
-    function haptic() {}
-    function playTone() {}
+    // The call sites stay so the taps are marked in one place.
     function playClickSound() {}
     function playLockSound() {}
     function playCompleteSound() {}
-
-    let shownMuteState = null;
-    function updateMuteIcon() {
-      const btn = document.getElementById("muteBtn");
-      if (!btn || shownMuteState === audioMuted) return;
-      shownMuteState = audioMuted;
-      btn.innerHTML = audioMuted ? SVG_VOL_OFF : SVG_VOL_ON;
-      btn.setAttribute("aria-pressed", audioMuted ? "true" : "false");
-      btn.setAttribute("aria-label", audioMuted ? "Unmute sounds" : "Mute sounds");
-    }
-
-    function prewarmAudio() {}
-
-    function toggleAudioMute() {
-      audioMuted = !audioMuted;
-      updateMuteIcon();
-      if (!audioMuted) playClickSound();
-    }
 
     function toLocalDateKey(ts = Date.now()) {
       const d = new Date(ts);
@@ -3044,7 +3042,6 @@
     const FIELD_DRAFT_MS = 500;          // typed text is committed this long after the last keystroke
     const META_TIMESTAMP_SAVE_MS = 60000;
     const MAX_CANDIDATE_URLS = 6;
-    const KNOWN_LAPTOP_URLS = ["http://192.168.2.136:3000", "http://100.78.24.69:3000"];
 
     // Trim, drop trailing "/", add http:// when no scheme was typed. "" for anything unusable.
     function normalizeLaptopUrl(url) {
@@ -3176,8 +3173,9 @@
     let appInBackground = false;
     let cachedLaptopUrl = null;
 
+    // The user's laptop address (paired, pasted or typed); "" while this phone is not paired.
     function getLaptopBaseUrl() {
-      if (cachedLaptopUrl) return cachedLaptopUrl;
+      if (cachedLaptopUrl !== null) return cachedLaptopUrl;
       let url = normalizeLaptopUrl(bridgeCall("getLaptopUrl"));
       if (!url) {
         try {
@@ -3185,8 +3183,8 @@
         } catch (e) {}
       }
       if (!url && location.protocol.startsWith("http")) url = location.origin;
-      cachedLaptopUrl = url || KNOWN_LAPTOP_URLS[0];
-      return cachedLaptopUrl;
+      cachedLaptopUrl = url;
+      return url;
     }
 
     // An explicit user choice: it is tried first on the next sync (the sticky last-good route is dropped).
@@ -3333,11 +3331,12 @@
     }
 
     // Ordered routes: the one that answered last, the user's URL, (browser copy) the laptop that served
-    // this page, server-advertised ones, the two known ones. The browser copy can only reach its own
-    // origin (the laptop sends no CORS headers), so that one is always among its routes.
+    // this page, then the ones the laptop advertised (its LAN and Tailscale addresses). No address is
+    // built in: an unpaired phone has no route at all. The browser copy can only reach its own origin
+    // (the laptop sends no CORS headers), so that one is always among its routes.
     function buildCandidateUrls() {
       const pageOrigin = !isApkShell() && /^https?:$/.test(location.protocol) ? location.origin : null;
-      return sanitizeUrlList([syncMeta.lastUrl, getLaptopBaseUrl(), pageOrigin, ...syncMeta.lanUrls, ...KNOWN_LAPTOP_URLS]);
+      return sanitizeUrlList([syncMeta.lastUrl, getLaptopBaseUrl(), pageOrigin, ...syncMeta.lanUrls]);
     }
 
     // ----- Persistence (separate from rendering) -----
@@ -3757,7 +3756,9 @@
       return !!(window.AndroidBridge && window.AndroidBridge.syncWithLaptopAsync);
     }
 
+    // No laptop address at all (never paired): nothing is sent; the sheet shows the "Not paired" state.
     function sendSyncRequest(candidates, body, force) {
+      if (!candidates.length) return Promise.resolve(syncFailure("auth"));
       if (hasAsyncBridge()) return postSyncNative(candidates, body, force);
       return withWatchdog(postSyncFetch(candidates, body));
     }
@@ -4294,12 +4295,13 @@
       return d === 1 ? "yesterday" : d + " days ago";
     }
 
-    // "today 14:32" or "Tue, Nov 18 14:32".
+    // "today 14:32" or "Tue, Nov 18 14:32". English like every other label (not the device locale),
+    // 24 h like the Day Timeline.
     function absoluteTime(ts) {
       const d = new Date(ts);
-      const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const time = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
       if (toLocalDateKey(ts) === toLocalDateKey()) return "today " + time;
-      return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + " " + time;
+      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + " " + time;
     }
 
     // Everything the chip (and the Focus-view indicator) shows, derived from scheduler + device meta.
@@ -4506,6 +4508,7 @@
       const shrunkByWebView = basePortraitInnerH > curH && curH > 0 ? (basePortraitInnerH - curH) : 0;
       const eff = Math.max(0, dp - shrunkByWebView);
       document.documentElement.style.setProperty("--eff-kb", eff + "px");
+      return eff;
     }
 
     function scheduleSettledKb(dp) {
@@ -4517,8 +4520,24 @@
       }
       kbSettleTimer = setTimeout(() => {
         document.documentElement.style.setProperty("--kb-settled", dp + "px");
-        updateEffectiveKb(dp);
+        // the part of the keyboard over the page (a WebView that did shrink already moved its bottom up)
+        revealFocusedEntry(updateEffectiveKb(dp));
       }, 140);
+    }
+
+    // Native IME path (adjustNothing + overlays-content): nothing resizes when the keyboard opens, so
+    // the browser never scrolls the focused field into view itself. Once the keyboard has settled, a
+    // page field it covers (e.g. the Focus-view notes) scrolls up to just above it; the --kb-settled
+    // padding on .screen-body gives the room. Sheet fields lift with the sheet instead.
+    function revealFocusedEntry(kbPx) {
+      const el = document.activeElement;
+      if (!isTextEntry(el) || typeof el.getBoundingClientRect !== "function") return;
+      const sc = document.getElementById("sheetContainer");
+      if (sc && sc.contains(el)) return;
+      try {
+        const covered = el.getBoundingClientRect().bottom - ((window.innerHeight || 0) - kbPx - 16);
+        if (covered > 0) window.scrollBy({ top: covered, behavior: prefersReducedMotionMobile() ? "auto" : "smooth" });
+      } catch (e) {}
     }
 
     // Called frame-by-frame by MainActivity's WindowInsetsAnimation.Callback on Android 11+.
@@ -4637,7 +4656,8 @@
     }
 
     // UI-only listeners: keep the keyboard open while choosing a pill in a sheet, Escape closes a sheet
-    // (browser copy), and a no-op touchstart so :active press feedback also works in mobile Safari.
+    // (browser copy), a no-op touchstart so :active press feedback also works in mobile Safari, and
+    // press-and-scrub on the Review heatmap (scrubHeatmap).
     function isTabletPlanBoard() {
       try {
         return !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
@@ -4659,6 +4679,12 @@
         if (e.key === "Escape" && isSheetOpen()) closeSheet();
       });
       document.addEventListener("touchstart", () => {}, { passive: true });
+      const onHeatmapPointer = e => {
+        const cols = e.target && e.target.closest ? e.target.closest(".heatmap-cols") : null;
+        if (cols) scrubHeatmap(e, cols);
+      };
+      document.addEventListener("pointerdown", onHeatmapPointer);
+      document.addEventListener("pointermove", onHeatmapPointer);
       try {
         const planMq = window.matchMedia && window.matchMedia("(min-width: 900px)");
         if (planMq && typeof planMq.addEventListener === "function") {
@@ -4826,6 +4852,27 @@
       return !task.scheduledDate || task.scheduledDate <= todayKey;
     }
 
+    // A daily-habit copy from an earlier day that was not done: that day was missed. The row stays
+    // (streaks, Review and the heatmap count it as missed) but it is never an open task again, so the
+    // habit does not show twice next to today's copy. One whose focus is still running ("active",
+    // e.g. across midnight) stays open until it is finished.
+    function isMissedHabitTask(task, todayKey) {
+      return !!task.habitId && task.status === "queued" && (task.scheduledDate || "") < todayKey;
+    }
+
+    // Open (queued or in focus) on todayKey: every open-task list, count, picker and rank uses this.
+    function isOpenTask(task, todayKey) {
+      return (task.status === "queued" || task.status === "active") && !isMissedHabitTask(task, todayKey);
+    }
+
+    // The Plan the week column a task renders in: its scheduledDate, or today when unscheduled. A dateless
+    // daily habit row has no day of its own, so as a missed day it is in no column (null). Dated missed
+    // days stay under their own past column as history.
+    function planColumnKey(task, todayKey) {
+      if (!task.scheduledDate && isMissedHabitTask(task, todayKey)) return null;
+      return task.scheduledDate || todayKey;
+    }
+
     function buildHabitTaskRow(habit, dateKey) {
       const stamp = Math.max(1, Number(habit.createdAt) || 1);
       return {
@@ -4907,7 +4954,7 @@
         const todayKey = toLocalDateKey(now);
         const queued = state.tasks.filter(t => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
         const questTasks = queued.filter(t => t.questId !== null);
-        target = questTasks[0] || queued[0] || state.tasks.find(t => t.status === "queued");
+        target = questTasks[0] || queued[0] || state.tasks.find(t => t.status === "queued" && !isMissedHabitTask(t, todayKey));
       }
       if (!target) {
         // The previous session was already flushed: clear it so it cannot be counted twice.
@@ -5291,7 +5338,8 @@
     function promoteTaskToTop(taskId) {
       closeSheet();
       playClickSound();
-      const pending = state.tasks.filter(t => t.status === "queued" || t.status === "active").sort(compareRank);
+      const todayKey = toLocalDateKey();
+      const pending = state.tasks.filter(t => isOpenTask(t, todayKey)).sort(compareRank);
       const idx = pending.findIndex(t => t.id === taskId);
       if (idx <= 0) return;
       const moved = pending[idx];
@@ -5510,8 +5558,44 @@
       });
       if (document.body) document.body.classList.remove("sheet-open");
       unlockBackgroundScroll();
+      const opener = sheetOpener;
+      sheetOpener = null;
+      if (opener) {
+        const back = opener.el.isConnected ? opener.el : findByFocusKey(document, opener.key);
+        if (back && !back.closest("[inert]")) focusQuietly(back);
+      }
       if (restore) showToast(restore.message, { actionLabel: "Restore", undo: restore.undo });
     }
+
+    // Focus that survives a re-render: renderApp replaces the view's markup, so a focused control is
+    // found again by its id, or else by its onclick (which names its own task, quest, habit or tab).
+    // Text fields are left out: renderAppSafely already waits for their blur.
+    function focusKeyOf(el) {
+      if (!el || el === document.body || typeof el.getAttribute !== "function" || isTextEntry(el)) return null;
+      const id = el.id || "";
+      const onclick = el.getAttribute("onclick") || "";
+      return id || onclick ? { id, onclick } : null;
+    }
+
+    function findByFocusKey(root, key) {
+      if (!key) return null;
+      if (key.id) {
+        const byId = document.getElementById(key.id);
+        if (byId) return byId;
+      }
+      if (!key.onclick) return null;
+      for (const el of root.querySelectorAll("[onclick]")) {
+        if (el.getAttribute("onclick") === key.onclick) return el;
+      }
+      return null;
+    }
+
+    function focusQuietly(el) {
+      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+    }
+
+    // The control that opened the sheet (TalkBack / keyboard focus goes back to it on close).
+    let sheetOpener = null;
 
     // Opens (or swaps) the sheet. Only a sheet that was closed glides up; swapping content in an open
     // sheet does not replay the animation.
@@ -5523,6 +5607,12 @@
       if (wasOpen && sc.dataset.sheet === "newTask" && kind !== "newTask") {
         captureComposerDraft();
         storeComposerDraft();
+      }
+      if (!wasOpen) {
+        const opener = document.activeElement;
+        sheetOpener = opener && opener !== document.body && !sc.contains(opener)
+          ? { el: opener, key: focusKeyOf(opener) }
+          : null;
       }
       lockBackgroundScroll();
       sc.dataset.sheet = kind;
@@ -5537,6 +5627,9 @@
         if (bgEl) bgEl.setAttribute("inert", "");
       });
       if (document.body) document.body.classList.add("sheet-open");
+      // Focus belongs inside the dialog; a form sheet then moves it on to its first field (focusFieldSoon).
+      const closeBtn = sc.querySelector(".sheet-close");
+      if (closeBtn && !sc.contains(document.activeElement)) focusQuietly(closeBtn);
       return sc;
     }
 
@@ -5728,7 +5821,8 @@
       }
       playClickSound();
       const now = Date.now();
-      const pending = state.tasks.filter(t => t.status === "queued" || t.status === "active").sort(compareRank);
+      const todayKey = toLocalDateKey(now);
+      const pending = state.tasks.filter(t => isOpenTask(t, todayKey)).sort(compareRank);
       let rank = 1000;
       if (pending.length > 0) {
         // Add to top: just above the current #1 (only the new task is written; no rank collapse).
@@ -5754,7 +5848,6 @@
       storeComposerDraft();
       commitLocalChange();
       playTaskFlipGlide(firstRects, newTaskId);
-      const todayKey = toLocalDateKey(now);
       const tomorrowKey = dayKeyOffset(1, now);
       if (scheduledDate === todayKey) showToast(promoteToTop ? "Task added · #1 Today" : "Task added · Today");
       else if (scheduledDate === tomorrowKey) showToast("Added for tomorrow");
@@ -5913,12 +6006,25 @@
       focusFieldSoon("newQuestTitleInput");
     }
 
+    // The h / wk field: a positive number, clamped to the 1-100 the field (and desktop) allow;
+    // null when it is blank or not a positive number.
+    function parseWeeklyTarget(raw) {
+      const n = Number(raw);
+      if (String(raw).trim() === "" || !Number.isFinite(n) || n <= 0) return null;
+      return Math.min(100, Math.max(1, n));
+    }
+
     function createNewQuestFromSheet() {
       const tEl = document.getElementById("newQuestTitleInput");
       const dEl = document.getElementById("newQuestDescInput");
       const hEl = document.getElementById("newQuestTargetInput");
       if (!tEl || !tEl.value.trim()) {
         if (tEl) tEl.focus();
+        return;
+      }
+      const target = hEl ? parseWeeklyTarget(hEl.value) : 10;
+      if (target === null) {
+        hEl.focus();
         return;
       }
       playCompleteSound();
@@ -5931,7 +6037,7 @@
         title,
         description: dEl ? dEl.value.trim() : "",
         accentColor: selectedQuestColor || "cyan",
-        targetWeeklyHours: Math.max(1, Number(hEl ? hEl.value : 10) || 10),
+        targetWeeklyHours: target,
         archived: false,
         createdAt: now,
         updatedAt: now
@@ -6005,7 +6111,8 @@
       const before = JSON.stringify(q);
       if (tEl && tEl.value.trim()) q.title = tEl.value.trim();
       if (dEl) q.description = dEl.value.trim();
-      if (hEl) q.targetWeeklyHours = Math.max(1, Number(hEl.value) || 10);
+      const target = hEl ? parseWeeklyTarget(hEl.value) : null;
+      if (target !== null) q.targetWeeklyHours = target; // blank or invalid keeps the saved target, like a blank title
       q.accentColor = selectedQuestColor || q.accentColor;
       questFormBaseline = null; // committed: closing is not a discard
       closeSheet();
@@ -6032,8 +6139,9 @@
       quest.updatedAt = completedStamp;
 
       const unassigned = [];
+      const todayKey = toLocalDateKey(now);
       state.tasks.forEach(t => {
-        if (t.questId === questId && (t.status === "queued" || t.status === "active")) {
+        if (t.questId === questId && isOpenTask(t, todayKey)) {
           const unlinkedAt = nextStamp(t, now);
           unassigned.push({ id: t.id, questId: t.questId, unlinkedAt });
           t.questId = null;
@@ -6178,16 +6286,15 @@
     function syncReasonInfo(reason) {
       if (SYNC_REASON_INFO[reason]) return SYNC_REASON_INFO[reason];
       const m = /^http_(\d+)$/.exec(reason || "");
-      if (m) return { title: "Laptop server error", detail: "Hunt on the laptop answered with HTTP " + m[1] + "." };
+      if (m) return { title: "Laptop server error", detail: "Hunt on the laptop hit an error. Restart Hunt on the laptop; the details are in hunt-server.log in its %TEMP% folder (HTTP " + m[1] + ")." };
       return SYNC_REASON_INFO.error;
     }
 
-    // { name: "Home Wi-Fi" | "Tailscale" | "Local network" | ..., address: "192.168.2.136" }
+    // { name: "Tailscale" | "Local network" | ..., address: "192.168.1.5" }
     function describeRoute(url) {
       const { host, port } = parseUrlHost(url);
       let name = "Custom";
-      if (url === KNOWN_LAPTOP_URLS[0]) name = "Home Wi-Fi";
-      else if (isTailscaleHost(host)) name = "Tailscale";
+      if (isTailscaleHost(host)) name = "Tailscale";
       else if (isPrivateHost(host)) name = "Local network";
       else if (host === "localhost" || host === "127.0.0.1") name = "This device";
       else if (location.host && location.host === host + (port ? ":" + port : "")) name = "This server";
@@ -6244,7 +6351,7 @@
             <label class="sheet-label" for="modalLaptopUrl">Laptop address</label>
             <button type="button" class="paste-link-btn hit-target pressable" onclick="pastePairingLinkFromClipboard()">Paste link</button>
           </div>
-          <input id="modalLaptopUrl" class="sheet-input mono-input" type="url" inputmode="url" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${escapeHtml(getLaptopBaseUrl())}" placeholder="Pairing link or http://192.168.2.136:3000" oninput="syncSheetUi.urlDirty=true;setSyncHint('')" onchange="applyLaptopUrlInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();manualSyncFromSheet();}" />
+          <input id="modalLaptopUrl" class="sheet-input mono-input" type="url" inputmode="url" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${escapeHtml(getLaptopBaseUrl())}" placeholder="Pairing link or http://&lt;laptop-ip&gt;:3000" oninput="syncSheetUi.urlDirty=true;setSyncHint('')" onchange="applyLaptopUrlInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();manualSyncFromSheet();}" />
           <div id="syncUrlHint" class="sync-hint" role="alert"></div>
 
           <button id="syncNowBtn" class="sync-now-btn pressable" onclick="manualSyncFromSheet()"></button>
@@ -6363,7 +6470,7 @@
 
     function routePillsHtml() {
       const primary = getLaptopBaseUrl();
-      shownRouteUrls = sanitizeUrlList([primary, ...syncMeta.lanUrls, ...KNOWN_LAPTOP_URLS]);
+      shownRouteUrls = sanitizeUrlList([primary, ...syncMeta.lanUrls]);
       const last = syncRun.lastResult;
       return shownRouteUrls.map((url, i) => {
         const r = describeRoute(url);
@@ -6443,7 +6550,7 @@
     function applyLaptopUrlInput(value, fromSyncNow) {
       const typed = String(value || "").trim();
       if (!typed) {
-        setSyncHint("Paste the pairing link from the laptop's Phone & Sync window, or enter its address, for example http://192.168.2.136:3000");
+        setSyncHint("Paste the pairing link from the laptop's Phone & Sync window, or enter its address, for example http://<laptop-ip>:3000");
         return false;
       }
       const pairing = takePairingLink(typed);
@@ -6453,7 +6560,7 @@
       }
       const clean = normalizeLaptopUrl(pairing.address);
       if (!clean) {
-        setSyncHint("That doesn't look like an address or a pairing link. Try http://192.168.2.136:3000");
+        setSyncHint("That doesn't look like an address or a pairing link. Try http://<laptop-ip>:3000");
         return false;
       }
       syncSheetUi.urlDirty = false;
@@ -7071,7 +7178,8 @@
         const n = Number(q.targetWeeklyHours);
         return a + (Number.isFinite(n) ? Math.max(0, n) : 0);
       }, 0).toFixed(1));
-      const openTasks = state.tasks.filter(t => t.status === "queued" || t.status === "active");
+      const todayKey = toLocalDateKey();
+      const openTasks = state.tasks.filter(t => isOpenTask(t, todayKey));
       let strongCount = 0;
       const tasksToSharpen = [];
       for (const t of openTasks) {
@@ -7169,7 +7277,8 @@
       }
       playCompleteSound();
       const now = Date.now();
-      const pending = state.tasks.filter(t => t.status === "queued" || t.status === "active").sort(compareRank);
+      const todayKey = toLocalDateKey(now);
+      const pending = state.tasks.filter(t => isOpenTask(t, todayKey)).sort(compareRank);
       const rank = pending.length > 0 ? (Number(pending[0].rank) || 0) - 1000 : 1000;
       const qId = resolveComposerQuestId(guideTaskQuestId);
       state.tasks.push({
@@ -7262,14 +7371,14 @@
     function renderGuideViewHtml() {
       const audit = auditGuideWorkspace();
       const tabBar = `
-        <div class="segmented-control" role="tablist" aria-label="Guide sections">
+        <div class="segmented-control" role="group" aria-label="Guide sections">
           ${[
             ["quests", "Quests"],
             ["tasks", "Tasks"],
             ["system", "System"],
             ["workshop", "Workshop"]
           ].map(([id, label]) => `
-            <button class="seg-option ${guideTab === id ? "active" : ""}" role="tab" aria-selected="${guideTab === id}" onclick="playClickSound();guideTab=${jsArg(id)};renderApp();">${escapeHtml(label)}</button>
+            <button class="seg-option ${guideTab === id ? "active" : ""}" aria-pressed="${guideTab === id}" onclick="playClickSound();guideTab=${jsArg(id)};renderApp();">${escapeHtml(label)}</button>
           `).join("")}
         </div>
       `;
@@ -7453,7 +7562,6 @@
       flushFieldDrafts(); // typed-but-uncommitted text must not be replaced by the stored value
       const activeQuests = activeQuestsList();
       if (filterQuestId !== "ALL" && !activeQuests.some(q => q.id === filterQuestId)) filterQuestId = "ALL";
-      updateMuteIcon();
       updateHeaderStatus();
       appVersionLabel();
       const topHeader = document.getElementById("topHeader");
@@ -7464,6 +7572,8 @@
       lastRenderedDateKey = todayKey;
       const prevStrip = container.querySelector(".chip-strip");
       const chipScrollLeft = prevStrip ? prevStrip.scrollLeft : 0;
+      const focused = document.activeElement;
+      const focusKey = focused && container.contains(focused) ? focusKeyOf(focused) : null;
 
       if (topHeader) topHeader.style.display = activeView === "focus" ? "none" : "flex";
       if (fabBtn) fabBtn.style.display = (activeView === "command" || activeView === "plan") ? "inline-flex" : "none";
@@ -7677,7 +7787,7 @@
         }
         const activeCol = cols.find(c => c.dateKey === selectedPlanDateKey) || cols[2];
         const dayTasks = state.tasks
-          .filter(t => (t.scheduledDate || todayKey) === activeCol.dateKey)
+          .filter(t => planColumnKey(t, todayKey) === activeCol.dateKey)
           .sort(compareRank);
         const pendingDay = dayTasks.filter(t => t.status === "queued" || t.status === "active");
         const completedDay = dayTasks.filter(t => t.status === "completed");
@@ -7699,7 +7809,7 @@
             <div class="plan-board-grid">
               ${cols.map(c => {
                 const colTasks = state.tasks
-                  .filter(t => (t.scheduledDate || todayKey) === c.dateKey)
+                  .filter(t => planColumnKey(t, todayKey) === c.dateKey)
                   .sort(compareRank);
                 const colPending = colTasks.filter(t => t.status === "queued" || t.status === "active");
                 const colDone = colTasks.filter(t => t.status === "completed");
@@ -7740,7 +7850,7 @@
 
             <div class="plan-strip">
               ${cols.map(c => {
-                const cnt = state.tasks.filter(t => (t.scheduledDate || todayKey) === c.dateKey && t.status !== "completed").length;
+                const cnt = state.tasks.filter(t => planColumnKey(t, todayKey) === c.dateKey && t.status !== "completed").length;
                 return `
                   <button class="plan-day-card pressable ${c.dateKey === activeCol.dateKey ? 'active' : ''} ${c.isToday ? 'today-mark' : ''}" aria-pressed="${c.dateKey === activeCol.dateKey}" aria-label="${escapeHtml(c.fullLabel)}${c.isToday ? ", today" : ""}, ${cnt} open" onclick="selectedPlanDateKey=${jsArg(c.dateKey)};renderApp();">
                     <span style="font-size:11px;font-weight:600;color:${c.isToday ? 'var(--amber)' : 'var(--muted)'};">${c.weekday}</span>
@@ -7852,7 +7962,7 @@
                 </div>
 
                 <div class="focus-notes">
-                  <textarea rows="2" placeholder="Tap to add session notes..." aria-label="Session notes" oninput="draftTaskField(${jsArg(activeTaskObj.id)}, 'notes', this.value)" onchange="saveTaskText(${jsArg(activeTaskObj.id)}, 'notes', this.value)" style="width:100%;resize:none;border-radius:13px;border:1px solid var(--border);background:var(--surface);padding:10px 14px;text-align:center;font-size:12px;color:var(--text-2);outline:none;">${escapeHtml(activeTaskObj.notes || "")}</textarea>
+                  <textarea class="focus-notes-input" rows="2" placeholder="Tap to add session notes..." aria-label="Session notes" oninput="draftTaskField(${jsArg(activeTaskObj.id)}, 'notes', this.value)" onchange="saveTaskText(${jsArg(activeTaskObj.id)}, 'notes', this.value)">${escapeHtml(activeTaskObj.notes || "")}</textarea>
                 </div>
               </div>
 
@@ -7883,6 +7993,23 @@
             weekSecByQuest.set(l.questId, (weekSecByQuest.get(l.questId) || 0) + l.durationSeconds);
           }
         }
+        // ...and one O(T) pass groups each quest's open tasks and the ones finished today.
+        const pendingByQuest = new Map();
+        const completedTodayByQuest = new Map();
+        for (const t of state.tasks) {
+          if (!t.questId) continue;
+          let group = null;
+          if (isOpenTask(t, todayKey)) group = pendingByQuest;
+          else if (t.status === "completed" && t.completedAt && toLocalDateKey(t.completedAt) === todayKey) group = completedTodayByQuest;
+          if (!group) continue;
+          const list = group.get(t.questId);
+          if (list) list.push(t);
+          else group.set(t.questId, [t]);
+        }
+        pendingByQuest.forEach(list => list.sort(compareRank));
+        completedTodayByQuest.forEach((list, questId) => {
+          completedTodayByQuest.set(questId, list.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0)).slice(0, 3));
+        });
 
         container.innerHTML = `
           <div class="hero-bar">
@@ -7912,13 +8039,8 @@
             const sec = weekSecByQuest.get(quest.id) || 0;
             const hrs = sec / 3600;
             const pct = Math.min(100, Math.round((hrs / Math.max(1, quest.targetWeeklyHours)) * 100));
-            const qTasks = state.tasks
-              .filter(t => t.questId === quest.id && (t.status === "queued" || t.status === "active"))
-              .sort(compareRank);
-            const qCompleted = state.tasks
-              .filter(t => t.questId === quest.id && t.status === "completed" && t.completedAt && toLocalDateKey(t.completedAt) === todayKey)
-              .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
-              .slice(0, 3);
+            const qTasks = pendingByQuest.get(quest.id) || [];
+            const qCompleted = completedTodayByQuest.get(quest.id) || [];
 
             return `
               <div class="review-card" style="padding:20px;">
@@ -8532,7 +8654,7 @@
                 ${hmCols.map(col => `
                   <div class="heatmap-col">
                     ${col.cells.map(cell => cell.isFuture ? `<span style="aspect-ratio:1/1;width:100%;"></span>` : `
-                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" aria-label="${escapeHtml(cell.shortLbl + ": " + formatTelemetryDuration(cell.sec, "0h") + ", " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
+                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" data-hm-key="${escapeHtml(cell.dateKey)}" aria-label="${escapeHtml(cell.shortLbl + ": " + formatTelemetryDuration(cell.sec, "0h") + ", " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
                     `).join("")}
                   </div>
                 `).join("")}
@@ -8738,6 +8860,28 @@
       // A re-render (e.g. a sync that brought changes) keeps the quest filter strip where the user left it.
       const nextStrip = chipScrollLeft ? container.querySelector(".chip-strip") : null;
       if (nextStrip) nextStrip.scrollLeft = chipScrollLeft;
+      // ...and keyboard / TalkBack focus on the control it was on (e.g. the Guide section just chosen).
+      if (focusKey && !container.contains(document.activeElement)) {
+        const again = findByFocusKey(container, focusKey);
+        if (again && container.contains(again)) focusQuietly(again);
+      }
+    }
+
+    // Review heatmap: the day cells are ~14 px on a phone, so a press anywhere on the grid picks the
+    // nearest day and sliding the finger scrubs through the days (the readout below follows). Wired
+    // in installUiHooks; the cells keep their own onclick for TalkBack and mouse clicks.
+    function scrubHeatmap(event, cols) {
+      if (!event || !cols || (event.type === "pointermove" && !event.buttons)) return;
+      const colEls = cols.children;
+      const box = cols.getBoundingClientRect();
+      if (!colEls.length || !(box.width > 0) || !(box.height > 0)) return;
+      const ci = Math.min(colEls.length - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * colEls.length)));
+      const cells = colEls[ci].children;
+      const ri = Math.min(cells.length - 1, Math.max(0, Math.floor(((event.clientY - box.top) / box.height) * cells.length)));
+      const key = cells[ri] ? cells[ri].getAttribute("data-hm-key") : null; // a future day has none
+      if (!key || key === selectedReviewHeatmapKey) return;
+      selectedReviewHeatmapKey = key;
+      renderApp();
     }
 
     function computeTimelineLayout(items, defaultStartHr, defaultEndHr) {
@@ -9009,7 +9153,6 @@
     installUiHooks();
     installKeyboardHooks();
     afterFirstPaint(() => scheduleSync(0));
-    setTimeout(prewarmAudio, 1500);
   </script>
 </body>
 </html>

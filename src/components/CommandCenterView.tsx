@@ -34,12 +34,16 @@ import { orderAfterDrop, useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import {
+  COMPLETION_HIGHLIGHT_MS,
+  SETTLING_COMPLETED_CARD_CLASS,
   captureTaskCompletionScene,
   playTwoBeatTaskCompletion,
+  reopenDotBgClass,
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { TaskNotesField } from "./TaskNotesField";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { useTransientHighlight } from "./useTransientHighlight";
 
 /** Clock tick while a timer runs (drives the live counters). */
 const RUNNING_TICK_MS = 1000;
@@ -47,8 +51,6 @@ const RUNNING_TICK_MS = 1000;
 const IDLE_TICK_MS = 60_000;
 /** Calendar days in the week KPI, today included. */
 const WEEK_DAYS = 7;
-/** Duration (ms) of the subtle arrival glow on a freshly completed task card. */
-const COMPLETION_HIGHLIGHT_MS = 650;
 
 /** Elements where Alt+Arrow keys belong to text editing, not to reordering. */
 function isTextEntryTarget(target: EventTarget): boolean {
@@ -77,6 +79,7 @@ export function CommandCenterView() {
     materializeDailyHabits,
     lastCompletedFeedback,
     clearFeedback,
+    setActiveView,
   } = useCommandStore(
     useShallow((s) => ({
       activeTaskId: s.activeTaskId,
@@ -93,6 +96,7 @@ export function CommandCenterView() {
       materializeDailyHabits: s.materializeDailyHabits,
       lastCompletedFeedback: s.lastCompletedFeedback,
       clearFeedback: s.clearFeedback,
+      setActiveView: s.setActiveView,
     }))
   );
 
@@ -122,20 +126,13 @@ export function CommandCenterView() {
 
   // Expanded Task ID (for notes / quest change)
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  // Notes toggle of the expanded task; Escape in the drawer returns focus here.
+  const expandedToggleRef = useRef<HTMLButtonElement | null>(null);
 
   // Recently completed task id for tactile arrival highlight & checkmark draw
-  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
-  const completeHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
+  const [justCompletedId, flashJustCompleted] = useTransientHighlight(
+    COMPLETION_HIGHLIGHT_MS
   );
-
-  useEffect(() => {
-    return () => {
-      if (completeHighlightTimerRef.current !== null) {
-        clearTimeout(completeHighlightTimerRef.current);
-      }
-    };
-  }, []);
 
   // Live session delta for active task & timeline
   const [liveDelta, setLiveDelta] = useState(0);
@@ -318,9 +315,6 @@ export function CommandCenterView() {
   const pendingSceneRef = useRef<TaskCompletionScene | null>(null);
 
   const handleCompleteTask = (taskId: string) => {
-    if (completeHighlightTimerRef.current !== null) {
-      clearTimeout(completeHighlightTimerRef.current);
-    }
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
     const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
@@ -330,11 +324,7 @@ export function CommandCenterView() {
       accentHex
     );
     setExpandedTaskId((cur) => (cur === taskId ? null : cur));
-    setJustCompletedId(taskId);
-    completeHighlightTimerRef.current = setTimeout(() => {
-      setJustCompletedId((cur) => (cur === taskId ? null : cur));
-      completeHighlightTimerRef.current = null;
-    }, COMPLETION_HIGHLIGHT_MS);
+    flashJustCompleted(taskId);
     hudAudio.playComplete();
     void completeTaskById(taskId);
   };
@@ -526,7 +516,7 @@ export function CommandCenterView() {
       {/* ================================================================= */}
       <div className="mb-10 sm:mb-12 flex flex-col justify-between gap-4 sm:gap-6 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             {formattedToday}
           </h1>
         </div>
@@ -543,9 +533,12 @@ export function CommandCenterView() {
 
           <div className="w-32 sm:w-44">
             <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
+              {/* Full-width fill slid in from the left (compositor-only); the
+                  track's overflow-hidden clips it, keeping the rounded end. */}
               <div
-                className="h-full rounded-full bg-[#00f0ff] transition-all duration-500"
-                style={{ width: `${weeklyProgressPct}%` }}
+                data-testid="week-progress-fill"
+                className="h-full w-full rounded-full bg-[#00f0ff] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{ transform: `translateX(${weeklyProgressPct - 100}%)` }}
               />
             </div>
             <div className="mt-1.5 text-right text-xs text-hud-muted tabular-nums">
@@ -753,9 +746,30 @@ export function CommandCenterView() {
               ) : (
                 <div
                   data-flow-key="empty-queue"
-                  className="rounded-2xl border border-dashed border-white/[0.08] py-14 text-center text-sm text-hud-muted"
+                  className="rounded-2xl border border-dashed border-white/[0.08] px-4 py-14 text-center text-sm text-hud-muted"
                 >
-                  No quest tasks queued. Add your most important work above.
+                  {quests !== undefined && activeQuests.length === 0 ? (
+                    // With no active quest, new tasks land in Other work, so
+                    // "add above" could never fill this queue.
+                    <>
+                      <p>
+                        No active quests. Create a quest to give your most
+                        important work a home.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          hudAudio.playClick();
+                          setActiveView("quests");
+                        }}
+                        className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/10 hover:text-white active:opacity-80"
+                      >
+                        Go to Quests
+                      </button>
+                    </>
+                  ) : (
+                    "No quest tasks queued. Add your most important work above."
+                  )}
                 </div>
               )
             ) : (
@@ -792,7 +806,7 @@ export function CommandCenterView() {
                       setDraggedTaskId(null);
                       setDragOverTaskId(null);
                     }}
-                    className={`group relative overflow-hidden rounded-2xl border transition-colors duration-200 ${
+                    className={`group relative cursor-grab overflow-hidden rounded-2xl border transition-colors duration-200 active:cursor-grabbing ${
                       isDragOver
                         ? "border-white/40 bg-[#1a1d24]"
                         : isTopTask
@@ -814,6 +828,7 @@ export function CommandCenterView() {
                           hudAudio.playLockOn();
                           initializeFocus(task.id);
                         }}
+                        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                         className="block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-base font-medium leading-snug text-white hover:text-[#00f0ff] transition-colors duration-150 ease-out active:opacity-80"
                       >
                         {task.title}
@@ -842,7 +857,7 @@ export function CommandCenterView() {
                             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
-                                : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                                : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
                             }`}
                           >
                             <Check className="h-3 w-3" />
@@ -911,6 +926,7 @@ export function CommandCenterView() {
                         <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
+                            ref={isExpanded ? expandedToggleRef : undefined}
                             onClick={() =>
                               setExpandedTaskId(isExpanded ? null : task.id)
                             }
@@ -935,9 +951,12 @@ export function CommandCenterView() {
                           if (e.key === "Escape") {
                             e.stopPropagation();
                             setExpandedTaskId(null);
+                            expandedToggleRef.current?.focus();
                           }
                         }}
-                        className="border-t border-white/[0.06] bg-[#0c0e12] px-6 py-4 space-y-3"
+                        // cursor-auto: the row's grab cursor is inherited, and
+                        // the notes field should keep its text cursor.
+                        className="cursor-auto border-t border-white/[0.06] bg-[#0c0e12] px-6 py-4 space-y-3"
                       >
                         <TaskNotesField
                           key={task.id}
@@ -1069,7 +1088,7 @@ export function CommandCenterView() {
                           className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
                             isCompleting
                               ? "border-transparent bg-slate-400 text-black"
-                              : "border-white/20 text-transparent hover:border-white hover:text-white"
+                              : "border-white/40 text-transparent hover:border-white hover:text-white"
                           }`}
                         >
                           <Check className="h-3 w-3" />
@@ -1159,7 +1178,7 @@ export function CommandCenterView() {
                     data-task-id={task.id}
                     className={`group relative overflow-hidden rounded-2xl border p-5 pl-6 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
                       isJustCompleted
-                        ? "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]"
+                        ? SETTLING_COMPLETED_CARD_CLASS
                         : "border-white/[0.05] bg-[#0e1014]/60"
                     }`}
                   >
@@ -1181,7 +1200,7 @@ export function CommandCenterView() {
                           }}
                           title="Reopen task"
                           aria-label="Reopen task"
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${style.bg} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 group-hover:opacity-95 focus-visible:opacity-100`}
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 group-hover:opacity-95 focus-visible:opacity-100`}
                         >
                           {isJustCompleted ? (
                             <motion.span

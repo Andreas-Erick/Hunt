@@ -4,8 +4,6 @@
 
 :root {
   color-scheme: dark;
-  --font-jetbrains-mono: "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
-  --font-space-grotesk: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
 }
 
 html,
@@ -73,11 +71,13 @@ body {
     display: none;
   }
 
-  /* Pure-CSS horizontal scroll-shadow cues (only visible when content overflows that edge). */
+  /* Pure-CSS horizontal scroll-shadow cues (only visible when content overflows that edge).
+     The cover colour must match the surface behind the scroller; override the two
+     --scroll-shadow-cover* variables on other surfaces (e.g. the header nav). */
   .scroll-shadow-x {
     background-image:
-      linear-gradient(to right, #111318 25%, rgba(17, 19, 24, 0)),
-      linear-gradient(to left, #111318 25%, rgba(17, 19, 24, 0)),
+      linear-gradient(to right, var(--scroll-shadow-cover, #111318) 25%, var(--scroll-shadow-cover-clear, rgba(17, 19, 24, 0))),
+      linear-gradient(to left, var(--scroll-shadow-cover, #111318) 25%, var(--scroll-shadow-cover-clear, rgba(17, 19, 24, 0))),
       radial-gradient(farthest-side at 0 50%, rgba(0, 240, 255, 0.18), transparent),
       radial-gradient(farthest-side at 100% 50%, rgba(0, 240, 255, 0.18), transparent);
     background-position: left center, right center, left center, right center;

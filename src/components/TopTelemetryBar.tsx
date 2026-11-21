@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -73,11 +73,14 @@ function ActiveSessionPill() {
 
   return (
     <button
+      type="button"
       onClick={() => setActiveView("focus")}
-      className="flex items-center gap-2 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-[#00ff9d] hover:bg-[#00ff9d]/20 transition-colors"
+      title={`Open Focus: ${activeTask.title}`}
+      className="flex items-center gap-2 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-[#00ff9d] hover:bg-[#00ff9d]/20 transition-all duration-150 ease-out active:scale-[0.98]"
     >
       <Radio className="h-3.5 w-3.5 animate-pulse" />
-      <span className="max-w-[150px] truncate hidden md:inline text-white/90">
+      {/* Title only on wide headers, so the nav tabs keep their room at laptop widths. */}
+      <span className="max-w-[150px] truncate hidden min-[1440px]:inline text-white/90">
         {activeTask.title}
       </span>
       <span className="font-mono font-semibold tabular-nums">
@@ -108,7 +111,7 @@ function PhoneSyncButton({ onOpen }: { onOpen: () => void }) {
       }}
       title={`${description} — open Phone & Cross-Device Sync`}
       aria-label={`Phone sync: ${description}`}
-      className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs text-neutral-300 hover:border-white/20 hover:text-white transition-colors"
+      className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs text-neutral-300 hover:border-white/20 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
     >
       <span
         className={`h-2 w-2 rounded-full transition-colors ${
@@ -132,10 +135,26 @@ export function TopTelemetryBar() {
 
   const [muted, setMuted] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMuted(hudAudio.syncFromStorage());
   }, []);
+
+  // At narrow widths the nav scrolls sideways: keep the active tab in view
+  // (e.g. Review or Guide on a half-screen window).
+  useEffect(() => {
+    const nav = navRef.current;
+    const tab = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !tab) return;
+    const navBox = nav.getBoundingClientRect();
+    const tabBox = tab.getBoundingClientRect();
+    if (tabBox.left < navBox.left) {
+      nav.scrollLeft -= navBox.left - tabBox.left;
+    } else if (tabBox.right > navBox.right) {
+      nav.scrollLeft += tabBox.right - navBox.right;
+    }
+  }, [activeView]);
 
   // Hide the top bar completely when inside Focus view so Focus mode is 100% distraction-free
   if (activeView === "focus") {
@@ -179,7 +198,10 @@ export function TopTelemetryBar() {
               </span>
             </div>
 
-            <nav className="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar">
+            <nav
+              ref={navRef}
+              className="scroll-shadow-x flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar [--scroll-shadow-cover:#0b0c0e] [--scroll-shadow-cover-clear:rgba(11,12,14,0)]"
+            >
               {NAV_ITEMS.map((item) => {
                 const isActive =
                   activeView === item.id ||
@@ -193,7 +215,7 @@ export function TopTelemetryBar() {
                       hudAudio.playClick();
                       setActiveView(item.id);
                     }}
-                    className={`shrink-0 rounded-lg px-2.5 lg:px-3.5 py-1.5 lg:py-2 text-xs lg:text-sm transition-all ${
+                    className={`shrink-0 rounded-lg px-2.5 lg:px-3.5 py-1.5 lg:py-2 text-xs lg:text-sm transition-all duration-150 ease-out active:opacity-80 ${
                       isActive
                         ? "bg-white/[0.09] font-medium text-white"
                         : "text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
@@ -220,7 +242,7 @@ export function TopTelemetryBar() {
               onClick={handleToggleMute}
               title={muted ? "Unmute interface audio" : "Mute interface audio"}
               aria-label={muted ? "Unmute interface audio" : "Mute interface audio"}
-              className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-colors"
+              className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
             >
               {muted ? (
                 <VolumeX className="h-4 w-4" />

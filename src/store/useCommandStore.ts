@@ -5,6 +5,8 @@ import { persist } from "zustand/middleware";
 import { db, loadSortedQuests } from "@/lib/db";
 import {
   habitTaskId,
+  isMissedHabitTask,
+  isOpenTask,
   isTaskVisibleToday,
   toLocalDateKey,
 } from "@/lib/dateUtils";
@@ -111,6 +113,14 @@ interface CommandStoreState {
   clearActionError: () => void;
 
   // Navigation
+  /**
+   * Asked by setActiveView before it leaves the current view; false keeps the
+   * view. A view registers one only while it holds unsaved form edits, which
+   * leaving would unmount. Not persisted.
+   */
+  discardGuard: (() => boolean) | null;
+  setDiscardGuard: (guard: (() => boolean) | null) => void;
+  /** Switches the view unless the registered discardGuard declines. */
   setActiveView: (view: HudView) => void;
   clearFeedback: () => void;
 
@@ -609,6 +619,21 @@ function reportActionFailure(set: StoreSet, name: string, err: unknown): void {
 }
 
 /**
+ * A failed habit materialization after a sync or import: kept in the breadcrumb
+ * ring, logged with the legacy console tag, and not shown to the user (the
+ * sync or import itself succeeded; the next boot or day change retries).
+ */
+function recordMaterializeFailure(err: unknown): void {
+  recordBreadcrumb({
+    level: "ERROR",
+    domain: "store",
+    event: "action_failed",
+    context: { action: "materializeDailyHabits", ...summarizeError(err) },
+  });
+  console.error("[hunt] action_failed", "materializeDailyHabits", err);
+}
+
+/**
  * Runs a Dexie-backed action. A failure is reported (reportActionFailure) and
  * resolves to false instead of rejecting, so the UI's fire-and-forget handlers
  * never produce unhandled rejections. No retry.
@@ -703,10 +728,9 @@ async function runSyncOnce(
 ): Promise<{ error: SyncErrorCode | null; wroteLocal: boolean }> {
   const res = await performServerSync(readStoreActiveFocus(get()));
 
-  if (!res.ok || !res.merged) {
-    const error = res.error ?? "unreachable";
-    setChanged(get, set, { isSyncOnline: false, syncError: error });
-    return { error, wroteLocal: false };
+  if (!res.ok) {
+    setChanged(get, set, { isSyncOnline: false, syncError: res.error });
+    return { error: res.error, wroteLocal: false };
   }
 
   const patch: Partial<CommandStoreState> = {
@@ -728,7 +752,7 @@ async function runSyncOnce(
       const added = await materializeHabitsIntoDB(toLocalDateKey());
       if (added > 0) wroteLocal = true;
     } catch (err) {
-      console.error("[hunt] action_failed", "materializeDailyHabits", err);
+      recordMaterializeFailure(err);
     }
   }
   return { error: null, wroteLocal };
@@ -921,6 +945,7 @@ export const useCommandStore = create<CommandStoreState>()(
       phoneLastSeenAt: null,
       syncError: null,
       actionError: null,
+      discardGuard: null,
 
       syncNow: () => {
         if (syncInFlight) {
@@ -1002,7 +1027,7 @@ export const useCommandStore = create<CommandStoreState>()(
           try {
             await materializeHabitsIntoDB(toLocalDateKey());
           } catch (err) {
-            console.error("[hunt] action_failed", "materializeDailyHabits", err);
+            recordMaterializeFailure(err);
           }
           return { ok: true, merged };
         } catch (err) {
@@ -1021,7 +1046,13 @@ export const useCommandStore = create<CommandStoreState>()(
       },
 
       clearActionError: () => set({ actionError: null }),
-      setActiveView: (view) => set({ activeView: view }),
+      setDiscardGuard: (guard) => set({ discardGuard: guard }),
+      setActiveView: (view) => {
+        const { activeView, discardGuard } = get();
+        if (view === activeView) return;
+        if (discardGuard && !discardGuard()) return;
+        set({ activeView: view });
+      },
       clearFeedback: () => set({ lastCompletedFeedback: null }),
 
       initializeFocus: async (requestedTaskId?: string) => {
@@ -1049,9 +1080,14 @@ export const useCommandStore = create<CommandStoreState>()(
           let targetId = requestedTaskId;
           if (!targetId) {
             const queued = await db.tasks.where("status").equals("queued").toArray();
-            // Nothing for today: start the first queued task of any day.
+            const todayKey = toLocalDateKey();
+            // Nothing for today: start the first queued task of any day, never a
+            // missed daily habit day (that is history, not open work).
             const chosen =
-              pickNextFocusTask(queued, toLocalDateKey()) ?? queued.sort(compareRank)[0];
+              pickNextFocusTask(queued, todayKey) ??
+              queued
+                .filter((t) => !isMissedHabitTask(t, todayKey))
+                .sort(compareRank)[0];
             if (!chosen) return;
             targetId = chosen.id;
           }
@@ -1303,6 +1339,7 @@ export const useCommandStore = create<CommandStoreState>()(
       completeQuest: async (questId) => {
         await runAction(set, "completeQuest", async () => {
           const now = Date.now();
+          const todayKey = toLocalDateKey(now);
           const written = await db.transaction(
             "rw",
             db.quests,
@@ -1320,8 +1357,10 @@ export const useCommandStore = create<CommandStoreState>()(
                 .where("questId")
                 .equals(questId)
                 .toArray();
+              // Open tasks move to Other work; completed tasks and missed
+              // daily habit days keep their quest as history.
               for (const t of linkedTasks) {
-                if (t.status === "queued" || t.status === "active") {
+                if (isOpenTask(t, todayKey)) {
                   await db.tasks.update(t.id, {
                     questId: null,
                     updatedAt: nextStamp(t),
@@ -1470,7 +1509,6 @@ export const useCommandStore = create<CommandStoreState>()(
         await runAction(set, "deleteHabit", async () => {
           recordDeletedHabitTombstone(habitId);
           const todayTaskId = habitTaskId(habitId, toLocalDateKey());
-          let removedTodayTask = false;
           await db.transaction("rw", db.habits, db.tasks, async () => {
             await db.habits.delete(habitId);
             const todayTask = await db.tasks.get(todayTaskId);
@@ -1481,13 +1519,12 @@ export const useCommandStore = create<CommandStoreState>()(
               todayTask.status === "queued" &&
               (todayTask.accumulatedSeconds || 0) === 0
             ) {
+              // Tombstone first: if it cannot be saved this throws and the
+              // transaction rolls back, so the task cannot come back via sync.
+              recordDeletedTaskTombstone(todayTaskId);
               await db.tasks.delete(todayTaskId);
-              removedTodayTask = true;
             }
           });
-          if (removedTodayTask) {
-            recordDeletedTaskTombstone(todayTaskId);
-          }
           get().requestSync();
         });
       },

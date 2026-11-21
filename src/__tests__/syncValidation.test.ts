@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -125,7 +125,8 @@ describe("validateSyncPayload: structure", () => {
 
   it.each([
     ["quests", 100, (i: number) => questRow({ id: `quest-${i}` })],
-    ["tasks", 5000, (i: number) => taskRow({ id: `tsk-${i}` })],
+    // 20,000 like logs: tasks are never pruned, so the old 5000 cap was reached by normal use.
+    ["tasks", 20000, (i: number) => taskRow({ id: `tsk-${i}` })],
     ["timeLogs", 20000, (i: number) => logRow({ id: `log-${i}-${TASK_ID}` })],
   ] as const)("accepts exactly %s %i rows and rejects one more", (key, cap, make) => {
     const rows = Array.from({ length: cap + 1 }, (_, i) => make(i));
@@ -618,20 +619,23 @@ describe("/api/sync with hostile rows", () => {
 
   const syncFile = () => path.join(dir, "hunt-sync.json");
   const call = (method: "GET" | "POST", payload?: unknown) =>
-    new Request("http://192.168.2.136:3000/api/sync", {
+    new Request("http://192.168.1.5:3000/api/sync", {
       method,
       headers: { "Content-Type": "application/json", "X-Hunt-Token": KEY, "X-Hunt-Client": "desktop" },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     });
 
-  beforeAll(async () => {
+  // A fresh data directory and route import per test: no test reads rows that
+  // another one stored, so the order does not matter.
+  beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "hunt-sync-validation-test-"));
     fs.writeFileSync(path.join(dir, "hunt-sync.key"), KEY, "utf8");
     process.env.HUNT_DATA_DIR = dir;
+    vi.resetModules();
     route = await import("@/app/api/sync/route");
   });
 
-  afterAll(() => {
+  afterEach(() => {
     delete process.env.HUNT_DATA_DIR;
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });

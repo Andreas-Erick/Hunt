@@ -5,7 +5,7 @@ import {
   summarizeError,
 } from "@/lib/diagnostics";
 import { restoreMirroredNoteDrafts } from "@/lib/noteDraftStore";
-import { getClientSyncToken } from "@/lib/syncEngine";
+import { getClientSyncToken, syncDataExistsElsewhere } from "@/lib/syncEngine";
 import { useCommandStore } from "@/store/useCommandStore";
 
 /** Upper bound on initial boot checks so a stalled IDB lock never hangs on "Loading Hunt...". */
@@ -40,7 +40,8 @@ export function bootOnce(): Promise<void> {
       )
       .then(() => {
         if (generation !== bootGeneration) return;
-        return seedInitialDataIfNeeded();
+        // db.ts stays Dexie-only; the sync-side "data exists" check is injected here.
+        return seedInitialDataIfNeeded(syncDataExistsElsewhere);
       })
       .catch((err) =>
         logDiagnostic({

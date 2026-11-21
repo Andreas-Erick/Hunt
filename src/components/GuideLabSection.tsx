@@ -32,6 +32,7 @@ import {
   QUEST_LAB_PRESETS,
   TASK_LAB_PRESETS,
 } from "@/lib/questScienceContent";
+import { useTodayDateKey } from "./useTodayDateKey";
 
 type LabMode = "task" | "quest";
 
@@ -97,9 +98,11 @@ export function GuideLabSection() {
   const tasks = useLiveQuery(() => db.tasks.toArray(), []);
   const loadingAudit = quests === undefined || tasks === undefined;
 
+  // Recomputed when the day changes (the view can stay open past midnight).
+  const todayKey = useTodayDateKey();
   const audit = useMemo(
-    () => (loadingAudit ? null : auditWorkspace(quests, tasks)),
-    [loadingAudit, quests, tasks]
+    () => (loadingAudit ? null : auditWorkspace(quests, tasks, todayKey)),
+    [loadingAudit, quests, tasks, todayKey]
   );
 
   const ids = useId();

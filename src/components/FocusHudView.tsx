@@ -384,7 +384,7 @@ export function FocusHudView() {
               onFocus={() => setNotesOpenForTaskId(activeTask.id)}
               placeholder="Session notes..."
               aria-label="Session notes"
-              className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 text-center text-xs leading-relaxed text-neutral-300 placeholder:text-hud-muted focus:border-white/20 focus:outline-none"
+              className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] p-3.5 text-center text-xs leading-relaxed text-neutral-300 placeholder:text-hud-muted focus:border-hud-cyan focus:outline-none"
             />
           ) : (
             <button

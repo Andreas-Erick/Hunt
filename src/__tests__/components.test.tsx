@@ -9,6 +9,7 @@ import {
   cleanup,
 } from "@testing-library/react";
 import { db, seedInitialDataIfNeeded } from "@/lib/db";
+import { syncDataExistsElsewhere } from "@/lib/syncEngine";
 import { useCommandStore } from "@/store/useCommandStore";
 import { TopTelemetryBar } from "@/components/TopTelemetryBar";
 import { CommandCenterView } from "@/components/CommandCenterView";
@@ -56,7 +57,7 @@ async function seedDemoData() {
     )
   );
   try {
-    await seedInitialDataIfNeeded();
+    await seedInitialDataIfNeeded(syncDataExistsElsewhere);
   } finally {
     vi.unstubAllGlobals();
   }
@@ -554,7 +555,7 @@ describe("UI Components & User Workflows", () => {
         isSyncOnline: true,
         syncError: null,
         lastSyncedAt: Date.now(),
-        lanUrls: ["http://192.168.2.136:3000"],
+        lanUrls: ["http://192.168.1.5:3000"],
         phoneLastSeenAt: null,
       });
     });

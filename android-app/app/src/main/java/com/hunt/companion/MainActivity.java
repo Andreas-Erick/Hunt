@@ -1,6 +1,7 @@
 package com.hunt.companion;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -139,8 +140,6 @@ public class MainActivity extends Activity {
     private static final String LAPTOP_URL_FILE = "hunt-laptop-url.txt";
     private static final String SYNC_TOKEN_FILE = "hunt-sync-token.txt";
 
-    private static final String DEFAULT_LAPTOP_URL = "http://192.168.2.136:3000";
-
     /** Header-safe pairing token: 32-256 printable ASCII characters, no spaces (same rule as the server). */
     private static final Pattern SYNC_TOKEN_RE = Pattern.compile("^[\\x21-\\x7E]{32,256}$");
     /** Token file format: "v2:" + Base64(iv) + ":" + Base64(AES-GCM ciphertext + tag). */
@@ -267,6 +266,10 @@ public class MainActivity extends Activity {
     private int imeAnimationDepth = 0;
     private boolean containerPaddingInitialized = false;
     private String pendingPairedToastUrl;
+    /** True once PAGE_URL has finished loading (a pairing can then be announced right away). */
+    private boolean pageLoaded;
+    /** The open "replace the current pairing?" dialog, if any. */
+    private AlertDialog pairingDialog;
 
     // =======================================================================================
     // Lifecycle
@@ -370,7 +373,7 @@ public class MainActivity extends Activity {
         }
 
         registerNetworkCallback();
-        handlePairingIntent(getIntent(), false);
+        handlePairingIntent(getIntent());
 
         webView.loadUrl(PAGE_URL);
     }
@@ -379,15 +382,20 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handlePairingIntent(intent, true);
+        handlePairingIntent(intent);
     }
 
     /**
      * Handles a {@code hunt://pair?url=<origin>&token=<secret>} deep link launched from the QR
      * browser page on the same device. Only private LAN, Tailscale CGNAT and loopback origins are
      * accepted, and the token must match {@link #SYNC_TOKEN_RE}.
+     * <p>
+     * The Activity is exported with a BROWSABLE filter, so any web page or app can fire this link.
+     * The first pairing (no key saved yet) applies at once, one tap from the QR page. A link that
+     * would REPLACE an existing pairing (another key or another laptop) saves nothing until the
+     * user taps Pair in a native dialog naming the new laptop.
      */
-    private void handlePairingIntent(Intent intent, boolean notifyNow) {
+    private void handlePairingIntent(Intent intent) {
         if (intent == null) return;
         Uri uri = intent.getData();
         intent.setData(null);
@@ -395,22 +403,72 @@ public class MainActivity extends Activity {
         if (!"hunt".equalsIgnoreCase(uri.getScheme()) || !"pair".equalsIgnoreCase(uri.getHost())) {
             return;
         }
-        String baseUrl = normalizeUrl(uri.getQueryParameter("url"));
+        final String baseUrl = normalizeUrl(uri.getQueryParameter("url"));
         if (!isAllowedSyncRouteUrl(baseUrl)) {
             Log.w(TAG, "Ignored pairing deep link: disallowed laptop route");
             return;
         }
         String rawKey = uri.getQueryParameter("token");
-        if (!saveSyncTokenInternal(rawKey)) {
+        final String key = rawKey == null ? "" : rawKey.trim();
+        if (!isValidSyncToken(key)) {
+            Log.w(TAG, "Ignored pairing deep link: invalid key format");
+            return;
+        }
+        // Reading the saved key is Keystore work (ioExec only); the decision comes back to the UI thread.
+        boolean queued = executeQuietly(ioExec, () -> {
+            boolean confirm = needsPairingConfirmation(syncToken(), laptopUrl(), key, baseUrl);
+            main.post(() -> {
+                if (destroyed || isFinishing()) return;
+                if (confirm) {
+                    confirmReplacePairing(key, baseUrl);
+                } else {
+                    applyPairing(key, baseUrl);
+                }
+            });
+        });
+        if (!queued) Log.w(TAG, "Ignored pairing deep link: the app is closing");
+    }
+
+    /**
+     * True when a pairing link would replace an existing pairing: a key is saved and the link
+     * carries another key or another laptop URL. The first pairing (no key saved) is never asked.
+     */
+    private static boolean needsPairingConfirmation(
+            String savedToken, String savedUrl, String newToken, String newUrl) {
+        if (savedToken == null || savedToken.isEmpty()) return false;
+        return !savedToken.equals(newToken) || savedUrl == null || !savedUrl.equals(newUrl);
+    }
+
+    /** UI thread: saves the key and laptop URL, then tells the page (now, or once it has loaded). */
+    private void applyPairing(String key, String baseUrl) {
+        if (!saveSyncTokenInternal(key)) {
             Log.w(TAG, "Ignored pairing deep link: invalid key format");
             return;
         }
         saveLaptopUrlInternal(baseUrl);
-        if (notifyNow) {
+        if (pageLoaded) {
             notifyPagePaired(baseUrl);
         } else {
             pendingPairedToastUrl = baseUrl;
         }
+    }
+
+    /** UI thread: asks before a link replaces the current pairing. Only Pair saves anything. */
+    private void confirmReplacePairing(String key, String baseUrl) {
+        if (pairingDialog != null) pairingDialog.dismiss();
+        String host = Uri.parse(baseUrl).getAuthority();
+        AlertDialog dialog = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Pair with " + host + "?")
+                .setMessage("This replaces your current laptop. Tap Pair only if you just scanned "
+                        + "this laptop's pairing QR code.")
+                .setPositiveButton("Pair", (d, which) -> applyPairing(key, baseUrl))
+                .setNegativeButton("Cancel", null)
+                .create();
+        dialog.setOnDismissListener(d -> {
+            if (pairingDialog == d) pairingDialog = null;
+        });
+        pairingDialog = dialog;
+        dialog.show();
     }
 
     private void notifyPagePaired(String baseUrl) {
@@ -532,6 +590,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        if (pairingDialog != null) {
+            pairingDialog.dismiss(); // nothing was saved; the link can be opened again
+            pairingDialog = null;
+        }
         main.removeCallbacksAndMessages(null);
         unregisterNetworkCallback();
         destroyWebView();
@@ -633,7 +695,9 @@ public class MainActivity extends Activity {
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            if (pendingPairedToastUrl != null && isPageUrl(url != null ? url : "")) {
+            if (!isPageUrl(url != null ? url : "")) return;
+            pageLoaded = true;
+            if (pendingPairedToastUrl != null) {
                 String pairedUrl = pendingPairedToastUrl;
                 pendingPairedToastUrl = null;
                 notifyPagePaired(pairedUrl);
@@ -942,7 +1006,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Normalized saved laptop URL, or the default when nothing is saved. */
+    /** Normalized saved laptop URL, or "" when none is saved (not paired: no address is built in). */
     private String laptopUrl() {
         String u = laptopUrlCache;
         if (u == null) {
@@ -958,10 +1022,10 @@ public class MainActivity extends Activity {
                 }
             }
         }
-        return u.isEmpty() ? DEFAULT_LAPTOP_URL : u;
+        return u;
     }
 
-    /** "" clears the saved URL (back to the default); anything else must be an http(s) URL. */
+    /** "" clears the saved URL (unpaired again); anything else must be an http(s) URL. */
     private void saveLaptopUrlInternal(String url) {
         if (url == null) return;
         String clean = normalizeUrl(url);
@@ -1318,7 +1382,14 @@ public class MainActivity extends Activity {
             return syncResult(requestId, false, "auth", null, 0, started, new JSONArray(), "");
         }
         List<String> candidates = parseCandidates(candidateUrlsJson);
-        if (candidates.isEmpty()) candidates.add(fallbackLaptopUrl());
+        if (candidates.isEmpty()) {
+            String saved = laptopUrl();
+            if (isHttpUrl(saved)) candidates.add(saved);
+        }
+        // No laptop address at all (never paired): "auth" (not paired) without any network I/O.
+        if (candidates.isEmpty()) {
+            return syncResult(requestId, false, "auth", null, 0, started, new JSONArray(), "");
+        }
 
         if (!hasActiveNetwork()) {
             return syncResult(requestId, false, "no_network", null, 0, started, new JSONArray(), "");
@@ -1648,11 +1719,6 @@ public class MainActivity extends Activity {
         return out;
     }
 
-    private String fallbackLaptopUrl() {
-        String u = laptopUrl();
-        return isHttpUrl(u) ? u : DEFAULT_LAPTOP_URL;
-    }
-
     /** Trim and strip trailing slashes. */
     private static String normalizeUrl(String raw) {
         if (raw == null) return "";
@@ -1697,7 +1763,7 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Parses a dotted-quad IPv4 literal ("192.168.2.136") into 4 bytes; null for anything else
+     * Parses a dotted-quad IPv4 literal ("192.168.1.5") into 4 bytes; null for anything else
      * (hostnames, IPv6). Never does a DNS lookup.
      */
     private static byte[] parseIpv4Literal(String host) {
@@ -1859,7 +1925,7 @@ public class MainActivity extends Activity {
             try {
                 return laptopUrl();
             } catch (RuntimeException e) {
-                return DEFAULT_LAPTOP_URL;
+                return "";
             }
         }
 

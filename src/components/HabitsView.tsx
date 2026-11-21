@@ -29,6 +29,7 @@ import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
+import { useDiscardGuard } from "./useDiscardGuard";
 
 export { computeHabitStreak };
 
@@ -38,6 +39,9 @@ const HISTORY_DAYS = 7;
 function confirmDiscard(dirty: boolean): boolean {
   return !dirty || window.confirm(DISCARD_PROMPT);
 }
+
+/** Discard guard for leaving the Habits view with an unsaved habit edit. */
+const confirmLeaveDirty = () => confirmDiscard(true);
 
 export function HabitsView() {
   const {
@@ -65,8 +69,11 @@ export function HabitsView() {
     async () => (await db.habits.toArray()).sort(compareRank),
     []
   );
+  // Index range read: tasks without a habitId are not in the habitId index,
+  // and habit ids are non-empty strings, so this is every habit task and no
+  // full-table scan.
   const habitTasks = useLiveQuery(
-    () => db.tasks.filter((t) => Boolean(t.habitId)).toArray(),
+    () => db.tasks.where("habitId").above("").toArray(),
     []
   );
 
@@ -171,6 +178,8 @@ export function HabitsView() {
     (editTitle !== editingHabit.title ||
       editNotes !== (editingHabit.notes ?? "") ||
       editQuestId !== editingHabit.questId);
+
+  useDiscardGuard(editIsDirty(), confirmLeaveDirty);
 
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -284,7 +293,7 @@ export function HabitsView() {
       {/* Header */}
       <div className="mb-8 sm:mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium tracking-tight text-white">
+          <h1 className="text-[clamp(1.625rem,2.2vw+1rem,2.25rem)] font-medium leading-tight tracking-tight text-white">
             Daily habits
           </h1>
           <p className="mt-2 max-w-[65ch] text-sm text-neutral-400">
@@ -454,7 +463,7 @@ export function HabitsView() {
                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
                           doneToday
                             ? `${style.bg} border-transparent text-black`
-                            : "border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                            : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
                         }`}
                       >
                         {doneToday ? (
@@ -502,7 +511,7 @@ export function HabitsView() {
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-2">
                       {!doneToday && (
                         <button
                           type="button"
@@ -528,7 +537,7 @@ export function HabitsView() {
                         label={`Delete habit ${habit.title}`}
                         confirmLabel="Delete habit?"
                         onConfirm={() => deleteHabit(habit.id)}
-                        className="rounded-lg p-2 text-hud-muted hover:text-[#ff2a5f] data-[state=armed]:opacity-100"
+                        className="ml-1 rounded-lg p-2 text-hud-muted hover:text-[#ff2a5f] data-[state=armed]:opacity-100"
                       >
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>

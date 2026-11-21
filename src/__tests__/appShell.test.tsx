@@ -17,7 +17,7 @@ import tailwindcss from "tailwindcss";
 import QRCode from "qrcode";
 import tailwindConfig from "../../tailwind.config";
 import { db, seedInitialDataIfNeeded } from "@/lib/db";
-import { buildLocalSyncPayload } from "@/lib/syncEngine";
+import { buildLocalSyncPayload, syncDataExistsElsewhere } from "@/lib/syncEngine";
 import { validateSyncPayload } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import HomePage from "@/app/page";
@@ -30,9 +30,19 @@ import {
   restoreMirroredNoteDrafts,
 } from "@/components/TaskNotesField";
 
+// next/font is a Next.js build-time transform; outside Next the module has no runtime exports.
+vi.mock("next/font/google", () => {
+  const font = (options: { variable: string }) => ({
+    className: "next-font",
+    variable: `next-font-var${options.variable}`,
+    style: { fontFamily: "next-font" },
+  });
+  return { Space_Grotesk: font, JetBrains_Mono: font };
+});
+
 const ROOT = path.resolve(__dirname, "..", "..");
 const TOKEN_KEY = "hunt-sync-token-v1";
-const LAN = "http://192.168.2.136:3000";
+const LAN = "http://192.168.1.5:3000";
 /** A fake pairing key with characters a URL query must escape. */
 const KEY = "k3y+/=&#?%" + "a1".repeat(20);
 const BOUNDARY_TEXT =
@@ -74,7 +84,7 @@ async function seedDemoData() {
     )
   );
   try {
-    await seedInitialDataIfNeeded();
+    await seedInitialDataIfNeeded(syncDataExistsElsewhere);
   } finally {
     vi.unstubAllGlobals();
   }
@@ -138,7 +148,7 @@ function setClipboard(writeText: ((text: string) => Promise<void>) | undefined) 
 /** Renders the open modal and waits for its QR code (no state updates after the test). */
 async function renderModal(onClose: () => void = () => undefined) {
   const view = render(<MobileSyncModal isOpen onClose={onClose} />);
-  await waitFor(() => expect(screen.queryByText("Generating QR...")).toBeNull());
+  await screen.findByTestId("pairing-qr");
   return view;
 }
 
@@ -672,7 +682,7 @@ describe("MobileSyncModal: pairing link (SRV-02 / DDL-01)", () => {
     const pairing = `${LAN}/hunt-mobile.html?token=${encodeURIComponent(KEY)}`;
 
     const { container } = render(<MobileSyncModal isOpen onClose={() => undefined} />);
-    await waitFor(() => expect(screen.queryByText("Generating QR...")).toBeNull());
+    await screen.findByTestId("pairing-qr");
     expect(qr.mock.calls.map((c) => c[0])).toEqual([pairing]);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
@@ -720,7 +730,7 @@ describe("MobileSyncModal: pairing link (SRV-02 / DDL-01)", () => {
     expect(
       screen.getByText("Open Hunt with the desktop launcher to load the pairing key.")
     ).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText("Generating QR...")).toBeNull());
+    await screen.findByTestId("pairing-qr");
     expect(qr.mock.calls.map((c) => c[0])).toEqual([LAN]);
 
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
@@ -734,7 +744,7 @@ describe("MobileSyncModal: pairing link (SRV-02 / DDL-01)", () => {
     useCommandStore.setState({ lanUrls: [LAN, second] });
     const qr = vi.spyOn(QRCode, "toString");
     render(<MobileSyncModal isOpen onClose={() => undefined} />);
-    await waitFor(() => expect(screen.queryByText("Generating QR...")).toBeNull());
+    await screen.findByTestId("pairing-qr");
 
     fireEvent.click(screen.getByRole("button", { name: "10.0.0.7:3000" }));
     await waitFor(() =>
@@ -1119,7 +1129,7 @@ describe("MobileSyncModal: actions (DIX-12 / DDL-10)", () => {
     });
 
     await waitUntil(
-      () => status().textContent === "Snapshot merged successfully!",
+      () => status().textContent === "Snapshot merged · syncing",
       "the merge message"
     );
     expect((await db.tasks.get("tsk-imported-1"))?.title).toBe("Imported from the phone");
@@ -1280,27 +1290,15 @@ describe("desktop launcher, taskbar favicon & audio persistence", () => {
     }
   });
 
-  it("hudAudio.dispose() deterministically closes an open AudioContext and is idempotent", async () => {
+  it("hudAudio never opens an AudioContext: every cue is silent while unmuted", async () => {
     const { hudAudio } = await import("@/lib/hudAudio");
-    const closeSpy = vi.fn(async () => undefined);
+    const constructed = vi.fn();
     const OriginalAudioContext = window.AudioContext;
     class MockAudioContext {
       state = "running";
-      currentTime = 0;
-      destination = {};
-      close = closeSpy;
-      resume = vi.fn(async () => undefined);
-      createOscillator = vi.fn(() => ({
-        type: "sine",
-        frequency: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
-        connect: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-      }));
-      createGain = vi.fn(() => ({
-        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
-        connect: vi.fn(),
-      }));
+      constructor() {
+        constructed();
+      }
     }
     Object.defineProperty(window, "AudioContext", {
       value: MockAudioContext,
@@ -1310,11 +1308,10 @@ describe("desktop launcher, taskbar favicon & audio persistence", () => {
     try {
       hudAudio.muted = false;
       hudAudio.playClick();
-      await hudAudio.dispose();
-      expect(closeSpy).toHaveBeenCalledTimes(1);
-      // Second call is an idempotent no-op
-      await hudAudio.dispose();
-      expect(closeSpy).toHaveBeenCalledTimes(1);
+      hudAudio.playClick();
+      hudAudio.playLockOn();
+      hudAudio.playComplete();
+      expect(constructed).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(window, "AudioContext", {
         value: OriginalAudioContext,
