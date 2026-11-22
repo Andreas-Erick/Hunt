@@ -214,16 +214,12 @@ public class MainActivity extends Activity {
 
     /** Newest state JSON known to this process (from JS or the one-time disk read). Never cleared. */
     private static volatile String latestState;
-    /** Newest state JSON not yet handed to a write. Writers take it with getAndSet(null). */
-    private static final AtomicReference<String> pendingState = new AtomicReference<>();
-    /** What the state file currently holds, to skip identical rewrites. Guarded by HuntFiles.LOCK. */
-    private static String lastWrittenState;
+    /** The state file's coalescing write (newest JSON not yet written; identical rewrites skipped). */
+    private static final HuntFiles.CoalescedWrite stateWrite = new HuntFiles.CoalescedWrite();
     /** What readPendingTicks answers when there is nothing to read. */
     private static final String NO_PENDING_TICKS = "{\"ticks\":[]}";
-    /** Newest Widget Snapshot not yet written (same coalescing as pendingState). */
-    private static final AtomicReference<String> pendingWidgetSnapshot = new AtomicReference<>();
-    /** What the snapshot file currently holds. Guarded by HuntFiles.LOCK. */
-    private static String lastWrittenWidgetSnapshot;
+    /** The Widget Snapshot file's coalescing write, as for the state file. */
+    private static final HuntFiles.CoalescedWrite widgetSnapshotWrite = new HuntFiles.CoalescedWrite();
 
     /** Normalized laptop URL as saved ("" = nothing saved, null = not loaded yet). */
     private static volatile String laptopUrlCache;
@@ -959,7 +955,7 @@ public class MainActivity extends Activity {
         String disk;
         synchronized (HuntFiles.LOCK) {
             disk = HuntFiles.readText(file(STATE_FILE));
-            if (lastWrittenState == null) lastWrittenState = disk;
+            stateWrite.knownOnDisk(disk);
         }
         synchronized (LATEST_LOCK) {
             if (latestState == null) latestState = disk; // a concurrent saveState wins
@@ -979,7 +975,7 @@ public class MainActivity extends Activity {
         synchronized (LATEST_LOCK) {
             latestState = json;
         }
-        pendingState.set(json);
+        stateWrite.set(json);
         // Always enqueue: extra flushes are cheap no-ops, and nothing can get stuck un-scheduled.
         // If ioExec is already shut down, the JSON stays pending for the next flush.
         executeQuietly(ioExec, this::flushPendingState);
@@ -1023,21 +1019,14 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * ioExec: writes the newest pending JSON. Taking the value inside HuntFiles.LOCK means the write
-     * that runs last always carries the newest JSON (last write wins), even across Activity
-     * instances. Identical content is not rewritten.
+     * ioExec: writes the newest pending JSON (last write wins, even across Activity instances;
+     * identical content is not rewritten). A failed write keeps the JSON pending.
      */
     private void flushPendingState() {
-        synchronized (HuntFiles.LOCK) {
-            String json = pendingState.getAndSet(null);
-            if (json == null || json.equals(lastWrittenState)) return;
-            try {
-                HuntFiles.writeText(file(STATE_FILE), json);
-                lastWrittenState = json;
-            } catch (IOException | RuntimeException e) {
-                Log.w(TAG, "Saving state failed; will retry on the next save", e);
-                pendingState.compareAndSet(null, json); // keep it unless something newer arrived
-            }
+        try {
+            stateWrite.flushTo(file(STATE_FILE));
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Saving state failed; will retry on the next save", e);
         }
     }
 
@@ -1047,7 +1036,7 @@ public class MainActivity extends Activity {
             Log.w(TAG, "saveWidgetSnapshot ignored: not a JSON object");
             return;
         }
-        pendingWidgetSnapshot.set(json);
+        widgetSnapshotWrite.set(json);
         executeQuietly(ioExec, this::flushWidgetSnapshot);
     }
 
@@ -1056,16 +1045,11 @@ public class MainActivity extends Activity {
      * then asks the placed Day and Stats Widgets to redraw from it.
      */
     private void flushWidgetSnapshot() {
-        synchronized (HuntFiles.LOCK) {
-            String json = pendingWidgetSnapshot.getAndSet(null);
-            if (json == null || json.equals(lastWrittenWidgetSnapshot)) return;
-            try {
-                HuntFiles.writeText(file(HuntFiles.WIDGET_SNAPSHOT_FILE), json);
-                lastWrittenWidgetSnapshot = json;
-            } catch (IOException | RuntimeException e) {
-                Log.w(TAG, "Saving the widget snapshot failed; the next save retries", e);
-                return;
-            }
+        try {
+            if (!widgetSnapshotWrite.flushTo(file(HuntFiles.WIDGET_SNAPSHOT_FILE))) return;
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Saving the widget snapshot failed; the next save retries", e);
+            return;
         }
         DayWidgetProvider.refreshAll(appContext);
         StatsWidgetProvider.refreshAll(appContext);

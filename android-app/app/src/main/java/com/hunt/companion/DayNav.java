@@ -33,7 +33,7 @@ final class DayNav {
     /** Selects `offset` (clamped) on widget `widgetId` for today; returns the offset kept. */
     static int select(Context ctx, int widgetId, int offset) {
         String todayKey = WidgetSupport.localDateKey();
-        int kept = DaySelection.selectedOffset(todayKey, offset, todayKey);
+        int kept = DaySelection.clampOffset(offset);
         prefs(ctx).edit()
                 .putString(KEY_CHOSEN_ON + widgetId, todayKey)
                 .putInt(KEY_OFFSET + widgetId, kept)

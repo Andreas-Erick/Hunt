@@ -46,16 +46,12 @@ public class DayWidgetProvider extends AppWidgetProvider {
     private static final String EXTRA_DAY_OFFSET = "com.hunt.companion.extra.DAY_OFFSET";
     /** Explicit broadcast from the Undo backstop alarm (never exported): a window has ended. */
     static final String ACTION_UNDO_DUE = "com.hunt.companion.action.DAY_WIDGET_UNDO_DUE";
-    /** PendingIntent request codes (kept as released, so placed widgets keep their intents). */
-    private static final int OPEN_HUNT_REQUEST = 0;
-    private static final int ROW_TEMPLATE_REQUEST = 1;
-    private static final int MIDNIGHT_REQUEST = 0;
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         DayWidgetUndo.commitDue(ctx);
         drawAll(ctx, mgr, ids);
-        WidgetSupport.armMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+        WidgetSupport.armMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.DAY_MIDNIGHT);
     }
 
     @Override
@@ -66,7 +62,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
             refreshAll(ctx); // appends the ticks whose window ended
         } else if (WidgetSupport.isClockChange(action, ACTION_MIDNIGHT)) {
             refreshAll(ctx);
-            WidgetSupport.armMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+            WidgetSupport.armMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.DAY_MIDNIGHT);
         } else if (ACTION_NAV.equals(action)) {
             int id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
             if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return;
@@ -84,7 +80,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
 
     @Override
     public void onDisabled(Context ctx) {
-        WidgetSupport.cancelMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+        WidgetSupport.cancelMidnightAlarm(ctx, DayWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.DAY_MIDNIGHT);
         DayNav.clear(ctx);
     }
 
@@ -107,14 +103,15 @@ public class DayWidgetProvider extends AppWidgetProvider {
     }
 
     private static RemoteViews draw(Context ctx, int widgetId, SelectedDay day) {
-        if (!day.hasList()) return WidgetSupport.messageViews(ctx, day.look, day.noData, OPEN_HUNT_REQUEST);
-        RemoteViews views = new RemoteViews(ctx.getPackageName(), day.look.dayLayout);
+        WidgetLook look = day.snapshot.look;
+        if (!day.hasList()) return WidgetSupport.messageViews(ctx, day.snapshot, WidgetRequestCodes.DAY_OPEN_HUNT);
+        RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayLayout);
         views.setTextViewText(R.id.widget_header, DaySelection.headerLabel(day.offset, day.date));
-        views.setOnClickPendingIntent(R.id.widget_header, WidgetSupport.openHunt(ctx, OPEN_HUNT_REQUEST));
+        views.setOnClickPendingIntent(R.id.widget_header, WidgetSupport.openHunt(ctx, WidgetRequestCodes.DAY_OPEN_HUNT));
         views.setTextViewText(R.id.widget_empty,
                 ctx.getString(R.string.day_widget_nothing_left, DaySelection.inSentence(day.offset, day.date)));
-        arrow(ctx, views, day.look, R.id.widget_prev, widgetId, day.offset - 1, day.offset > 0);
-        arrow(ctx, views, day.look, R.id.widget_next, widgetId, day.offset + 1, day.offset < day.lastOffset);
+        arrow(ctx, views, look, R.id.widget_prev, widgetId, day.offset - 1, day.offset > 0);
+        arrow(ctx, views, look, R.id.widget_next, widgetId, day.offset + 1, day.offset < day.lastOffset);
 
         Intent service = new Intent(ctx, DayWidgetService.class)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
@@ -145,7 +142,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
                 .putExtra(EXTRA_DAY_OFFSET, offset)
                 // A distinct URI per widget and target, so each arrow keeps its own PendingIntent.
                 .setData(Uri.parse("hunt-widget://day/" + widgetId + "/" + offset));
-        return PendingIntent.getBroadcast(ctx, 0, intent,
+        return PendingIntent.getBroadcast(ctx, WidgetRequestCodes.DAY_NAV, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
@@ -163,6 +160,6 @@ public class DayWidgetProvider extends AppWidgetProvider {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_NO_ANIMATION
                         | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-        return PendingIntent.getActivity(ctx, ROW_TEMPLATE_REQUEST, intent, PendingIntent.FLAG_UPDATE_CURRENT | mutable);
+        return PendingIntent.getActivity(ctx, WidgetRequestCodes.DAY_ROW_TEMPLATE, intent, PendingIntent.FLAG_UPDATE_CURRENT | mutable);
     }
 }

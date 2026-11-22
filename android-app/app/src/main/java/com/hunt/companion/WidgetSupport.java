@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.util.Log;
 import android.widget.RemoteViews;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -32,11 +33,31 @@ final class WidgetSupport {
 
     /** The snapshot file as both widgets start from it. */
     static final class Snapshot {
+        /** The Day Widget's per-day entries. */
+        static final String DAYS = "days";
+        /** The Stats Widget's per-day entries. */
+        static final String STATS = "stats";
+
         WidgetLook look = WidgetLook.NEON;
         /** No snapshot yet, an unreadable one, or the user has nothing in Hunt: "Open Hunt to get started". */
         boolean noData = true;
         /** The parsed snapshot; null when noData came from a missing or unreadable file. */
         JSONObject json;
+
+        /** The {@link #DAYS} or {@link #STATS} entries; empty without a snapshot. */
+        JSONArray entries(String name) {
+            JSONArray entries = json == null ? null : json.optJSONArray(name);
+            return entries == null ? new JSONArray() : entries;
+        }
+
+        /** Index of the entry keyed `dateKey` (YYYY-MM-DD) in `entries`, or -1 when there is none. */
+        static int indexOf(JSONArray entries, String dateKey) {
+            for (int i = 0; i < entries.length(); i++) {
+                JSONObject entry = entries.optJSONObject(i);
+                if (entry != null && dateKey.equals(entry.optString("dateKey"))) return i;
+            }
+            return -1;
+        }
     }
 
     /** Reads and parses the snapshot file. Any thread. */
@@ -66,10 +87,10 @@ final class WidgetSupport {
     }
 
     /** The whole widget as one message that opens Hunt: "Open Hunt to get started" or "to refresh". */
-    static RemoteViews messageViews(Context ctx, WidgetLook look, boolean noData, int openRequest) {
-        RemoteViews views = new RemoteViews(ctx.getPackageName(), look.messageLayout);
+    static RemoteViews messageViews(Context ctx, Snapshot snap, int openRequest) {
+        RemoteViews views = new RemoteViews(ctx.getPackageName(), snap.look.messageLayout);
         views.setTextViewText(R.id.widget_message,
-                ctx.getString(noData ? R.string.day_widget_get_started : R.string.day_widget_refresh));
+                ctx.getString(snap.noData ? R.string.day_widget_get_started : R.string.day_widget_refresh));
         views.setOnClickPendingIntent(R.id.widget_message_root, openHunt(ctx, openRequest));
         return views;
     }

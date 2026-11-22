@@ -65,7 +65,7 @@ public class DayWidgetService extends RemoteViewsService {
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
             if (row != null && day.undoable.contains(row.optString("id", ""))) return undoRow(row);
-            WidgetLook look = day.look;
+            WidgetLook look = day.snapshot.look;
             RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayRowLayout);
             if (row == null) return views;
             String title = row.optString("title", "");
@@ -100,7 +100,7 @@ public class DayWidgetService extends RemoteViewsService {
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), day.look.dayUndoRowLayout);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), day.snapshot.look.dayUndoRowLayout);
             String title = row.optString("title", "");
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
             views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));

@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { QUEST_ACCENT_KEYS } from "@/lib/domainTypes";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const MAIN = path.join(ROOT, "android-app", "app", "src", "main");
@@ -185,6 +186,17 @@ describe("the widgets draw the snapshot's look", () => {
     for (const r of neon) expect(refs, `Dawn twin of ${r}`).toContain(r.replace("neon", "dawn"));
     for (const r of refs) expect(r, "every look resource is Neon or Dawn").toMatch(/neon|dawn/);
     expect(lookCode).toMatch(/return\s+"dawn"\.equals\(name\)\s*\?\s*DAWN\s*:\s*NEON\s*;/);
+  });
+
+  it("WidgetLook's Quest accent keys are the app's, then slate, and each look's colours line up with them", () => {
+    const keys = JSON.parse(`[${/ACCENT_KEYS\s*=\s*\{([^}]*)\}/.exec(lookCode)?.[1] ?? ""}]`) as string[];
+    expect(keys).toEqual([...QUEST_ACCENT_KEYS, "slate"]);
+    // The colours are matched to the keys by position: name them so a reorder cannot slip through.
+    for (const look of LOOKS) {
+      const block = new RegExp(`${look.toUpperCase()}\\([\\s\\S]*?new int\\[\\]\\s*\\{([^}]*)\\}`).exec(lookCode)?.[1] ?? "";
+      const colours = [...block.matchAll(/R\.color\.(\w+)/g)].map((m) => m[1]);
+      expect(colours, look).toEqual(keys.map((k) => `widget_${look}_q_${k}`));
+    }
   });
 
   it("the Day Widget's list declares a view type for every row layout, so a look change can swap row layouts", () => {

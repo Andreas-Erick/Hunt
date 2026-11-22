@@ -31,9 +31,6 @@ public class StatsWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "HuntStatsWidget";
     /** Explicit broadcast from the midnight alarm (never exported). */
     static final String ACTION_MIDNIGHT = "com.hunt.companion.action.STATS_WIDGET_MIDNIGHT";
-    /** PendingIntent request codes (kept as released, so placed widgets keep their intents). */
-    private static final int OPEN_HUNT_REQUEST = 20;
-    private static final int MIDNIGHT_REQUEST = 21;
 
     /** Height assumed before the launcher reports one (the provider's minHeight). */
     private static final int DEFAULT_HEIGHT_DP = 110;
@@ -55,9 +52,8 @@ public class StatsWidgetProvider extends AppWidgetProvider {
 
     /** What the widget can show for the current local date. */
     static final class Stats {
-        WidgetLook look = WidgetLook.NEON;
-        /** No snapshot yet, or the user has nothing in Hunt: "Open Hunt to get started". */
-        boolean noData = true;
+        /** The snapshot file: look, and noData ("Open Hunt to get started"). */
+        WidgetSupport.Snapshot snapshot = new WidgetSupport.Snapshot();
         /** No stats entry for today (snapshot from an older day or app): "Open Hunt to refresh". */
         boolean stale;
         long focusSeconds;
@@ -68,7 +64,7 @@ public class StatsWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         drawAll(ctx, mgr, ids);
-        WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+        WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.STATS_MIDNIGHT);
     }
 
     @Override
@@ -82,13 +78,13 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         String action = intent == null ? null : intent.getAction();
         if (WidgetSupport.isClockChange(action, ACTION_MIDNIGHT)) {
             refreshAll(ctx);
-            WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+            WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.STATS_MIDNIGHT);
         }
     }
 
     @Override
     public void onDisabled(Context ctx) {
-        WidgetSupport.cancelMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
+        WidgetSupport.cancelMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, WidgetRequestCodes.STATS_MIDNIGHT);
     }
 
     /** Redraws every placed Stats Widget from the snapshot file. Any thread; no-op when none is placed. */
@@ -117,19 +113,22 @@ public class StatsWidgetProvider extends AppWidgetProvider {
     }
 
     private static RemoteViews draw(Context ctx, Stats stats, int heightDp) {
-        if (stats.noData || stats.stale) return WidgetSupport.messageViews(ctx, stats.look, stats.noData, OPEN_HUNT_REQUEST);
-        RemoteViews views = new RemoteViews(ctx.getPackageName(), stats.look.statsLayout);
+        WidgetLook look = stats.snapshot.look;
+        if (stats.snapshot.noData || stats.stale) {
+            return WidgetSupport.messageViews(ctx, stats.snapshot, WidgetRequestCodes.STATS_OPEN_HUNT);
+        }
+        RemoteViews views = new RemoteViews(ctx.getPackageName(), look.statsLayout);
         String focus = StatsWidgetFit.formatFocus(stats.focusSeconds);
         views.setTextViewText(R.id.widget_stats_focus, focus);
         views.setContentDescription(R.id.widget_stats_root, ctx.getString(R.string.stats_widget_open, focus));
-        views.setOnClickPendingIntent(R.id.widget_stats_root, WidgetSupport.openHunt(ctx, OPEN_HUNT_REQUEST));
+        views.setOnClickPendingIntent(R.id.widget_stats_root, WidgetSupport.openHunt(ctx, WidgetRequestCodes.STATS_OPEN_HUNT));
 
         StatsWidgetFit fit = StatsWidgetFit.fit(heightDp, stats.quests.length(), stats.streaks.length());
         views.setViewVisibility(R.id.widget_stats_no_quests, stats.quests.length() == 0 ? View.VISIBLE : View.GONE);
         for (int i = 0; i < QUEST_ROWS.length; i++) {
             JSONObject q = i < fit.questRows ? stats.quests.optJSONObject(i) : null;
             views.setViewVisibility(QUEST_ROWS[i], q == null ? View.GONE : View.VISIBLE);
-            if (q != null) drawQuest(ctx, views, i, q, stats.look);
+            if (q != null) drawQuest(ctx, views, i, q, look);
         }
         showMore(ctx, views, R.id.widget_stats_quests_more, fit.questsMore);
 
@@ -162,24 +161,17 @@ public class StatsWidgetProvider extends AppWidgetProvider {
     /** Reads the snapshot file and picks the stats entry for the current local date. Any thread. */
     static Stats readStats(Context ctx) {
         Stats stats = new Stats();
-        WidgetSupport.Snapshot snap = WidgetSupport.readSnapshot(ctx);
-        stats.look = snap.look;
-        stats.noData = snap.noData;
-        if (snap.json == null) return stats;
-        String key = WidgetSupport.localDateKey();
-        JSONArray entries = snap.json.optJSONArray("stats");
-        stats.stale = true;
-        for (int i = 0; entries != null && i < entries.length(); i++) {
-            JSONObject entry = entries.optJSONObject(i);
-            if (entry == null || !key.equals(entry.optString("dateKey"))) continue;
-            stats.focusSeconds = entry.optLong("focusSeconds", 0);
-            JSONArray quests = entry.optJSONArray("quests");
-            JSONArray streaks = entry.optJSONArray("streaks");
-            stats.quests = quests == null ? new JSONArray() : quests;
-            stats.streaks = streaks == null ? new JSONArray() : streaks;
-            stats.stale = false;
-            break;
-        }
+        stats.snapshot = WidgetSupport.readSnapshot(ctx);
+        JSONArray entries = stats.snapshot.entries(WidgetSupport.Snapshot.STATS);
+        int at = WidgetSupport.Snapshot.indexOf(entries, WidgetSupport.localDateKey());
+        stats.stale = at < 0;
+        if (stats.stale) return stats;
+        JSONObject entry = entries.optJSONObject(at);
+        stats.focusSeconds = entry.optLong("focusSeconds", 0);
+        JSONArray quests = entry.optJSONArray("quests");
+        JSONArray streaks = entry.optJSONArray("streaks");
+        stats.quests = quests == null ? new JSONArray() : quests;
+        stats.streaks = streaks == null ? new JSONArray() : streaks;
         return stats;
     }
 }

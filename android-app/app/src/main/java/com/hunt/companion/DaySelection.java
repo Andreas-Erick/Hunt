@@ -27,12 +27,31 @@ final class DaySelection {
      */
     static int selectedOffset(String savedOn, int savedOffset, String todayKey) {
         if (savedOn == null || !savedOn.equals(todayKey)) return 0;
-        return Math.max(0, Math.min(savedOffset, MAX_DAY_OFFSET));
+        return clampOffset(savedOffset);
+    }
+
+    /** `offset` kept within what the arrows reach: [0, MAX_DAY_OFFSET]. */
+    static int clampOffset(int offset) {
+        return Math.max(0, Math.min(offset, MAX_DAY_OFFSET));
+    }
+
+    /** The two lists a snapshot day holds; {@link #key} is its name in the snapshot JSON. */
+    enum View {
+        /** The current date: the Focus Task first, then the queue. */
+        TODAY("today"),
+        /** A later day: what is planned for it. */
+        FUTURE("future");
+
+        final String key;
+
+        View(String key) {
+            this.key = key;
+        }
     }
 
     /** The snapshot list to draw for `dateKey`: its today view only on the current date. */
-    static String viewFor(String dateKey, String todayKey) {
-        return dateKey.equals(todayKey) ? "today" : "future";
+    static View viewFor(String dateKey, String todayKey) {
+        return dateKey.equals(todayKey) ? View.TODAY : View.FUTURE;
     }
 
     /** "Tue 24". */
