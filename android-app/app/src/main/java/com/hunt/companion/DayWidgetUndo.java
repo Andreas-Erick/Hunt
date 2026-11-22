@@ -12,6 +12,8 @@ import android.util.Log;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,34 +41,58 @@ final class DayWidgetUndo {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     /** Token of the one pending timer, so rescheduling replaces it instead of piling up. */
     private static final Object TIMER = new Object();
+    /**
+     * Windows the user undid whose removal could not be written yet (guarded by LOCK). This
+     * process never queues or draws them, and every {@link #commitDue} retries the removal; only
+     * a process that dies before a retry succeeds can still queue the tick, which the tap
+     * reported to the user.
+     */
+    private static final Set<String> UNDONE = new HashSet<>();
 
     private DayWidgetUndo() {
     }
 
     /**
      * Opens a window for a tick tapped at {@code tickedAt}. A second tap on a Task already in its
-     * window changes nothing. Returns false if nothing was opened.
+     * window changes nothing. Returns false only when the window could not be written: the row
+     * stays open to tick again, and the caller tells the user.
      */
     static boolean open(Context ctx, String taskId, String dateKey, long tickedAt) {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
             String key = TickKeys.taskDay(taskId, dateKey);
-            if (prefs.contains(key)) return false;
+            if (prefs.contains(key) && !UNDONE.contains(key)) return true;
             if (!prefs.edit().putLong(key, tickedAt).commit()) {
                 Log.w(TAG, "Opening an Undo window failed; the row stays open to tick again");
                 return false;
             }
+            UNDONE.remove(key);
         }
         schedule(ctx);
         return true;
     }
 
-    /** Undo: closes the window without queueing anything, as if the tick never happened. */
-    static void undo(Context ctx, String taskId, String dateKey) {
+    /**
+     * Undo: closes the window without queueing anything, as if the tick never happened. Returns
+     * false when the removal could not be written (after one retry): this process still never
+     * queues it ({@link #UNDONE}) and keeps retrying, but the caller tells the user, because a
+     * process that dies first would queue the tick.
+     */
+    static boolean undo(Context ctx, String taskId, String dateKey) {
+        String key = TickKeys.taskDay(taskId, dateKey);
+        boolean saved;
         synchronized (LOCK) {
-            prefs(ctx).edit().remove(TickKeys.taskDay(taskId, dateKey)).commit();
+            SharedPreferences prefs = prefs(ctx);
+            saved = prefs.edit().remove(key).commit() || prefs.edit().remove(key).commit();
+            if (saved) {
+                UNDONE.remove(key);
+            } else {
+                UNDONE.add(key);
+                Log.w(TAG, "Saving an Undo failed; this process keeps the tick out of the queue and retries");
+            }
         }
         schedule(ctx);
+        return saved;
     }
 
     /**
@@ -81,9 +107,10 @@ final class DayWidgetUndo {
         UndoWindow.Commit result;
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
+            retryUndone(prefs);
             // Appended before the window is removed: a crash in between appends it again, which
             // the queue ignores (one entry per Task and day).
-            result = UndoWindow.commit(prefs.getAll(), System.currentTimeMillis(),
+            result = UndoWindow.commit(withoutUndone(prefs.getAll()), System.currentTimeMillis(),
                     (taskId, dateKey, tickedAt) -> PendingTicks.append(dir, taskId, dateKey, tickedAt).closesWindow());
             if (result.heldBack > 0) {
                 Log.w(TAG, result.heldBack + " ended Undo window(s) could not be queued yet; kept for the next try");
@@ -97,17 +124,28 @@ final class DayWidgetUndo {
         return result;
     }
 
-    /** Every window not yet queued ({@link TickKeys#taskDay} -> tap time). Any thread. */
+    /** Every window not yet queued ({@link TickKeys#taskDay} -> tap time), without undone ones. Any thread. */
     static Map<String, ?> held(Context ctx) {
         synchronized (LOCK) {
-            Map<String, ?> all = prefs(ctx).getAll();
-            return all == null ? Collections.<String, Object>emptyMap() : all;
+            return withoutUndone(prefs(ctx).getAll());
         }
     }
 
-    /** Tasks of `dateKey` still in their window at `now`. */
-    static Set<String> openTaskIds(Context ctx, String dateKey, long now) {
-        return UndoWindow.openTaskIds(held(ctx), dateKey, now);
+    /** Caller holds LOCK. `all` without the windows the user undid. */
+    private static Map<String, ?> withoutUndone(Map<String, ?> all) {
+        if (all == null) return Collections.<String, Object>emptyMap();
+        if (UNDONE.isEmpty()) return all;
+        Map<String, Object> held = new HashMap<>(all);
+        held.keySet().removeAll(UNDONE);
+        return held;
+    }
+
+    /** Caller holds LOCK. Retries writing the removals of undone windows that failed before. */
+    private static void retryUndone(SharedPreferences prefs) {
+        if (UNDONE.isEmpty()) return;
+        SharedPreferences.Editor edit = prefs.edit();
+        for (String key : UNDONE) edit.remove(key);
+        if (edit.commit()) UNDONE.clear();
     }
 
     /**

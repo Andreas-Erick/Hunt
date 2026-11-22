@@ -75,7 +75,10 @@ or at once if it is already running.
   before the tap returns; a main-thread timer ends them on
   time, and an inexact alarm, every widget redraw and the
   page's queue read end any the timer missed because the
-  process was gone. No new permission.
+  process was gone. No new permission. A tap whose write
+  fails is never silent: the widget shows a short message.
+  An Undo that cannot be written is still kept out of the
+  queue by the running process, which retries it.
 - Row taps go to a no-UI, non-exported trampoline activity,
   not a broadcast. A receiver that starts Hunt is a
   background activity launch, which Android 10+ blocks

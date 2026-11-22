@@ -10,9 +10,6 @@ import android.os.Build;
 import android.util.Log;
 import android.widget.RemoteViews;
 
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-
 /**
  * Day Widget (GLOSSARY.md): draws one day's open Tasks from the Widget Snapshot the phone page
  * hands to the shell after every save (ADR-0006), and lets the user tick a Task done. A tick is
@@ -33,7 +30,7 @@ import java.time.temporal.ChronoUnit;
  * "✓ Done · Undo" and the Pending Tick is appended only when the window ends. Every redraw first
  * appends what is due.
  *
- * Row taps reach {@link #onRowTap} through {@link DayWidgetTapActivity}, a no-UI trampoline: the
+ * Row taps reach {@link DayWidgetTaps} through {@link DayWidgetTapActivity}, a no-UI trampoline: the
  * list's template is an activity PendingIntent, so opening Hunt is a launch the user started from
  * the launcher. A broadcast receiver starting an activity is a background activity launch
  * (blocked from Android 10 unless an exemption applies; from Android 14 a launcher no longer
@@ -49,13 +46,6 @@ public class DayWidgetProvider extends AppWidgetProvider {
     private static final String EXTRA_DAY_OFFSET = "com.hunt.companion.extra.DAY_OFFSET";
     /** Explicit broadcast from the Undo backstop alarm (never exported): a window has ended. */
     static final String ACTION_UNDO_DUE = "com.hunt.companion.action.DAY_WIDGET_UNDO_DUE";
-    /** Fill-in extras of a row tap: {@link #ROW_TICK}, {@link #ROW_UNDO} or {@link #ROW_OPEN}, plus the Task and day. */
-    static final String EXTRA_ROW_ACTION = "rowAction";
-    static final String EXTRA_TASK_ID = "taskId";
-    static final String EXTRA_DATE_KEY = "dateKey";
-    static final String ROW_TICK = "tick";
-    static final String ROW_UNDO = "undo";
-    static final String ROW_OPEN = "open";
     /** PendingIntent request codes (kept as released, so placed widgets keep their intents). */
     private static final int OPEN_HUNT_REQUEST = 0;
     private static final int ROW_TEMPLATE_REQUEST = 1;
@@ -85,54 +75,6 @@ public class DayWidgetProvider extends AppWidgetProvider {
             mgr.updateAppWidget(id, draw(ctx, id, SelectedDay.read(ctx, offset)));
             mgr.notifyAppWidgetViewDataChanged(id, R.id.widget_list);
         }
-    }
-
-    /**
-     * A row was tapped (forwarded by {@link DayWidgetTapActivity}): tick the Task, undo a tick, or
-     * ask to open Hunt. Returns true when the caller should open Hunt; this class never starts an
-     * activity itself.
-     */
-    static boolean onRowTap(Context ctx, Intent intent) {
-        if (intent == null) return false;
-        String action = intent.getStringExtra(EXTRA_ROW_ACTION);
-        String taskId = intent.getStringExtra(EXTRA_TASK_ID);
-        String dateKey = intent.getStringExtra(EXTRA_DATE_KEY);
-        if (ROW_TICK.equals(action)) {
-            tick(ctx, taskId, dateKey, System.currentTimeMillis());
-            return false;
-        }
-        if (ROW_UNDO.equals(action)) {
-            if (taskId != null && dateKey != null) DayWidgetUndo.undo(ctx, taskId, dateKey);
-            refreshAll(ctx); // the row is back as it was
-            return false;
-        }
-        return ROW_OPEN.equals(action);
-    }
-
-    /**
-     * Ticks a Task done at {@code tickedAt}: opens its Undo window and redraws, which shows the row
-     * as "✓ Done · Undo"; the Pending Tick is appended when the window ends, still with
-     * {@code tickedAt}. Only a row the snapshot marks tickable on that day can be ticked (never the
-     * Focus Task). The single entry point for a tick.
-     */
-    static void tick(Context ctx, String taskId, String dateKey, long tickedAt) {
-        if (taskId != null && dateKey != null && isTickable(ctx, taskId, dateKey)) {
-            DayWidgetUndo.open(ctx, taskId, dateKey, tickedAt);
-        }
-        refreshAll(ctx); // draws the Undo row, or redraws a stale list the tap came from
-    }
-
-    private static boolean isTickable(Context ctx, String taskId, String dateKey) {
-        long offset;
-        try {
-            offset = ChronoUnit.DAYS.between(LocalDate.parse(WidgetSupport.localDateKey()), LocalDate.parse(dateKey));
-        } catch (RuntimeException e) {
-            return false; // a malformed day from a stale list: nothing to tick
-        }
-        if (offset < 0 || offset > DaySelection.MAX_DAY_OFFSET) return false;
-        SelectedDay day = SelectedDay.read(ctx, (int) offset);
-        if (!day.hasList() || !dateKey.equals(day.date.toString())) return false;
-        return day.canTick(day.row(taskId));
     }
 
     @Override
@@ -209,7 +151,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
 
     /**
      * Template for row taps: an explicit activity intent to the no-UI trampoline
-     * {@link DayWidgetTapActivity}, which forwards to {@link #onRowTap} and opens Hunt when asked.
+     * {@link DayWidgetTapActivity}, which forwards to {@link DayWidgetTaps} and opens Hunt when asked.
      * An activity PendingIntent the launcher sends on a widget tap is a user-started launch on
      * every API level; a receiver starting Hunt would be a background activity launch. Each row's
      * fill-in adds what was tapped (tick, undo or open, Task, day), so it must be mutable, and from
