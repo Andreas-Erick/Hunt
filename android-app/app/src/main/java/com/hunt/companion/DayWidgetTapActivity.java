@@ -3,6 +3,7 @@ package com.hunt.companion;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
 
 /**
  * No-UI trampoline for Day Widget row taps (tick, Undo, open Hunt). The list's PendingIntent
@@ -15,7 +16,7 @@ import android.util.Log;
  * Not exported (only the widget's own PendingIntent reaches it), Theme.NoDisplay (it draws
  * nothing and finishes in onCreate, before onResume, as that theme requires), no history, kept
  * out of Recents and in its own empty-affinity task so it never joins Hunt's task. It holds no
- * logic: DayWidgetProvider decides.
+ * logic: {@link DayWidgetTaps} decides; this only opens Hunt or tells the user a tap failed.
  */
 public class DayWidgetTapActivity extends Activity {
     private static final String TAG = "HuntDayWidgetTap";
@@ -25,15 +26,23 @@ public class DayWidgetTapActivity extends Activity {
         super.onCreate(state);
         // A recreated instance (state != null) already handled its tap.
         if (state == null) {
+            DayWidgetTaps.Result result;
             try {
-                if (DayWidgetProvider.onRowTap(this, getIntent())) {
-                    startActivity(WidgetSupport.launchIntent(this));
-                }
+                result = DayWidgetTaps.onRowTap(this, getIntent());
             } catch (RuntimeException e) {
                 Log.w(TAG, "Day Widget row tap failed", e);
+                result = DayWidgetTaps.Result.TICK_FAILED;
             }
+            if (result == DayWidgetTaps.Result.OPEN_HUNT) startActivity(WidgetSupport.launchIntent(this));
+            else if (result == DayWidgetTaps.Result.TICK_FAILED) tell(R.string.day_widget_tap_failed);
+            else if (result == DayWidgetTaps.Result.UNDO_FAILED) tell(R.string.day_widget_undo_failed);
         }
         finish();
         overridePendingTransition(0, 0);
+    }
+
+    /** A failed tap is never silent: a short text toast, which outlives this activity. */
+    private void tell(int message) {
+        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
     }
 }

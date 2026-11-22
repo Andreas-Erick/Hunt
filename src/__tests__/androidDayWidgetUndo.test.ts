@@ -122,7 +122,7 @@ describe("Day Widget Undo window (#9): boundaries", () => {
     const widgetFiles = fs.readdirSync(JAVA_DIR).filter((f) => f.endsWith(".java") && f !== "DayWidgetUndo.java");
     for (const file of widgetFiles) expect(code(file), file).not.toMatch(/PendingTicks\.append\(/);
     expect(undo.match(/PendingTicks\.append\(/g) ?? []).toHaveLength(1);
-    expect(provider).toMatch(/DayWidgetUndo\.open\(/);
+    expect(code("DayWidgetTaps.java")).toMatch(/DayWidgetUndo\.open\(/);
   });
 
   it("windows live in private preferences, and end on an inexact alarm: no exact-alarm or wake permission", () => {
@@ -135,6 +135,24 @@ describe("Day Widget Undo window (#9): boundaries", () => {
     expect(undo).toMatch(/new Intent\(ctx, DayWidgetProvider\.class\)\s*\.setAction\(DayWidgetProvider\.ACTION_UNDO_DUE\)/);
     expect(undo).toMatch(/PendingIntent\.FLAG_IMMUTABLE/);
     expect(manifest).not.toContain("DAY_WIDGET_UNDO_DUE");
+  });
+
+  it("an Undo whose write fails is never queued by this process, retried, and reported to the user", () => {
+    // Context-bound, so not runnable on the JDK: the guard pins the shape CODING_STANDARDS asks for.
+    const undoBody = /static\s+boolean\s+undo\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(undo)?.[1] ?? "";
+    expect(undoBody).toMatch(/saved\s*=\s*prefs\.edit\(\)\.remove\(key\)\.commit\(\)/);
+    expect(undoBody).toMatch(/UNDONE\.add\(key\)/);
+    expect(undoBody).toMatch(/return saved;/);
+    const commitDue = /static\s+UndoWindow\.Commit\s+commitDue\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(undo)?.[1] ?? "";
+    expect(commitDue).toMatch(/retryUndone\(prefs\)/);
+    expect(commitDue).toMatch(/UndoWindow\.commit\(withoutUndone\(/);
+    const taps = code("DayWidgetTaps.java");
+    expect(taps).toMatch(/Result\.UNDO_FAILED/);
+    const tap = code("DayWidgetTapActivity.java");
+    expect(tap).toMatch(/Result\.UNDO_FAILED\)\s*tell\(R\.string\.day_widget_undo_failed\)/);
+    expect(tap).toMatch(/Result\.TICK_FAILED\)\s*tell\(R\.string\.day_widget_tap_failed\)/);
+    // A crash in the tap is reported the same way, not only logged.
+    expect(tap).toMatch(/catch\s*\(RuntimeException e\)\s*\{[^}]*result\s*=\s*DayWidgetTaps\.Result\.TICK_FAILED;/);
   });
 
   it("a window the timer missed is still ended by every redraw and by the page's queue read (ADR-0006)", () => {
@@ -185,7 +203,7 @@ describe("Day Widget row taps go through a no-UI trampoline activity (background
     expect(/<activity\b[^>]*android:name="\.DayWidgetTapActivity"[^>]*\/>/.test(manifest), "no intent filter").toBe(true);
     const onCreate = /void\s+onCreate\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(tap)?.[1] ?? "";
     expect(onCreate).toMatch(/finish\(\)/);
-    expect(onCreate).toMatch(/DayWidgetProvider\.onRowTap\(/);
+    expect(onCreate).toMatch(/DayWidgetTaps\.onRowTap\(/);
     // Opening Hunt happens here, from the foreground trampoline, never from a receiver.
     expect(onCreate).toMatch(/startActivity\(WidgetSupport\.launchIntent\(this\)\)/);
   });

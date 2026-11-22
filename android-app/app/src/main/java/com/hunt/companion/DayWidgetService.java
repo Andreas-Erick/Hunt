@@ -87,9 +87,9 @@ public class DayWidgetService extends RemoteViewsService {
                     ctx.getString(focus ? R.string.day_widget_row_focus : R.string.day_widget_row_open, title));
             // The row opens Hunt; a tickable row's 48dp marker box ticks it. The snapshot never marks
             // the Focus Task tickable (HuntCore's rule), so it has no tick target.
-            views.setOnClickFillInIntent(R.id.widget_row, rowTap(DayWidgetProvider.ROW_OPEN, row));
+            views.setOnClickFillInIntent(R.id.widget_row, rowTap(DayWidgetTaps.ROW_OPEN, row));
             if (day.canTick(row)) {
-                views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetProvider.ROW_TICK, row));
+                views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetTaps.ROW_TICK, row));
                 views.setContentDescription(R.id.widget_row_tick, ctx.getString(R.string.day_widget_row_tick, title));
             }
             return views;
@@ -104,15 +104,15 @@ public class DayWidgetService extends RemoteViewsService {
             String title = row.optString("title", "");
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
             views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));
-            views.setOnClickFillInIntent(R.id.widget_row_undo, rowTap(DayWidgetProvider.ROW_UNDO, row));
+            views.setOnClickFillInIntent(R.id.widget_row_undo, rowTap(DayWidgetTaps.ROW_UNDO, row));
             return views;
         }
 
         private Intent rowTap(String action, JSONObject row) {
             return new Intent()
-                    .putExtra(DayWidgetProvider.EXTRA_ROW_ACTION, action)
-                    .putExtra(DayWidgetProvider.EXTRA_TASK_ID, row.optString("id", ""))
-                    .putExtra(DayWidgetProvider.EXTRA_DATE_KEY, dateKey);
+                    .putExtra(DayWidgetTaps.EXTRA_ROW_ACTION, action)
+                    .putExtra(DayWidgetTaps.EXTRA_TASK_ID, row.optString("id", ""))
+                    .putExtra(DayWidgetTaps.EXTRA_DATE_KEY, dateKey);
         }
 
         @Override
