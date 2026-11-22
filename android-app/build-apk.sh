@@ -286,7 +286,7 @@ else
   info "added with: $ZIP_TOOL"
 fi
 
-# Sanity: classes.dex, hunt-mobile.html and the Day Widget resources present; resources.arsc must stay STORED
+# Sanity: classes.dex, hunt-mobile.html and the Day and Stats Widget resources present; resources.arsc must stay STORED
 # (Android 11+ refuses targetSdk>=30 APKs with a compressed resources.arsc).
 list_entries() {
   if command -v unzip >/dev/null 2>&1; then unzip -Z1 "$1"
@@ -294,7 +294,7 @@ list_entries() {
   else "$PYTHON" -I -c 'import sys,zipfile;print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$1"; fi
 }
 ENTRIES=$(list_entries "$WORK_DIR/unaligned.apk" | tr -d '\r')
-for e in AndroidManifest.xml resources.arsc classes.dex assets/hunt-mobile.html res/xml/day_widget_info.xml res/layout/widget_day_neon.xml res/layout/widget_day_row_neon.xml; do
+for e in AndroidManifest.xml resources.arsc classes.dex assets/hunt-mobile.html res/xml/day_widget_info.xml res/layout/widget_day_neon.xml res/layout/widget_day_row_neon.xml res/xml/stats_widget_info.xml res/layout/widget_stats_neon.xml; do
   grep -qx "$e" <<<"$ENTRIES" || die "APK is missing $e"
 done
 if command -v unzip >/dev/null 2>&1; then
