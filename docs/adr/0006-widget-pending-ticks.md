@@ -62,3 +62,10 @@ on its next start, or at once if it is already running.
   longer lends its exemption to a PendingIntent it sends
   unless it opts in. An activity PendingIntent from a widget
   tap is a launch the user started, on every API level.
+- While Hunt is running, the queue announces each newly
+  appended tick to the live Activity, which calls
+  `window.__huntPendingTicksArrived` once the page has
+  loaded. The page runs the same drain, then repaints. It
+  also drains on resume, for a signal that found no page.
+  Ticks it acknowledged stay out of later drains until
+  the shell has removed them.

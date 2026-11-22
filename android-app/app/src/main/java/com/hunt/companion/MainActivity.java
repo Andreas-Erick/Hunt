@@ -280,6 +280,15 @@ public class MainActivity extends Activity {
     /** The open "replace the current pairing?" dialog, if any. */
     private AlertDialog pairingDialog;
 
+    /**
+     * Pending Ticks while Hunt is open (#10): the widget appends on its own thread; this hops to the
+     * UI thread and asks the loaded page to drain. Before the page has loaded (or once the WebView is
+     * gone) it does nothing: the boot drain, or the drain on resume, picks the tick up instead.
+     */
+    private final PendingTicks.Listener tickQueuedListener = () -> main.post(() -> {
+        if (pageLoaded) callJs("__huntPendingTicksArrived", "null");
+    });
+
     // =======================================================================================
     // Lifecycle
     // =======================================================================================
@@ -384,6 +393,7 @@ public class MainActivity extends Activity {
 
         registerNetworkCallback();
         handlePairingIntent(getIntent());
+        PendingTicks.setListener(tickQueuedListener);
 
         webView.loadUrl(PAGE_URL);
     }
@@ -600,6 +610,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        PendingTicks.clearListener(tickQueuedListener);
         if (pairingDialog != null) {
             pairingDialog.dismiss(); // nothing was saved; the link can be opened again
             pairingDialog = null;
