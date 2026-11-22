@@ -1,7 +1,12 @@
 <resources>
     <string name="app_name">Hunt</string>
-    <string name="day_widget_description">Today\'s open Tasks</string>
+    <string name="day_widget_description">Open Tasks for today and the week ahead</string>
     <string name="day_widget_today">Today</string>
+    <string name="day_widget_tomorrow">Tomorrow</string>
+    <string name="day_widget_prev">Previous day</string>
+    <string name="day_widget_next">Next day</string>
+    <string name="day_widget_prev_glyph" translatable="false">&#x2039;</string>
+    <string name="day_widget_next_glyph" translatable="false">&#x203A;</string>
     <string name="day_widget_get_started">Open Hunt to get started</string>
     <string name="day_widget_refresh">Open Hunt to refresh</string>
     <string name="day_widget_nothing_left">Nothing left for %1$s</string>
