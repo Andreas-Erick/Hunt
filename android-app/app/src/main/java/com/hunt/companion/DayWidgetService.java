@@ -1,5 +1,6 @@
 package com.hunt.companion;
 
+import android.appwidget.AppWidgetManager;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
@@ -10,31 +11,36 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Rows of the Day Widget's list, drawn from the Widget Snapshot (ADR-0006). Read-only: it reads
- * the snapshot file and never writes anything. The class name is part of the manifest contract.
+ * Rows of the Day Widget's list for its selected day, drawn from the Widget Snapshot
+ * (ADR-0006). Read-only: it reads the snapshot file and never writes anything. The class name is
+ * part of the manifest contract.
  */
 public class DayWidgetService extends RemoteViewsService {
     @Override
     public RemoteViewsFactory onGetViewFactory(Intent intent) {
-        return new Rows(getApplicationContext());
+        return new Rows(getApplicationContext(),
+                intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID));
     }
 
     private static final class Rows implements RemoteViewsFactory {
         private final Context ctx;
+        private final int widgetId;
         private JSONArray rows = new JSONArray();
 
-        Rows(Context ctx) {
+        Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
+            this.widgetId = widgetId;
         }
 
         @Override
         public void onCreate() {
         }
 
-        /** Binder thread: re-reads the snapshot after notifyAppWidgetViewDataChanged. */
+        /** Binder thread: after notifyAppWidgetViewDataChanged, re-reads the snapshot and the day. */
         @Override
         public void onDataSetChanged() {
-            DayWidgetProvider.Today today = DayWidgetProvider.readToday(ctx);
+            DayWidgetProvider.Today today =
+                    DayWidgetProvider.readDay(ctx, DayWidgetProvider.savedOffset(ctx, widgetId));
             rows = today.noData || today.stale ? new JSONArray() : today.rows;
         }
 

@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -20,28 +21,42 @@ import java.io.File;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /**
- * Day Widget (GLOSSARY.md): draws today's open Tasks from the Widget Snapshot the phone page
- * hands to the shell after every save (ADR-0006). It only reads: it never writes the state file
- * or any other file, and holds no Hunt rule; which Tasks show, their order and the Focus flag all
- * come from HuntCore's buildWidgetSnapshot.
+ * Day Widget (GLOSSARY.md): draws one day's open Tasks from the Widget Snapshot the phone page
+ * hands to the shell after every save (ADR-0006). It never writes the state file or the snapshot
+ * and holds no Hunt rule; which Tasks show, their order and the Focus flag all come from HuntCore's
+ * buildWidgetSnapshot. Its only own state is each widget's selected day (prev and next arrows,
+ * today to today + 6), kept in private preferences and valid only on the local date it was
+ * chosen, so the widget is back on today after midnight.
  *
  * The class name is part of every placed widget: never rename it, or users lose their widgets
  * on update.
  *
  * Redraws: when the snapshot changes ({@link #refreshAll}), on every APPWIDGET_UPDATE (placing,
- * reboot, APK update), on time or time-zone changes, and just after local midnight through an
- * inexact alarm (no exact-alarm permission; a late alarm only means a slightly late redraw).
+ * reboot, APK update), on time or time-zone changes, on an arrow tap, and just after local
+ * midnight through an inexact alarm (no exact-alarm permission; a late alarm only means a
+ * slightly late redraw).
  */
 public class DayWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "HuntDayWidget";
     /** Explicit broadcast from the midnight alarm (never exported). */
     static final String ACTION_MIDNIGHT = "com.hunt.companion.action.DAY_WIDGET_MIDNIGHT";
+    /** Explicit broadcast from the prev and next arrows (never exported); carries the widget id and target day. */
+    static final String ACTION_NAV = "com.hunt.companion.action.DAY_WIDGET_NAV";
+    private static final String EXTRA_DAY_OFFSET = "com.hunt.companion.extra.DAY_OFFSET";
+    /** The next arrow stops at today + 6 (the snapshot's eighth day only covers the midnight rollover). */
+    static final int MAX_DAY_OFFSET = 6;
+    /** Private preferences holding each widget's selected day: "on_<id>" date key, "offset_<id>". */
+    private static final String NAV_PREFS = "day_widget_nav";
+    /** "Tue 24": the day label beyond Tomorrow (English, like every other widget string). */
+    static final DateTimeFormatter SHORT_DAY = DateTimeFormatter.ofPattern("EEE d", Locale.ENGLISH);
     /** Minutes after local midnight the redraw is aimed at (clear of clock skew around 00:00). */
     private static final int MIDNIGHT_SLACK_MINUTES = 1;
 
-    /** What the widget can show for the current local date. */
+    /** What the widget can show for its selected day. */
     static final class Today {
         /** "neon" or "dawn" (only Neon has layouts so far; anything else draws Neon). */
         String look = "neon";
@@ -49,8 +64,14 @@ public class DayWidgetProvider extends AppWidgetProvider {
         boolean noData = true;
         /** The snapshot is from an earlier day than today: "Open Hunt to refresh". */
         boolean stale;
-        /** Today's rows, ready to draw (id, title, accent, tickable, focus, habit). */
+        /** The selected day's rows, ready to draw (id, title, accent, tickable, focus, habit). */
         JSONArray rows = new JSONArray();
+        /** Days after today that are shown (0 = today), within [0, lastOffset]. */
+        int offset;
+        /** The furthest day the next arrow can reach: today + 6, or less if the snapshot ends sooner. */
+        int lastOffset;
+        /** The selected local date. */
+        LocalDate date = LocalDate.now();
     }
 
     @Override
@@ -69,13 +90,33 @@ public class DayWidgetProvider extends AppWidgetProvider {
                 || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             refreshAll(ctx);
             armMidnightAlarm(ctx);
+        } else if (ACTION_NAV.equals(action)) {
+            int id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
+            if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return;
+            String todayKey = localDateKey();
+            int offset = selectedOffset(todayKey, intent.getIntExtra(EXTRA_DAY_OFFSET, 0), todayKey);
+            navPrefs(ctx).edit()
+                    .putString("on_" + id, todayKey)
+                    .putInt("offset_" + id, offset)
+                    .apply();
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            mgr.updateAppWidget(id, draw(ctx, id, readDay(ctx, offset)));
+            mgr.notifyAppWidgetViewDataChanged(id, R.id.widget_list);
         }
+    }
+
+    @Override
+    public void onDeleted(Context ctx, int[] ids) {
+        SharedPreferences.Editor edit = navPrefs(ctx).edit();
+        for (int id : ids) edit.remove("on_" + id).remove("offset_" + id);
+        edit.apply();
     }
 
     @Override
     public void onDisabled(Context ctx) {
         AlarmManager alarms = ctx.getSystemService(AlarmManager.class);
         if (alarms != null) alarms.cancel(midnightIntent(ctx));
+        navPrefs(ctx).edit().clear().apply();
     }
 
     /** Redraws every placed Day Widget from the snapshot file. Any thread; no-op when none is placed. */
@@ -92,8 +133,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
     }
 
     private static void drawAll(Context ctx, AppWidgetManager mgr, int[] ids) {
-        Today today = readToday(ctx);
-        for (int id : ids) mgr.updateAppWidget(id, draw(ctx, id, today));
+        for (int id : ids) mgr.updateAppWidget(id, draw(ctx, id, readDay(ctx, savedOffset(ctx, id))));
         mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list);
     }
 
@@ -106,10 +146,14 @@ public class DayWidgetProvider extends AppWidgetProvider {
             return views;
         }
         RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_neon);
-        String label = ctx.getString(R.string.day_widget_today);
+        String label = today.offset == 0 ? ctx.getString(R.string.day_widget_today)
+                : today.offset == 1 ? ctx.getString(R.string.day_widget_tomorrow)
+                : shortDayLabel(today.date);
         views.setTextViewText(R.id.widget_header, label);
         views.setOnClickPendingIntent(R.id.widget_header, openHunt(ctx));
         views.setTextViewText(R.id.widget_empty, ctx.getString(R.string.day_widget_nothing_left, label));
+        arrow(ctx, views, R.id.widget_prev, widgetId, today.offset - 1, today.offset > 0);
+        arrow(ctx, views, R.id.widget_next, widgetId, today.offset + 1, today.offset < today.lastOffset);
 
         Intent service = new Intent(ctx, DayWidgetService.class)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
@@ -119,6 +163,58 @@ public class DayWidgetProvider extends AppWidgetProvider {
         views.setEmptyView(R.id.widget_list, R.id.widget_empty);
         views.setPendingIntentTemplate(R.id.widget_list, openHuntTemplate(ctx));
         return views;
+    }
+
+    /**
+     * The previous or next arrow. At an end it stays in place, so the label never shifts, but it is
+     * dimmed, disabled and has no intent.
+     */
+    private static void arrow(Context ctx, RemoteViews views, int viewId, int widgetId, int target, boolean enabled) {
+        views.setBoolean(viewId, "setEnabled", enabled);
+        views.setTextColor(viewId, ctx.getColor(enabled ? R.color.widget_neon_text : R.color.widget_neon_dim));
+        if (enabled) views.setOnClickPendingIntent(viewId, navIntent(ctx, widgetId, target));
+    }
+
+    /** Explicit, immutable broadcast to this provider that selects day `offset` on widget `widgetId`. */
+    private static PendingIntent navIntent(Context ctx, int widgetId, int offset) {
+        Intent intent = new Intent(ctx, DayWidgetProvider.class)
+                .setAction(ACTION_NAV)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                .putExtra(EXTRA_DAY_OFFSET, offset)
+                // A distinct URI per widget and target, so each arrow keeps its own PendingIntent.
+                .setData(Uri.parse("hunt-widget://day/" + widgetId + "/" + offset));
+        return PendingIntent.getBroadcast(ctx, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private static SharedPreferences navPrefs(Context ctx) {
+        return ctx.getSharedPreferences(NAV_PREFS, Context.MODE_PRIVATE);
+    }
+
+    /** The day offset widget `widgetId` shows now: its choice if made today, otherwise today. */
+    static int savedOffset(Context ctx, int widgetId) {
+        SharedPreferences prefs = navPrefs(ctx);
+        return selectedOffset(prefs.getString("on_" + widgetId, null),
+                prefs.getInt("offset_" + widgetId, 0), localDateKey());
+    }
+
+    /**
+     * Pure: the selected day offset, clamped to [0, MAX_DAY_OFFSET]. A choice saved on another
+     * local date than `todayKey` has expired, so the widget is back on today after midnight.
+     */
+    static int selectedOffset(String savedOn, int savedOffset, String todayKey) {
+        if (savedOn == null || !savedOn.equals(todayKey)) return 0;
+        return Math.max(0, Math.min(savedOffset, MAX_DAY_OFFSET));
+    }
+
+    /** Pure: the snapshot list to draw for `dateKey`; its today view only on the current date. */
+    static String viewFor(String dateKey, String todayKey) {
+        return dateKey.equals(todayKey) ? "today" : "future";
+    }
+
+    /** Pure: "Tue 24". */
+    static String shortDayLabel(LocalDate day) {
+        return SHORT_DAY.format(day);
     }
 
     /** Opens Hunt (header, message body). Immutable. */
@@ -164,8 +260,12 @@ public class DayWidgetProvider extends AppWidgetProvider {
         return LocalDate.now().toString();
     }
 
-    /** Reads the snapshot file and picks what to show for the current local date. Any thread. */
-    static Today readToday(Context ctx) {
+    /**
+     * Reads the snapshot file and picks what to show `offset` days after the current local date,
+     * clamped to what the snapshot covers. Stale when the snapshot has no entry for today.
+     * Any thread.
+     */
+    static Today readDay(Context ctx, int offset) {
         Today today = new Today();
         String text;
         synchronized (HuntFiles.LOCK) {
@@ -178,16 +278,25 @@ public class DayWidgetProvider extends AppWidgetProvider {
             today.noData = snap.optBoolean("noData", false);
             String key = localDateKey();
             JSONArray days = snap.optJSONArray("days");
-            today.stale = true;
+            int first = -1;
             for (int i = 0; days != null && i < days.length(); i++) {
                 JSONObject day = days.optJSONObject(i);
                 if (day != null && key.equals(day.optString("dateKey"))) {
-                    JSONArray rows = day.optJSONArray("today");
-                    today.rows = rows == null ? new JSONArray() : rows;
-                    today.stale = false;
+                    first = i;
                     break;
                 }
             }
+            today.stale = first < 0;
+            if (today.stale) return today;
+            today.lastOffset = Math.min(MAX_DAY_OFFSET, days.length() - 1 - first);
+            today.offset = Math.max(0, Math.min(offset, today.lastOffset));
+            today.date = LocalDate.parse(key).plusDays(today.offset);
+            String dateKey = today.date.toString();
+            JSONObject day = days.optJSONObject(first + today.offset);
+            // Days are consecutive; a gap or a mismatch just draws an empty day.
+            if (day == null || !dateKey.equals(day.optString("dateKey"))) return today;
+            JSONArray rows = day.optJSONArray(viewFor(dateKey, key));
+            today.rows = rows == null ? new JSONArray() : rows;
         } catch (JSONException e) {
             Log.w(TAG, "Unreadable widget snapshot; showing the get-started state until the next save", e);
             today.noData = true;
