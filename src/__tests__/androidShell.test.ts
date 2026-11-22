@@ -488,6 +488,28 @@ describe("Day Widget (ADR-0006)", () => {
     expect(ack).toContain("ackPendingTicksInternal(json)");
   });
 
+  it("a newly queued tick tells a live, loaded page to drain (#10)", () => {
+    const queue = widgetJava.find((f) => f.name === "PendingTicks.java")?.code ?? "";
+    // The queue itself announces each new tick, after the write and outside the lock, so whatever
+    // widget path appends (direct tap or after an undo window) reaches the page.
+    const append = blockAfter(queue, /static\s+boolean\s+append\([^)]*\)\s*\{/);
+    expect(append).toMatch(/notifyTickQueued\(\)/);
+    expect(append.indexOf("notifyTickQueued()")).toBeGreaterThan(append.lastIndexOf("HuntFiles.writeText("));
+    const notify = blockAfter(queue, /private\s+static\s+void\s+notifyTickQueued\(\)\s*\{/);
+    expect(notify).not.toMatch(/synchronized/);
+    // MainActivity listens only while it exists; the signal is gated on a loaded page on the UI thread.
+    const onCreate = blockAfter(javaCode, /protected\s+void\s+onCreate\(Bundle\s+savedInstanceState\)\s*\{/);
+    expect(onCreate).toMatch(/PendingTicks\.setListener\(\s*tickQueuedListener\s*\)/);
+    const onDestroy = blockAfter(javaCode, /protected\s+void\s+onDestroy\(\)\s*\{/);
+    expect(onDestroy).toMatch(/PendingTicks\.clearListener\(\s*tickQueuedListener\s*\)/);
+    const listener = blockAfter(javaCode, /tickQueuedListener\s*=\s*\(\)\s*->\s*main\.post\(\(\)\s*->\s*\{/);
+    expect(listener).toMatch(/if\s*\(\s*pageLoaded\s*\)\s*callJs\(\s*"__huntPendingTicksArrived"\s*,\s*"null"\s*\)/);
+    // ...and the packaged page answers it and also drains on resume.
+    const page = read(ASSET_PAGE_FILE);
+    expect(page).toMatch(/window\.__huntPendingTicksArrived\s*=\s*drainPendingTicksAndRender\b/);
+    expect(blockAfter(page,/function\s+onAppVisible\(\)\s*\{/)).toMatch(/drainPendingTicks\(\)/);
+  });
+
   it("a tickable row has its own tick target, separate from the open-Hunt row", () => {
     const service = widgetSources.find((f) => f.name === "DayWidgetService.java")?.code ?? "";
     expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row_tick\b/);
