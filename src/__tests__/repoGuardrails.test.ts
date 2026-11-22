@@ -42,6 +42,13 @@ describe("README facts match the repo", () => {
     const target = /targetSdkVersion="(\d+)"/.exec(manifest)?.[1];
     expect(readme, "update the Android badge in README.md").toContain(`min%20${min}%20%C2%B7%20target%20${target}`);
   });
+
+  it("Design decisions table links every ADR in docs/adr", () => {
+    const adrs = fs.readdirSync(path.join(ROOT, "docs", "adr")).filter((f) => /^\d{4}-.+\.md$/.test(f));
+    expect(adrs.length).toBeGreaterThan(0);
+    const missing = adrs.filter((f) => !readme.includes(`](docs/adr/${f})`));
+    expect(missing, "add a row to README.md's Design decisions table").toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

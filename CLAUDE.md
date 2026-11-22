@@ -6,6 +6,8 @@
 - **Review**: judge diffs against `CODING_STANDARDS.md`. Mechanical UI rules live in `src/__tests__/sourceScan_uiGuardrails.test.ts`.
 - **Decisions**: `docs/adr/` records the merge, sync-hub, phone-app and APK-build choices; update the ADR when a change alters one.
 - **Spec**: `Instructions_for_AI.md` holds the project's trigger-based quality spec; read the section whose trigger matches the task.
+- **Android shell, widgets, APK**: read `docs/agents/android.md` first.
+- **Worktrees**: run `bash scripts/worktree.sh setup` in a new worktree (links `node_modules`, copies the git-ignored spec and signing key); remove it with `bash scripts/worktree.sh teardown <dir>`.
 
 ## Agent skills
 
