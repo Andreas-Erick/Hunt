@@ -2,6 +2,7 @@ package com.hunt.companion;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -50,8 +51,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -203,8 +202,6 @@ public class MainActivity extends Activity {
     // newest state from memory instead of reading a file that may still be being written.
     // ---------------------------------------------------------------------------------------
 
-    /** Guards every file read/write (state, URL and token files). */
-    private static final Object FILE_LOCK = new Object();
     /** Guards the compare-and-set of {@link #latestState} after the one-time disk read. */
     private static final Object LATEST_LOCK = new Object();
     /** Guards the one-time lazy load of the URL cache. */
@@ -217,10 +214,12 @@ public class MainActivity extends Activity {
 
     /** Newest state JSON known to this process (from JS or the one-time disk read). Never cleared. */
     private static volatile String latestState;
-    /** Newest state JSON not yet handed to a write. Writers take it with getAndSet(null). */
-    private static final AtomicReference<String> pendingState = new AtomicReference<>();
-    /** What the state file currently holds, to skip identical rewrites. Guarded by FILE_LOCK. */
-    private static String lastWrittenState;
+    /** The state file's coalescing write (newest JSON not yet written; identical rewrites skipped). */
+    private static final HuntFiles.CoalescedWrite stateWrite = new HuntFiles.CoalescedWrite();
+    /** What readPendingTicks answers when there is nothing to read. */
+    private static final String NO_PENDING_TICKS = "{\"ticks\":[]}";
+    /** The Widget Snapshot file's coalescing write, as for the state file. */
+    private static final HuntFiles.CoalescedWrite widgetSnapshotWrite = new HuntFiles.CoalescedWrite();
 
     /** Normalized laptop URL as saved ("" = nothing saved, null = not loaded yet). */
     private static volatile String laptopUrlCache;
@@ -255,6 +254,8 @@ public class MainActivity extends Activity {
 
     // Written once in onCreate, read from the bridge / executor threads.
     private volatile File filesDir;
+    /** Outlives this Activity: the widget redraw after a snapshot write may run after onDestroy. */
+    private volatile Context appContext;
     private volatile ConnectivityManager connectivity;
     private volatile String appVersion = "";
 
@@ -275,6 +276,15 @@ public class MainActivity extends Activity {
     /** The open "replace the current pairing?" dialog, if any. */
     private AlertDialog pairingDialog;
 
+    /**
+     * Pending Ticks while Hunt is open (#10): the widget appends on its own thread; this hops to the
+     * UI thread and asks the loaded page to drain. Before the page has loaded (or once the WebView is
+     * gone) it does nothing: the boot drain, or the drain on resume, picks the tick up instead.
+     */
+    private final PendingTicks.Listener tickQueuedListener = () -> main.post(() -> {
+        if (pageLoaded) callJs("__huntPendingTicksArrived", "null");
+    });
+
     // =======================================================================================
     // Lifecycle
     // =======================================================================================
@@ -285,6 +295,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         filesDir = getFilesDir();
+        appContext = getApplicationContext();
         connectivity = getSystemService(ConnectivityManager.class);
         appVersion = readAppVersion();
 
@@ -378,6 +389,7 @@ public class MainActivity extends Activity {
 
         registerNetworkCallback();
         handlePairingIntent(getIntent());
+        PendingTicks.setListener(tickQueuedListener);
 
         webView.loadUrl(PAGE_URL);
     }
@@ -594,6 +606,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        PendingTicks.clearListener(tickQueuedListener);
         if (pairingDialog != null) {
             pairingDialog.dismiss(); // nothing was saved; the link can be opened again
             pairingDialog = null;
@@ -940,9 +953,9 @@ public class MainActivity extends Activity {
         String s = latestState;
         if (s != null) return s;
         String disk;
-        synchronized (FILE_LOCK) {
-            disk = readTextFile(file(STATE_FILE));
-            if (lastWrittenState == null) lastWrittenState = disk;
+        synchronized (HuntFiles.LOCK) {
+            disk = HuntFiles.readText(file(STATE_FILE));
+            stateWrite.knownOnDisk(disk);
         }
         synchronized (LATEST_LOCK) {
             if (latestState == null) latestState = disk; // a concurrent saveState wins
@@ -962,7 +975,7 @@ public class MainActivity extends Activity {
         synchronized (LATEST_LOCK) {
             latestState = json;
         }
-        pendingState.set(json);
+        stateWrite.set(json);
         // Always enqueue: extra flushes are cheap no-ops, and nothing can get stuck un-scheduled.
         // If ioExec is already shut down, the JSON stays pending for the next flush.
         executeQuietly(ioExec, this::flushPendingState);
@@ -971,15 +984,15 @@ public class MainActivity extends Activity {
     /** JavaBridge thread: writes one quarantine copy (deduplicated) and prunes old ones. */
     private boolean saveCorruptStateInternal(String raw) {
         if (raw == null || raw.isEmpty()) return false;
-        synchronized (FILE_LOCK) {
+        synchronized (HuntFiles.LOCK) {
             File[] existing = filesDir.listFiles((dir, name) -> name.startsWith(CORRUPT_PREFIX) && name.endsWith(".json"));
             if (existing != null) {
                 for (File f : existing) {
-                    if (raw.trim().equals(readTextFile(f))) return true;
+                    if (raw.trim().equals(HuntFiles.readText(f))) return true;
                 }
             }
             try {
-                writeTextFile(file(CORRUPT_PREFIX + System.currentTimeMillis() + ".json"), raw);
+                HuntFiles.writeText(file(CORRUPT_PREFIX + System.currentTimeMillis() + ".json"), raw);
             } catch (IOException | RuntimeException e) {
                 Log.w(TAG, "Keeping an unusable state copy failed", e);
                 return false;
@@ -1006,22 +1019,71 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * ioExec: writes the newest pending JSON. Taking the value inside FILE_LOCK means the write
-     * that runs last always carries the newest JSON (last write wins), even across Activity
-     * instances. Identical content is not rewritten.
+     * ioExec: writes the newest pending JSON (last write wins, even across Activity instances;
+     * identical content is not rewritten). A failed write keeps the JSON pending.
      */
     private void flushPendingState() {
-        synchronized (FILE_LOCK) {
-            String json = pendingState.getAndSet(null);
-            if (json == null || json.equals(lastWrittenState)) return;
-            try {
-                writeTextFile(file(STATE_FILE), json);
-                lastWrittenState = json;
-            } catch (IOException | RuntimeException e) {
-                Log.w(TAG, "Saving state failed; will retry on the next save", e);
-                pendingState.compareAndSet(null, json); // keep it unless something newer arrived
-            }
+        try {
+            stateWrite.flushTo(file(STATE_FILE));
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Saving state failed; will retry on the next save", e);
         }
+    }
+
+    /** JavaBridge thread: records the newest Widget Snapshot and schedules its write on ioExec. */
+    private void saveWidgetSnapshotInternal(String json) {
+        if (!looksLikeJsonObject(json)) {
+            Log.w(TAG, "saveWidgetSnapshot ignored: not a JSON object");
+            return;
+        }
+        widgetSnapshotWrite.set(json);
+        executeQuietly(ioExec, this::flushWidgetSnapshot);
+    }
+
+    /**
+     * ioExec: writes the newest pending snapshot (last write wins, identical content skipped),
+     * then asks the placed Day and Stats Widgets to redraw from it.
+     */
+    private void flushWidgetSnapshot() {
+        try {
+            if (!widgetSnapshotWrite.flushTo(file(HuntFiles.WIDGET_SNAPSHOT_FILE))) return;
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Saving the widget snapshot failed; the next save retries", e);
+            return;
+        }
+        DayWidgetProvider.refreshAll(appContext);
+        StatsWidgetProvider.refreshAll(appContext);
+    }
+
+    /**
+     * JavaBridge thread: what the page drains, as {@link PendingTicks#read} JSON ({"ticks": [...]},
+     * plus "heldBack" / "unreadable" / "keptAs" when something needs reporting). A small file.
+     * Day Widget Undo windows that ended while no timer ran (the process was gone) are queued
+     * first; ticks still in their window are not, they arrive when it ends. Windows the queue
+     * refused are offered again once the read has set a corrupt queue aside.
+     */
+    private String readPendingTicksInternal() {
+        File dir = filesDir;
+        if (dir == null) return NO_PENDING_TICKS;
+        UndoWindow.Commit before = DayWidgetUndo.commitDue(appContext);
+        String read = PendingTicks.read(dir, before.heldBack);
+        boolean changed = !before.closed.isEmpty();
+        if (before.heldBack > 0) changed |= !DayWidgetUndo.commitDue(appContext).closed.isEmpty();
+        if (changed) DayWidgetProvider.refreshAll(appContext);
+        return read;
+    }
+
+    /**
+     * JavaBridge thread: schedules removal of the acknowledged ticks on ioExec. ioExec is FIFO, so
+     * the state the page saved just before (with the ticks applied) is written first: a crash in
+     * between leaves the ticks queued, and HuntCore skips them as already done next time.
+     */
+    private void ackPendingTicksInternal(final String json) {
+        final File dir = filesDir;
+        if (dir == null || json == null) return;
+        executeQuietly(ioExec, () -> {
+            if (PendingTicks.ack(dir, json) > 0) DayWidgetProvider.refreshAll(appContext);
+        });
     }
 
     /** UI thread (onStop): runs a flush on ioExec (after any queued writes) and waits up to timeoutMs. */
@@ -1045,8 +1107,8 @@ public class MainActivity extends Activity {
                 u = laptopUrlCache;
                 if (u == null) {
                     String saved;
-                    synchronized (FILE_LOCK) {
-                        saved = readTextFile(file(LAPTOP_URL_FILE));
+                    synchronized (HuntFiles.LOCK) {
+                        saved = HuntFiles.readText(file(LAPTOP_URL_FILE));
                     }
                     u = normalizeUrl(saved);
                     laptopUrlCache = u;
@@ -1082,8 +1144,8 @@ public class MainActivity extends Activity {
             t = syncTokenCache.get();
             if (t != null) return t;
             String stored;
-            synchronized (FILE_LOCK) {
-                stored = readTextFile(file(SYNC_TOKEN_FILE));
+            synchronized (HuntFiles.LOCK) {
+                stored = HuntFiles.readText(file(SYNC_TOKEN_FILE));
             }
             boolean legacy = !stored.isEmpty() && !stored.startsWith(TOKEN_ENVELOPE_PREFIX);
             String loaded = legacy ? stored : decryptToken(stored);
@@ -1128,7 +1190,7 @@ public class MainActivity extends Activity {
             Log.w(TAG, "Encrypting the sync token failed; it is kept in memory only", e);
             return;
         }
-        synchronized (FILE_LOCK) {
+        synchronized (HuntFiles.LOCK) {
             // A newer token arrived while this one was encrypted (possibly on a recreated
             // Activity's ioExec): its own queued task writes it, so never overwrite it with this one.
             if (!token.equals(syncTokenCache.get())) return;
@@ -1191,41 +1253,12 @@ public class MainActivity extends Activity {
     /** ioExec: atomically writes a small config file. */
     private void writeConfigFile(String name, String value) {
         if (value == null) return;
-        synchronized (FILE_LOCK) {
+        synchronized (HuntFiles.LOCK) {
             try {
-                writeTextFile(file(name), value);
+                HuntFiles.writeText(file(name), value);
             } catch (IOException | RuntimeException e) {
                 Log.w(TAG, "Saving " + name + " failed", e);
             }
-        }
-    }
-
-    /**
-     * Reads a whole text file through AtomicFile (which also recovers an interrupted write and
-     * reads the legacy plain files as-is). Returns "" if missing or unreadable.
-     * Caller holds FILE_LOCK.
-     */
-    private static String readTextFile(File f) {
-        try {
-            return new String(new AtomicFile(f).readFully(), StandardCharsets.UTF_8).trim();
-        } catch (FileNotFoundException e) {
-            return "";
-        } catch (IOException | RuntimeException e) {
-            Log.w(TAG, "Reading " + f.getName() + " failed", e);
-            return "";
-        }
-    }
-
-    /** Replaces a file atomically (AtomicFile: write aside, fsync, rename). Caller holds FILE_LOCK. */
-    private static void writeTextFile(File f, String text) throws IOException {
-        AtomicFile af = new AtomicFile(f);
-        FileOutputStream out = af.startWrite();
-        try {
-            out.write(text.getBytes(StandardCharsets.UTF_8));
-            af.finishWrite(out);
-        } catch (IOException | RuntimeException e) {
-            af.failWrite(out); // the previous file content stays intact
-            throw e;
         }
     }
 
@@ -1963,6 +1996,46 @@ public class MainActivity extends Activity {
                 saveStateInternal(json);
             } catch (RuntimeException e) {
                 Log.w(TAG, "saveState failed", e);
+            }
+        }
+
+        /**
+         * Day Widget (ADR-0006): remembers the page's Widget Snapshot, writes it asynchronously
+         * (coalesced, atomic) and then redraws the placed widgets.
+         */
+        @JavascriptInterface
+        public void saveWidgetSnapshot(String json) {
+            try {
+                saveWidgetSnapshotInternal(json);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "saveWidgetSnapshot failed", e);
+            }
+        }
+
+        /**
+         * Pending Ticks (ADR-0006): {"ticks": [{taskId, dateKey, tickedAt}, ...]} plus what the page
+         * must report (see {@link PendingTicks#read}).
+         */
+        @JavascriptInterface
+        public String readPendingTicks() {
+            try {
+                return readPendingTicksInternal();
+            } catch (RuntimeException e) {
+                Log.w(TAG, "readPendingTicks failed", e);
+                return NO_PENDING_TICKS;
+            }
+        }
+
+        /**
+         * Removes exactly the given ticks (a JSON array as read) from the queue, after the page has
+         * applied and saved them; ticks queued since stay.
+         */
+        @JavascriptInterface
+        public void ackPendingTicks(String json) {
+            try {
+                ackPendingTicksInternal(json);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "ackPendingTicks failed", e);
             }
         }
 

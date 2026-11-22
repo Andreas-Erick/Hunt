@@ -1,3 +1,32 @@
 <resources>
     <string name="app_name">Hunt</string>
+    <string name="day_widget_description">Open Tasks for today and the week ahead</string>
+    <string name="day_widget_today">Today</string>
+    <string name="day_widget_prev">Previous day</string>
+    <string name="day_widget_next">Next day</string>
+    <string name="day_widget_prev_glyph" translatable="false">&#x2039;</string>
+    <string name="day_widget_next_glyph" translatable="false">&#x203A;</string>
+    <string name="day_widget_get_started">Open Hunt to get started</string>
+    <string name="day_widget_refresh">Open Hunt to refresh</string>
+    <string name="day_widget_nothing_left">Nothing left for %1$s</string>
+    <string name="day_widget_open_hunt">Open Hunt</string>
+    <string name="day_widget_focus_tag">Focus</string>
+    <string name="day_widget_habit_tag">Habit</string>
+    <string name="day_widget_row_open">%1$s, open Hunt</string>
+    <string name="day_widget_row_tick">Mark %1$s done</string>
+    <string name="day_widget_row_focus">%1$s, in Focus, open Hunt</string>
+    <string name="day_widget_done">✓ Done</string>
+    <string name="day_widget_done_title">· %1$s</string>
+    <string name="day_widget_undo">Undo</string>
+    <string name="day_widget_undo_label">Undo</string>
+    <string name="day_widget_row_undo">%1$s done. Undo</string>
+    <string name="day_widget_tap_failed">Hunt couldn\'t save that tick. Try again, or tick it in Hunt.</string>
+    <string name="day_widget_undo_failed">Hunt couldn\'t save that Undo. If the Task shows as done in Hunt, untick it there.</string>
+    <string name="stats_widget_description">Quest hours this week, today\'s focus time and Habit streaks</string>
+    <string name="stats_widget_week">This week</string>
+    <string name="stats_widget_today">today</string>
+    <string name="stats_widget_streaks">Streaks</string>
+    <string name="stats_widget_no_quests">Set up a Quest in Hunt</string>
+    <string name="stats_widget_more">+%1$d more</string>
+    <string name="stats_widget_open">Hunt stats, %1$s of Quest focus today. Open Hunt</string>
 </resources>

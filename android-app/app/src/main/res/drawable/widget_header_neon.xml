@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neon header and message targets: transparent at rest, accent ripple when pressed. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/widget_neon_ripple">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_neon_pressed" />
+            <corners android:radius="@dimen/widget_inner_radius" />
+        </shape>
+    </item>
+</ripple>

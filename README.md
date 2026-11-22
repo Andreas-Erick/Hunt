@@ -59,6 +59,14 @@ an atomic JSON file through its Android shell. When both are
 on the same network (or Tailscale), they converge through a
 small sync server that runs inside the desktop app.
 
+On Android, two optional home-screen widgets work without
+opening the app. The **Day Widget** lists the open tasks
+for today or any of the next six days, and ticks one done
+with a 4-second Undo. Hunt applies the tick the next time
+it runs. The **Stats Widget** shows each quest's hours over
+the last seven days against its target, today's focus time
+and habit streaks. Both follow the device's look.
+
 Two looks ship with it: **Neon** (the original) and **Dawn**
 (blue-hour colours, a serif clock and a sun that crosses the
 Focus screen once an hour). Each device remembers its own
@@ -152,6 +160,7 @@ step.
 | [0003](docs/adr/0003-single-file-phone-app.md) | One-file phone app | Types stop at HuntCore |
 | [0004](docs/adr/0004-direct-apk-build.md) | No-Gradle signed APK | Custom build script |
 | [0005](docs/adr/0005-two-looks.md) | Two looks, one token set | Looks aren't synced |
+| [0006](docs/adr/0006-widget-pending-ticks.md) | Widget ticks are queued | Applied when Hunt runs |
 
 ## Quickstart
 

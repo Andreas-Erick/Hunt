@@ -1,6 +1,7 @@
 import { habitTaskId, isTaskVisibleToday, toLocalDateKey } from "./dateUtils";
 import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
 import { compareRank } from "./syncTypes";
+import type { SyncPayload } from "./syncTypes";
 
 /**
  * Deterministic TimeLog id for one focus session. The same session flushed on
@@ -202,6 +203,23 @@ export function buildHabitTaskRow(habit: Habit, dateKey: string): Task {
 }
 
 /**
+ * The daily Habit rows for `dateKey` that Hunt has not created yet, built by
+ * their fixed ids (buildHabitTaskRow), so the Widgets can list and tick a
+ * Habit before the app has run that day. A row that exists is left out, and so
+ * is one deleted elsewhere: a tombstoned row stays deleted. Pure.
+ */
+export function missingHabitRows(
+  state: Pick<SyncPayload, "tasks" | "habits" | "deletedTaskIds">,
+  dateKey: string
+): Task[] {
+  const known = new Set((state.tasks ?? []).map((t) => t.id));
+  for (const id of state.deletedTaskIds ?? []) known.add(id);
+  return (state.habits ?? [])
+    .filter((h) => !known.has(habitTaskId(h.id, dateKey)))
+    .map((h) => buildHabitTaskRow(h, dateKey));
+}
+
+/**
  * R6: stamp for a local write to an existing row. Never older than the row it
  * replaces (the row may carry a newer stamp from a device whose clock is
  * ahead), so the edit cannot silently lose last-write-wins on the next sync.
@@ -211,4 +229,20 @@ export function nextStamp(
   now: number = Date.now()
 ): number {
   return Math.max(now, (row?.updatedAt || 0) + 1);
+}
+
+/**
+ * SHARED "complete a Task" rule: the row for `task` completed at `completedAt`,
+ * stamped by R6 at that time (never older than the row it replaces). The
+ * phone's completion and the desktop store's both write this row, so the same
+ * Task completed at the same moment is the same row on either device. Pure:
+ * `task` is not modified.
+ */
+export function completeTaskRow(task: Task, completedAt: number): Task {
+  return {
+    ...task,
+    status: "completed",
+    completedAt,
+    updatedAt: nextStamp(task, completedAt),
+  };
 }

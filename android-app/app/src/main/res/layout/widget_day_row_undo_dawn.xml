@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A Day Widget row in its Undo window (#9), Dawn look (twin of widget_day_row_undo_neon.xml:
+    same ids and geometry; sage "✓ Done", sentence-case gold Undo, no tracking).
+    Exactly the task row's height and surface, so ticking never shifts the list. Undo is a
+    48dp-high target at the far end of the row, across the widget from the next row's tick
+    target (start of its row) and 8dp of list gap below. The rest of the row is not a target.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:minHeight="48dp"
+    android:background="@drawable/widget_row_dawn"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/widget_row_done"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:paddingStart="14dp"
+        android:text="@string/day_widget_done"
+        android:textColor="@color/widget_dawn_success"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_row_done_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:importantForAccessibility="no"
+        android:maxLines="1"
+        android:paddingStart="6dp"
+        android:paddingEnd="8dp"
+        android:textColor="@color/widget_dawn_dim"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_row_undo"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minWidth="72dp"
+        android:minHeight="48dp"
+        android:background="@drawable/widget_header_dawn"
+        android:contentDescription="@string/day_widget_undo_label"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/day_widget_undo"
+        android:textColor="@color/widget_dawn_accent"
+        android:textSize="14sp" />
+</LinearLayout>

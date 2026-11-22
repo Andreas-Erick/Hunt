@@ -26,7 +26,11 @@ and script, with no build step for the UI.
 `scripts/build-mobile-core.mjs` uses esbuild to bundle
 `src/mobile/huntCore.ts` into a marked block in the page.
 That bundle covers the merge, stamps, habit rows, the focus
-state machine, burst logs, and the next-task rule.
+state machine, burst logs, task completion, the next-task
+rule, and the Android widgets' side of it (ADR-0006): the
+Widget Snapshot the widgets draw (rows, which can be
+ticked, Quest progress and streaks) and applying Pending
+Ticks.
 
 Tests enforce the arrangement:
 

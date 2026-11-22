@@ -57,6 +57,16 @@ export interface AndroidBridgeStub {
   setKeepScreenOn?: (on: boolean) => void;
   vibrateClick?: () => void;
   getAppVersion?: () => string;
+  saveWidgetSnapshot?: (json: string) => void;
+  readPendingTicks?: () => string;
+  ackPendingTicks?: (json: string) => void;
+}
+
+export interface Breadcrumb {
+  level: string;
+  domain: string;
+  event: string;
+  context?: Record<string, unknown>;
 }
 
 export interface FocusShape {
@@ -136,8 +146,11 @@ export interface MobilePageGlobals {
   promoteTaskToTop(taskId: string): void;
   __huntSyncDone(result: unknown): void;
   __huntLifecycle(phase: string): void;
+  __huntPendingTicksArrived(): void;
   __huntNetwork(info: { online: boolean }): void;
   __huntBack(): boolean;
+  setLook(look: string): void;
+  __huntDiagnostics: { getBreadcrumbs(): Breadcrumb[] };
   __pwned?: unknown;
 }
 

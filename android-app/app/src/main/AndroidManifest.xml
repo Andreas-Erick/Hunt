@@ -66,6 +66,59 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Day Widget (ADR-0006). Not exported: the system still delivers the appwidget and
+            time broadcasts, and the midnight alarm is an explicit intent. Never rename these
+            classes, or placed widgets disappear on update.
+        -->
+        <receiver
+            android:name=".DayWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/day_widget_info" />
+        </receiver>
+        <service
+            android:name=".DayWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <!--
+            Day Widget row taps (tick, Undo, open Hunt) land here, a no-UI trampoline, instead of
+            a broadcast: a receiver opening Hunt would be a blocked background activity launch.
+            Not exported, no intent filter: only the widget's own PendingIntent reaches it.
+        -->
+        <activity
+            android:name=".DayWidgetTapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <!--
+            Stats Widget (optional; the user adds it if they want it). Not exported, like the Day
+            Widget. Never rename the class, or placed widgets disappear on update.
+        -->
+        <receiver
+            android:name=".StatsWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/stats_widget_info" />
+        </receiver>
+
     </application>
 
 </manifest>
