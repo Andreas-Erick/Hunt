@@ -53,7 +53,7 @@ final class DayWidgetUndo {
             String key = TickKeys.taskDay(taskId, dateKey);
             if (prefs.contains(key)) return false;
             if (!prefs.edit().putLong(key, tickedAt).commit()) {
-                Log.w(TAG, "Opening an Undo window failed; tick dropped");
+                Log.w(TAG, "Opening an Undo window failed; the row stays open to tick again");
                 return false;
             }
         }
