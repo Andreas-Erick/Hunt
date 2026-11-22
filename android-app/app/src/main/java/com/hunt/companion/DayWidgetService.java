@@ -29,12 +29,16 @@ public class DayWidgetService extends RemoteViewsService {
     }
 
     private static final class Rows implements RemoteViewsFactory {
+        /** Row layouts per look: the task row and the Undo row. */
+        private static final int ROW_KINDS = 2;
         private final Context ctx;
         private final int widgetId;
         private JSONArray rows = new JSONArray();
         private String dateKey = "";
         /** Tasks of the day in their Undo window, drawn as "✓ Done · Undo". */
         private Set<String> undoable = Collections.emptySet();
+        /** The snapshot's look, so every row uses the same look's layout and Quest accents. */
+        private String look = "neon";
 
         Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
@@ -51,6 +55,7 @@ public class DayWidgetService extends RemoteViewsService {
             DayWidgetProvider.Today today =
                     DayWidgetProvider.readDay(ctx, DayWidgetProvider.savedOffset(ctx, widgetId));
             dateKey = today.date.toString();
+            look = today.look;
             Map<String, ?> held = DayWidgetUndo.held(ctx);
             undoable = UndoWindow.openTaskIds(held, dateKey, System.currentTimeMillis());
             Set<String> hidden = UndoWindow.heldTaskIds(held, dateKey);
@@ -77,12 +82,12 @@ public class DayWidgetService extends RemoteViewsService {
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
             if (row != null && undoable.contains(row.optString("id", ""))) return undoRow(row);
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_row_neon);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayRowLayout(look));
             if (row == null) return views;
             String title = row.optString("title", "");
             boolean focus = row.optBoolean("focus", false);
             boolean tickable = row.optBoolean("tickable", false) && !focus;
-            int accent = ctx.getColor(accentColor(row.optString("accent", "slate")));
+            int accent = ctx.getColor(WidgetLook.questAccent(look, row.optString("accent", "slate")));
 
             views.setTextViewText(R.id.widget_row_title, title);
             views.setInt(R.id.widget_row_bar, "setColorFilter", accent);
@@ -112,7 +117,7 @@ public class DayWidgetService extends RemoteViewsService {
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_row_undo_neon);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayUndoRowLayout(look));
             String title = row.optString("title", "");
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
             views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));
@@ -134,7 +139,8 @@ public class DayWidgetService extends RemoteViewsService {
 
         @Override
         public int getViewTypeCount() {
-            return 2; // the task row and the Undo row
+            // Two row kinds (task, Undo) per look; a look change swaps them all.
+            return WidgetLook.COUNT * ROW_KINDS;
         }
 
         @Override
@@ -146,21 +152,6 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public boolean hasStableIds() {
             return true;
-        }
-
-        /** Quest accent key from the snapshot -> the Neon colour resource (slate for unknown keys). */
-        private static int accentColor(String key) {
-            switch (key) {
-                case "cyan": return R.color.widget_neon_q_cyan;
-                case "emerald": return R.color.widget_neon_q_emerald;
-                case "amber": return R.color.widget_neon_q_amber;
-                case "purple": return R.color.widget_neon_q_purple;
-                case "rose": return R.color.widget_neon_q_rose;
-                case "sky": return R.color.widget_neon_q_sky;
-                case "orange": return R.color.widget_neon_q_orange;
-                case "lime": return R.color.widget_neon_q_lime;
-                default: return R.color.widget_neon_q_slate;
-            }
         }
     }
 }

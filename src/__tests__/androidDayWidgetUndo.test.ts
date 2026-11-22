@@ -160,8 +160,10 @@ describe("Day Widget Undo window (#9)", () => {
   });
 
   it("a row in its window draws as '✓ Done · Undo' at the same height, Undo a 48dp target at the far end", () => {
-    expect(service).toMatch(/R\.layout\.widget_day_row_undo_neon/);
-    expect(service).toMatch(/getViewTypeCount\(\)\s*\{\s*return\s+2;/);
+    // The look's Undo row (Neon or Dawn twin) comes through WidgetLook; the list counts it as a row kind.
+    expect(service).toMatch(/WidgetLook\.dayUndoRowLayout\(look\)/);
+    expect(code("WidgetLook.java")).toMatch(/R\.layout\.widget_day_row_undo_dawn\s*:\s*R\.layout\.widget_day_row_undo_neon/);
+    expect(service).toMatch(/return\s+WidgetLook\.COUNT\s*\*\s*ROW_KINDS\s*;/);
     expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row_undo\s*,\s*rowTap\(DayWidgetProvider\.ROW_UNDO/);
     const rowRoot = /<LinearLayout\b[^>]*>/.exec(undoRow)?.[0] ?? "";
     expect(attr(rowRoot, "layout_height")).toBe(attr(/<LinearLayout\b[^>]*>/.exec(taskRow)?.[0] ?? "", "layout_height"));
