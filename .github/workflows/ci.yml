@@ -69,3 +69,35 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  apk:
+    name: Android APK builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Same build-tools/platform as build-apk.sh's defaults (and release.yml).
+      - name: Ensure Android build-tools & platform SDK
+        shell: bash
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          (yes || true) | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" \
+            "build-tools;36.1.0" \
+            "platforms;android-36.1" > /dev/null
+
+      # Catches broken resources, manifest or Java before release. Signs with a
+      # throwaway key, so the cert pin is skipped here; release.yml enforces it.
+      - name: Build APK with a throwaway key
+        shell: bash
+        run: |
+          keytool -genkeypair -keystore "$RUNNER_TEMP/ci.keystore" -storetype PKCS12 \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=CI" > /dev/null
+          KEYSTORE="$RUNNER_TEMP/ci.keystore" EXPECTED_CERT_SHA256=skip \
+            bash android-app/build-apk.sh ./android-app "$RUNNER_TEMP/hunt-ci.apk"
