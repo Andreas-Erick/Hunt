@@ -2968,6 +2968,47 @@ var HuntCore = (() => {
     if (isStampValue(task.updatedAt)) return toLocalDateKey(task.updatedAt);
     return null;
   }
+  var EMPTY_DATES = /* @__PURE__ */ new Set();
+  function summarizeHabitDays(habitTasks, todayKey) {
+    const todayByHabit = /* @__PURE__ */ new Map();
+    const datesByHabit = /* @__PURE__ */ new Map();
+    for (const task of habitTasks) {
+      const habitId = task.habitId;
+      if (!habitId) continue;
+      const canonical = task.id === habitTaskId(habitId, todayKey);
+      if (canonical || task.scheduledDate === todayKey && !todayByHabit.has(habitId)) {
+        todayByHabit.set(habitId, task);
+      }
+      const day = completionDateKey(task);
+      if (day) {
+        let dates = datesByHabit.get(habitId);
+        if (!dates) {
+          dates = /* @__PURE__ */ new Set();
+          datesByHabit.set(habitId, dates);
+        }
+        dates.add(day);
+      }
+    }
+    const cache = /* @__PURE__ */ new Map();
+    return {
+      summaryFor(habitId) {
+        var _a;
+        let summary = cache.get(habitId);
+        if (!summary) {
+          const todayTask = todayByHabit.get(habitId);
+          const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
+          summary = {
+            todayTask,
+            completedDates,
+            streak: computeHabitStreak(completedDates, todayKey),
+            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed"
+          };
+          cache.set(habitId, summary);
+        }
+        return summary;
+      }
+    };
+  }
 
   // src/lib/syncTypes.ts
   function canonicalString(value) {
@@ -3371,9 +3412,100 @@ var HuntCore = (() => {
     };
   }
 
+  // src/lib/questProgress.ts
+  var QUEST_WEEK_DAYS = 7;
+  function rollingWeekKeys(todayKey) {
+    return Array.from(
+      { length: QUEST_WEEK_DAYS },
+      (_, i) => dateKeyFromOffset(todayKey, -i)
+    );
+  }
+  function safeSeconds(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  function safeTarget(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  function percentOf(seconds, targetHours) {
+    if (targetHours <= 0) return 0;
+    return Math.min(100, Math.round(seconds / 3600 / targetHours * 100));
+  }
+  function computeQuestWeekProgress(params) {
+    const { quests, logs, todayKey, live } = params;
+    const week = new Set(rollingWeekKeys(todayKey));
+    const today = /* @__PURE__ */ new Map();
+    const weekly = /* @__PURE__ */ new Map();
+    let totalToday = 0;
+    let totalWeek = 0;
+    const add = (questId, dateKey, seconds) => {
+      var _a, _b;
+      weekly.set(questId, ((_a = weekly.get(questId)) != null ? _a : 0) + seconds);
+      totalWeek += seconds;
+      if (dateKey === todayKey) {
+        today.set(questId, ((_b = today.get(questId)) != null ? _b : 0) + seconds);
+        totalToday += seconds;
+      }
+    };
+    for (const log of logs) {
+      if (!log.questId || !week.has(log.dateKey)) continue;
+      add(log.questId, log.dateKey, safeSeconds(log.durationSeconds));
+    }
+    if (live && live.questId) add(live.questId, todayKey, safeSeconds(live.seconds));
+    const totalTarget = quests.filter((q) => !q.archived).reduce((acc, q) => acc + safeTarget(q.targetWeeklyHours), 0);
+    return {
+      forQuest(quest) {
+        var _a, _b;
+        const weekSeconds = (_a = weekly.get(quest.id)) != null ? _a : 0;
+        const targetHours = safeTarget(quest.targetWeeklyHours);
+        return {
+          todaySeconds: (_b = today.get(quest.id)) != null ? _b : 0,
+          weekSeconds,
+          targetHours,
+          pct: percentOf(weekSeconds, targetHours)
+        };
+      },
+      total: {
+        todaySeconds: totalToday,
+        weekSeconds: totalWeek,
+        targetHours: totalTarget,
+        pct: percentOf(totalWeek, totalTarget)
+      }
+    };
+  }
+
+  // src/lib/widgetStats.ts
+  var ACCENTS = new Set(QUEST_ACCENT_KEYS);
+  function statsFor(state, dateKey) {
+    var _a, _b, _c, _d;
+    const quests = (_a = state.quests) != null ? _a : [];
+    const progress = computeQuestWeekProgress({ quests, logs: (_b = state.timeLogs) != null ? _b : [], todayKey: dateKey });
+    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey);
+    return {
+      dateKey,
+      focusSeconds: progress.total.todaySeconds,
+      quests: quests.filter((q) => !q.archived).sort((a, b) => a.slotIndex - b.slotIndex).map((q) => {
+        const p = progress.forQuest(q);
+        return {
+          code: q.code,
+          accent: ACCENTS.has(q.accentColor) ? q.accentColor : "slate",
+          weekSeconds: p.weekSeconds,
+          targetHours: p.targetHours,
+          pct: p.pct,
+          met: p.targetHours > 0 && p.weekSeconds >= p.targetHours * 3600
+        };
+      }),
+      streaks: ((_d = state.habits) != null ? _d : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
+    };
+  }
+  function buildWidgetStats(state, todayKey) {
+    return [statsFor(state, todayKey), statsFor(state, dateKeyFromOffset(todayKey, 1))];
+  }
+
   // src/lib/widgetSnapshot.ts
   var WIDGET_SNAPSHOT_VERSION = 1;
-  var ACCENTS = new Set(QUEST_ACCENT_KEYS);
+  var ACCENTS2 = new Set(QUEST_ACCENT_KEYS);
   function todayTasks(state, todayKey) {
     var _a, _b, _c;
     const tasks = (_a = state.tasks) != null ? _a : [];
@@ -3386,7 +3518,7 @@ var HuntCore = (() => {
     var _a, _b, _c, _d, _e, _f;
     const accentOf = /* @__PURE__ */ new Map();
     for (const q of (_a = state.quests) != null ? _a : []) {
-      accentOf.set(q.id, ACCENTS.has(q.accentColor) ? q.accentColor : "slate");
+      accentOf.set(q.id, ACCENTS2.has(q.accentColor) ? q.accentColor : "slate");
     }
     const focusId = (_c = (_b = state.activeFocus) == null ? void 0 : _b.activeTaskId) != null ? _c : null;
     const toRow = (t) => ({
@@ -3403,7 +3535,8 @@ var HuntCore = (() => {
       look,
       todayKey,
       noData,
-      days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }]
+      days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }],
+      stats: buildWidgetStats(state, todayKey)
     };
   }
   return __toCommonJS(huntCore_exports);

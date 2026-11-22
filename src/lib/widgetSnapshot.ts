@@ -5,6 +5,8 @@ import type { Look } from "./lookPreference";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 import { buildHabitTaskRow } from "./taskQueue";
+import { buildWidgetStats } from "./widgetStats";
+import type { WidgetStatsEntry } from "./widgetStats";
 
 /**
  * Widget Snapshot: the ready-to-draw data the Android Widgets read (ADR-0006).
@@ -47,6 +49,8 @@ export interface WidgetSnapshot {
   noData: boolean;
   /** One entry per date, starting with today. */
   days: WidgetDay[];
+  /** Stats Widget: today's entry, then tomorrow's for the midnight rollover. */
+  stats: WidgetStatsEntry[];
 }
 
 const ACCENTS: ReadonlySet<string> = new Set(QUEST_ACCENT_KEYS);
@@ -96,5 +100,6 @@ export function buildWidgetSnapshot(
     todayKey,
     noData,
     days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }],
+    stats: buildWidgetStats(state, todayKey),
   };
 }
