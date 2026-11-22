@@ -1060,10 +1060,16 @@ public class MainActivity extends Activity {
         StatsWidgetProvider.refreshAll(appContext);
     }
 
-    /** JavaBridge thread: the Pending Tick queue as JSON array text ("[]" when empty). A small file. */
+    /**
+     * JavaBridge thread: the Pending Tick queue as JSON array text ("[]" when empty). A small file.
+     * Day Widget Undo windows that ended while no timer ran (the process was gone) are queued
+     * first; ticks still in their window are not, they arrive when it ends.
+     */
     private String readPendingTicksInternal() {
         File dir = filesDir;
-        return dir == null ? "[]" : PendingTicks.read(dir);
+        if (dir == null) return "[]";
+        if (DayWidgetUndo.commitDue(appContext)) DayWidgetProvider.refreshAll(appContext);
+        return PendingTicks.read(dir);
     }
 
     /**

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A Day Widget row in its Undo window (#9), Neon look: "✓ Done · <title>" and an Undo target.
+    Exactly the task row's height and surface, so ticking never shifts the list. The ✓ sits in
+    the same 48dp column as the tick ring it replaces. Undo is a 48dp-high target at the far end
+    of the row, so it sits across the widget from the next row's tick target (start of its row)
+    and 8dp of list gap below. The rest of the row is not a target: a stray tap near Undo does
+    nothing.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:minHeight="48dp"
+    android:background="@drawable/widget_row_neon"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/widget_row_done"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:paddingStart="14dp"
+        android:text="@string/day_widget_done"
+        android:textColor="@color/widget_neon_success"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_row_done_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:importantForAccessibility="no"
+        android:maxLines="1"
+        android:paddingStart="6dp"
+        android:paddingEnd="8dp"
+        android:textColor="@color/widget_neon_dim"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_row_undo"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minWidth="72dp"
+        android:minHeight="48dp"
+        android:background="@drawable/widget_header_neon"
+        android:contentDescription="@string/day_widget_undo_label"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:letterSpacing="0.14"
+        android:maxLines="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/day_widget_undo"
+        android:textAllCaps="true"
+        android:textColor="@color/widget_neon_accent"
+        android:textSize="13sp" />
+</LinearLayout>

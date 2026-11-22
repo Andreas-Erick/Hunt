@@ -454,6 +454,8 @@ describe("Day Widget (ADR-0006)", () => {
     expect(widgetSources.map((f) => f.name).sort()).toEqual([
       "DayWidgetProvider.java",
       "DayWidgetService.java",
+      "DayWidgetTapActivity.java",
+      "DayWidgetUndo.java",
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
       "WidgetLook.java",
