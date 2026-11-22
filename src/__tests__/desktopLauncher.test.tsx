@@ -5,7 +5,6 @@ import fs from "fs";
 import path from "path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Quest, Task } from "@/lib/domainTypes";
 import { db } from "@/lib/db";
 import { BOOT_SAFETY_TIMEOUT_MS, bootOnce, resetBootOnceForTests } from "@/lib/bootSequence";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -134,6 +133,7 @@ describe("Desktop launch reliability & fullscreen taskbar hiding", () => {
   it("toggles browser fullscreen from TopTelemetryBar and cleans up fullscreenchange listener on unmount", async () => {
     let fsElement: Element | null = null;
     const reqSpy = vi.fn(async function (this: Element) {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- the stub records which element asked for fullscreen
       fsElement = this;
       document.dispatchEvent(new Event("fullscreenchange"));
     });

@@ -1,11 +1,18 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
+  ...nextTs,
   {
     rules: {
       "@next/next/no-page-custom-font": "off",
+      // A leading underscore marks a parameter or binding that is unused on purpose.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
       // eslint-config-next 16 ships eslint-plugin-react-hooks 7, whose recommended set adds
       // the React Compiler rules below. Hunt does not use the React Compiler, so they stay
       // off and the hooks rules match the Next 14 config: rules-of-hooks (error) and

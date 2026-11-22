@@ -1,7 +1,6 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
-  act,
   cleanup,
   fireEvent,
   render,

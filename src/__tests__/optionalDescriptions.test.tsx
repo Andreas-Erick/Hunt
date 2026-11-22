@@ -1,7 +1,6 @@
 // Tasks, habits and quests accept an optional description when they are created.
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Quest, Task } from "@/lib/domainTypes";
 import { db } from "@/lib/db";
 import { useCommandStore } from "@/store/useCommandStore";
 import { CommandCenterView } from "@/components/CommandCenterView";
