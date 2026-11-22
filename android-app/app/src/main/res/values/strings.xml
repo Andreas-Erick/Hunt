@@ -2,7 +2,6 @@
     <string name="app_name">Hunt</string>
     <string name="day_widget_description">Open Tasks for today and the week ahead</string>
     <string name="day_widget_today">Today</string>
-    <string name="day_widget_tomorrow">Tomorrow</string>
     <string name="day_widget_prev">Previous day</string>
     <string name="day_widget_next">Next day</string>
     <string name="day_widget_prev_glyph" translatable="false">&#x2039;</string>

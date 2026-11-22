@@ -1,25 +1,17 @@
 package com.hunt.companion;
 
-import android.app.AlarmManager;
-import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.RemoteViews;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.io.File;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 
 /**
  * Stats Widget (GLOSSARY.md): each Quest's hours over the rolling last 7 days against its weekly
@@ -30,16 +22,16 @@ import java.time.ZonedDateTime;
  * The class name is part of every placed widget: never rename it, or users lose their widgets
  * on update.
  *
- * Size: it shows as many Quest and streak rows as the widget's height allows and counts the rest
- * as "+N more". Redraws: snapshot change ({@link #refreshAll}), APPWIDGET_UPDATE, resize, time or
- * time-zone change, and just after local midnight through an inexact alarm, when it switches to
- * the snapshot's entry for the new day.
+ * Size: it shows as many Quest and streak rows as the widget's height in the current orientation
+ * allows and counts the rest as "+N more". Redraws: snapshot change ({@link #refreshAll}),
+ * APPWIDGET_UPDATE, resize, time or time-zone change, and just after local midnight through an
+ * inexact alarm, when it switches to the snapshot's entry for the new day.
  */
 public class StatsWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "HuntStatsWidget";
     /** Explicit broadcast from the midnight alarm (never exported). */
     static final String ACTION_MIDNIGHT = "com.hunt.companion.action.STATS_WIDGET_MIDNIGHT";
-    private static final int MIDNIGHT_SLACK_MINUTES = 1;
+    /** PendingIntent request codes (kept as released, so placed widgets keep their intents). */
     private static final int OPEN_HUNT_REQUEST = 20;
     private static final int MIDNIGHT_REQUEST = 21;
 
@@ -63,7 +55,7 @@ public class StatsWidgetProvider extends AppWidgetProvider {
 
     /** What the widget can show for the current local date. */
     static final class Stats {
-        String look = "neon";
+        WidgetLook look = WidgetLook.NEON;
         /** No snapshot yet, or the user has nothing in Hunt: "Open Hunt to get started". */
         boolean noData = true;
         /** No stats entry for today (snapshot from an older day or app): "Open Hunt to refresh". */
@@ -76,41 +68,36 @@ public class StatsWidgetProvider extends AppWidgetProvider {
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
         drawAll(ctx, mgr, ids);
-        armMidnightAlarm(ctx);
+        WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
     }
 
     @Override
     public void onAppWidgetOptionsChanged(Context ctx, AppWidgetManager mgr, int id, Bundle options) {
-        mgr.updateAppWidget(id, draw(ctx, readStats(ctx), heightDp(options)));
+        mgr.updateAppWidget(id, draw(ctx, readStats(ctx), heightDp(ctx, options)));
     }
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
         super.onReceive(ctx, intent);
         String action = intent == null ? null : intent.getAction();
-        if (ACTION_MIDNIGHT.equals(action)
-                || Intent.ACTION_TIME_CHANGED.equals(action)
-                || Intent.ACTION_TIMEZONE_CHANGED.equals(action)
-                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
+        if (WidgetSupport.isClockChange(action, ACTION_MIDNIGHT)) {
             refreshAll(ctx);
-            armMidnightAlarm(ctx);
+            WidgetSupport.armMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
         }
     }
 
     @Override
     public void onDisabled(Context ctx) {
-        AlarmManager alarms = ctx.getSystemService(AlarmManager.class);
-        if (alarms != null) alarms.cancel(midnightIntent(ctx));
+        WidgetSupport.cancelMidnightAlarm(ctx, StatsWidgetProvider.class, ACTION_MIDNIGHT, MIDNIGHT_REQUEST);
     }
 
     /** Redraws every placed Stats Widget from the snapshot file. Any thread; no-op when none is placed. */
     static void refreshAll(Context ctx) {
         if (ctx == null) return;
         try {
-            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-            int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, StatsWidgetProvider.class));
-            if (ids == null || ids.length == 0) return;
-            drawAll(ctx, mgr, ids);
+            int[] ids = WidgetSupport.placedIds(ctx, StatsWidgetProvider.class);
+            if (ids.length == 0) return;
+            drawAll(ctx, AppWidgetManager.getInstance(ctx), ids);
         } catch (RuntimeException e) {
             Log.w(TAG, "Stats Widget refresh failed", e);
         }
@@ -118,27 +105,24 @@ public class StatsWidgetProvider extends AppWidgetProvider {
 
     private static void drawAll(Context ctx, AppWidgetManager mgr, int[] ids) {
         Stats stats = readStats(ctx);
-        for (int id : ids) mgr.updateAppWidget(id, draw(ctx, stats, heightDp(mgr.getAppWidgetOptions(id))));
+        for (int id : ids) mgr.updateAppWidget(id, draw(ctx, stats, heightDp(ctx, mgr.getAppWidgetOptions(id))));
     }
 
-    private static int heightDp(Bundle options) {
-        int h = options == null ? 0 : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
-        return h > 0 ? h : DEFAULT_HEIGHT_DP;
+    /** The widget's height in the current orientation ({@link StatsWidgetFit#heightDp}). */
+    private static int heightDp(Context ctx, Bundle options) {
+        int min = options == null ? 0 : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0);
+        int max = options == null ? 0 : options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
+        boolean portrait = ctx.getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+        return StatsWidgetFit.heightDp(min, max, portrait, DEFAULT_HEIGHT_DP);
     }
 
     private static RemoteViews draw(Context ctx, Stats stats, int heightDp) {
-        if (stats.noData || stats.stale) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.messageLayout(stats.look));
-            views.setTextViewText(R.id.widget_message,
-                    ctx.getString(stats.noData ? R.string.day_widget_get_started : R.string.day_widget_refresh));
-            views.setOnClickPendingIntent(R.id.widget_message_root, openHunt(ctx));
-            return views;
-        }
-        RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.statsLayout(stats.look));
+        if (stats.noData || stats.stale) return WidgetSupport.messageViews(ctx, stats.look, stats.noData, OPEN_HUNT_REQUEST);
+        RemoteViews views = new RemoteViews(ctx.getPackageName(), stats.look.statsLayout);
         String focus = StatsWidgetFit.formatFocus(stats.focusSeconds);
         views.setTextViewText(R.id.widget_stats_focus, focus);
         views.setContentDescription(R.id.widget_stats_root, ctx.getString(R.string.stats_widget_open, focus));
-        views.setOnClickPendingIntent(R.id.widget_stats_root, openHunt(ctx));
+        views.setOnClickPendingIntent(R.id.widget_stats_root, WidgetSupport.openHunt(ctx, OPEN_HUNT_REQUEST));
 
         StatsWidgetFit fit = StatsWidgetFit.fit(heightDp, stats.quests.length(), stats.streaks.length());
         views.setViewVisibility(R.id.widget_stats_no_quests, stats.quests.length() == 0 ? View.VISIBLE : View.GONE);
@@ -161,13 +145,13 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         return views;
     }
 
-    private static void drawQuest(Context ctx, RemoteViews views, int i, JSONObject q, String look) {
+    private static void drawQuest(Context ctx, RemoteViews views, int i, JSONObject q, WidgetLook look) {
         boolean met = q.optBoolean("met", false);
-        views.setInt(QUEST_DOTS[i], "setColorFilter", ctx.getColor(WidgetLook.questAccent(look, q.optString("accent"))));
+        views.setInt(QUEST_DOTS[i], "setColorFilter", ctx.getColor(look.questAccent(q.optString("accent"))));
         views.setTextViewText(QUEST_CODES[i], q.optString("code", ""));
         views.setProgressBar(QUEST_BARS[i], 100, Math.max(0, Math.min(100, q.optInt("pct", 0))), false);
         views.setTextViewText(QUEST_HOURS[i], StatsWidgetFit.formatHours(q.optLong("weekSeconds", 0), q.optDouble("targetHours", 0), met));
-        views.setTextColor(QUEST_HOURS[i], ctx.getColor(met ? WidgetLook.success(look) : WidgetLook.text(look)));
+        views.setTextColor(QUEST_HOURS[i], ctx.getColor(met ? look.success : look.text));
     }
 
     private static void showMore(Context ctx, RemoteViews views, int id, int more) {
@@ -175,60 +159,26 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         if (more > 0) views.setTextViewText(id, ctx.getString(R.string.stats_widget_more, more));
     }
 
-    /** Opens Hunt (the whole widget). Immutable. */
-    private static PendingIntent openHunt(Context ctx) {
-        Intent launch = new Intent(ctx, MainActivity.class)
-                .setAction(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        return PendingIntent.getActivity(ctx, OPEN_HUNT_REQUEST, launch,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
-
-    private static PendingIntent midnightIntent(Context ctx) {
-        Intent intent = new Intent(ctx, StatsWidgetProvider.class).setAction(ACTION_MIDNIGHT);
-        return PendingIntent.getBroadcast(ctx, MIDNIGHT_REQUEST, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
-
-    /** Inexact, non-waking alarm just after the next local midnight (replaces any earlier one). */
-    private static void armMidnightAlarm(Context ctx) {
-        AlarmManager alarms = ctx.getSystemService(AlarmManager.class);
-        if (alarms == null) return;
-        ZoneId zone = ZoneId.systemDefault();
-        ZonedDateTime next = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).plusMinutes(MIDNIGHT_SLACK_MINUTES);
-        alarms.set(AlarmManager.RTC, next.toInstant().toEpochMilli(), midnightIntent(ctx));
-    }
-
     /** Reads the snapshot file and picks the stats entry for the current local date. Any thread. */
     static Stats readStats(Context ctx) {
         Stats stats = new Stats();
-        String text;
-        synchronized (HuntFiles.LOCK) {
-            text = HuntFiles.readText(new File(ctx.getFilesDir(), HuntFiles.WIDGET_SNAPSHOT_FILE));
-        }
-        if (text.isEmpty()) return stats;
-        try {
-            JSONObject snap = new JSONObject(text);
-            stats.look = snap.optString("look", "neon");
-            stats.noData = snap.optBoolean("noData", false);
-            String key = LocalDate.now().toString();
-            JSONArray entries = snap.optJSONArray("stats");
-            stats.stale = true;
-            for (int i = 0; entries != null && i < entries.length(); i++) {
-                JSONObject entry = entries.optJSONObject(i);
-                if (entry == null || !key.equals(entry.optString("dateKey"))) continue;
-                stats.focusSeconds = entry.optLong("focusSeconds", 0);
-                JSONArray quests = entry.optJSONArray("quests");
-                JSONArray streaks = entry.optJSONArray("streaks");
-                stats.quests = quests == null ? new JSONArray() : quests;
-                stats.streaks = streaks == null ? new JSONArray() : streaks;
-                stats.stale = false;
-                break;
-            }
-        } catch (JSONException e) {
-            Log.w(TAG, "Unreadable widget snapshot; showing the get-started state until the next save", e);
-            stats.noData = true;
+        WidgetSupport.Snapshot snap = WidgetSupport.readSnapshot(ctx);
+        stats.look = snap.look;
+        stats.noData = snap.noData;
+        if (snap.json == null) return stats;
+        String key = WidgetSupport.localDateKey();
+        JSONArray entries = snap.json.optJSONArray("stats");
+        stats.stale = true;
+        for (int i = 0; entries != null && i < entries.length(); i++) {
+            JSONObject entry = entries.optJSONObject(i);
+            if (entry == null || !key.equals(entry.optString("dateKey"))) continue;
+            stats.focusSeconds = entry.optLong("focusSeconds", 0);
+            JSONArray quests = entry.optJSONArray("quests");
+            JSONArray streaks = entry.optJSONArray("streaks");
+            stats.quests = quests == null ? new JSONArray() : quests;
+            stats.streaks = streaks == null ? new JSONArray() : streaks;
+            stats.stale = false;
+            break;
         }
         return stats;
     }

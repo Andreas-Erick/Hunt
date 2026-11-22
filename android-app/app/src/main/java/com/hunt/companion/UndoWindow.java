@@ -10,8 +10,8 @@ import java.util.Set;
 /**
  * The Day Widget's Undo window (#9) as a plain rule: a tick is held for {@link #WINDOW_MS} after
  * the tap, showing "✓ Done · Undo", and becomes a Pending Tick only when its window ends. Each
- * Task and day has its own window, keyed "dateKey|taskId" with the tap time (epoch ms) as the
- * value. Plain Java, no Android types and no I/O (DayWidgetUndo stores and schedules), so the
+ * Task and day has its own window, keyed {@link TickKeys#taskDay} with the tap time (epoch ms)
+ * as the value. Plain Java, no Android types and no I/O (DayWidgetUndo stores and schedules), so the
  * test suite runs it on the JDK.
  */
 final class UndoWindow {
@@ -19,21 +19,6 @@ final class UndoWindow {
     static final long WINDOW_MS = 4000;
 
     private UndoWindow() {
-    }
-
-    /** The window's key; the date key (YYYY-MM-DD) never holds '|', the Task id may. */
-    static String key(String taskId, String dateKey) {
-        return dateKey + "|" + taskId;
-    }
-
-    static String dateKeyOf(String key) {
-        int bar = key.indexOf('|');
-        return bar < 0 ? "" : key.substring(0, bar);
-    }
-
-    static String taskIdOf(String key) {
-        int bar = key.indexOf('|');
-        return bar < 0 ? key : key.substring(bar + 1);
     }
 
     /**
@@ -56,13 +41,54 @@ final class UndoWindow {
         return due;
     }
 
+    /** Appends one ended window's tick to the Pending Tick queue. */
+    interface Queue {
+        /** True when the tick is settled (queued, or never queueable) and its window may close. */
+        boolean settle(String taskId, String dateKey, long tickedAt);
+    }
+
+    /** What {@link #commit} did: the windows to close, and how many ended ones it had to keep. */
+    static final class Commit {
+        final List<String> closed = new ArrayList<>();
+        int heldBack;
+    }
+
+    /**
+     * Hands every window that has ended at `now` to `queue`, in tap order with its original tap
+     * time. Only a settled tick closes its window; one the queue refused (full, unreadable, a
+     * failed write) stays held, still hidden, and is offered again on the next commit, so no tick
+     * is ever lost.
+     */
+    static Commit commit(Map<String, ?> held, long now, Queue queue) {
+        Commit result = new Commit();
+        for (String key : due(held, now)) {
+            Object v = held.get(key);
+            long tickedAt = v instanceof Long ? (Long) v : now;
+            if (queue.settle(TickKeys.taskIdOf(key), TickKeys.dateKeyOf(key), tickedAt)) result.closed.add(key);
+            else result.heldBack++;
+        }
+        return result;
+    }
+
+    /**
+     * Tasks of `dateKey` the Day Widget's list leaves out: those waiting in the Pending Tick
+     * queue, and those whose window has ended but are not queued yet. Tasks still in their
+     * window stay listed (drawn as "✓ Done · Undo").
+     */
+    static Set<String> hiddenTaskIds(Set<String> queued, Map<String, ?> held, String dateKey, long now) {
+        Set<String> hidden = heldTaskIds(held, dateKey);
+        hidden.removeAll(openTaskIds(held, dateKey, now));
+        hidden.addAll(queued);
+        return hidden;
+    }
+
     /** Tasks of `dateKey` still in their window: drawn as "✓ Done · Undo". */
     static Set<String> openTaskIds(Map<String, ?> held, String dateKey, long now) {
         Set<String> open = new HashSet<>();
         for (Map.Entry<String, ?> e : held.entrySet()) {
             Object v = e.getValue();
-            if (dateKey.equals(dateKeyOf(e.getKey())) && v instanceof Long && !isDue((Long) v, now)) {
-                open.add(taskIdOf(e.getKey()));
+            if (dateKey.equals(TickKeys.dateKeyOf(e.getKey())) && v instanceof Long && !isDue((Long) v, now)) {
+                open.add(TickKeys.taskIdOf(e.getKey()));
             }
         }
         return open;
@@ -72,7 +98,7 @@ final class UndoWindow {
     static Set<String> heldTaskIds(Map<String, ?> held, String dateKey) {
         Set<String> ids = new HashSet<>();
         for (String k : held.keySet()) {
-            if (dateKey.equals(dateKeyOf(k))) ids.add(taskIdOf(k));
+            if (dateKey.equals(TickKeys.dateKeyOf(k))) ids.add(TickKeys.taskIdOf(k));
         }
         return ids;
     }

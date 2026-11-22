@@ -3401,6 +3401,12 @@ var HuntCore = (() => {
       updatedAt: stamp
     };
   }
+  function missingHabitRows(state, dateKey) {
+    var _a, _b, _c;
+    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
+    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
+    return ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
+  }
   function nextStamp(row, now = Date.now()) {
     return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
   }
@@ -3478,6 +3484,9 @@ var HuntCore = (() => {
 
   // src/lib/widgetStats.ts
   var ACCENTS = new Set(QUEST_ACCENT_KEYS);
+  function widgetAccent(accentColor) {
+    return accentColor && ACCENTS.has(accentColor) ? accentColor : "slate";
+  }
   function statsFor(state, dateKey) {
     var _a, _b, _c, _d;
     const quests = (_a = state.quests) != null ? _a : [];
@@ -3490,7 +3499,7 @@ var HuntCore = (() => {
         const p = progress.forQuest(q);
         return {
           code: q.code,
-          accent: ACCENTS.has(q.accentColor) ? q.accentColor : "slate",
+          accent: widgetAccent(q.accentColor),
           weekSeconds: p.weekSeconds,
           targetHours: p.targetHours,
           pct: p.pct,
@@ -3507,25 +3516,18 @@ var HuntCore = (() => {
   // src/lib/widgetSnapshot.ts
   var WIDGET_SNAPSHOT_VERSION = 1;
   var WIDGET_SNAPSHOT_DAYS = 8;
-  var ACCENTS2 = new Set(QUEST_ACCENT_KEYS);
   function futureTasks(state, dateKey) {
     var _a;
     return ((_a = state.tasks) != null ? _a : []).filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey)).sort(compareRank);
   }
   function todayTasks(state, todayKey) {
-    var _a, _b, _c;
-    const tasks = (_a = state.tasks) != null ? _a : [];
-    const known = new Set(tasks.map((t) => t.id));
-    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
-    const synthesized = ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, todayKey))).map((h) => buildHabitTaskRow(h, todayKey));
-    return tasks.concat(synthesized).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    var _a;
+    return ((_a = state.tasks) != null ? _a : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
   }
   function buildWidgetSnapshot(state, todayKey, look) {
     var _a, _b, _c, _d, _e, _f;
     const accentOf = /* @__PURE__ */ new Map();
-    for (const q of (_a = state.quests) != null ? _a : []) {
-      accentOf.set(q.id, ACCENTS2.has(q.accentColor) ? q.accentColor : "slate");
-    }
+    for (const q of (_a = state.quests) != null ? _a : []) accentOf.set(q.id, widgetAccent(q.accentColor));
     const focusId = (_c = (_b = state.activeFocus) == null ? void 0 : _b.activeTaskId) != null ? _c : null;
     const toRow = (t) => ({
       id: t.id,
@@ -3559,10 +3561,8 @@ var HuntCore = (() => {
     return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
   }
   function habitRowFor(state, tick) {
-    var _a, _b;
-    if (((_a = state.deletedTaskIds) != null ? _a : []).includes(tick.taskId)) return null;
-    const habit = ((_b = state.habits) != null ? _b : []).find((h) => habitTaskId(h.id, tick.dateKey) === tick.taskId);
-    return habit ? buildHabitTaskRow(habit, tick.dateKey) : null;
+    var _a;
+    return (_a = missingHabitRows(state, tick.dateKey).find((t) => t.id === tick.taskId)) != null ? _a : null;
   }
   function skipReason(state, task) {
     var _a;
@@ -4337,24 +4337,42 @@ var HuntCore = (() => {
     // The shell removes acknowledged ticks later, on its write thread, so a drain that runs before that
     // (the next tick's signal, a resume) would read them again: they are left out until they are gone.
     // Returns true when the state changed.
+    // This bookkeeping stays in the page: it is wiring between the page and its shell (which acks have
+    // not landed yet), not a Hunt rule. The key matches the shell's TickKeys.ack.
     const ticksAwaitingAck = new Set();
     function pendingTickKey(t) {
       return t && typeof t === "object" ? `${t.taskId}|${t.dateKey}|${Number(t.tickedAt)}` : JSON.stringify(t);
+    }
+    // What the shell reports with the queue: Undo windows it could not queue yet (kept and retried, so
+    // only logged) and a queue it could not read. Unreadable data is a visible event, told once per run.
+    let tickQueueProblemShown = false;
+    function reportTickQueueProblems(read) {
+      if (read.heldBack > 0) recordMobileBreadcrumb("WARN", "widget", "ticks_held_back", { count: read.heldBack });
+      if (!read.unreadable) return;
+      recordMobileBreadcrumb("ERROR", "widget", "ticks_unreadable", { reason: String(read.unreadable), keptAs: String(read.keptAs || "") });
+      if (tickQueueProblemShown) return;
+      tickQueueProblemShown = true;
+      showToast(read.unreadable === "corrupt"
+        ? "Some ticks from the home-screen widget couldn't be read. A copy was kept on this phone; tick those Tasks again in Hunt."
+        : "Hunt couldn't read the home-screen widget's ticks just now. They stay saved, and Hunt tries again next time it opens.",
+        { ms: 8000 });
     }
     function drainPendingTicks() {
       if (!isApkShell()) return false;
       const raw = bridgeCall("readPendingTicks");
       if (!raw) return false;
-      let queued;
+      let read;
       try {
-        queued = JSON.parse(raw);
+        read = JSON.parse(raw);
       } catch (e) {
-        queued = null;
+        read = null;
       }
-      if (!Array.isArray(queued)) {
+      const queued = read && Array.isArray(read.ticks) ? read.ticks : null;
+      if (!queued) {
         recordMobileBreadcrumb("WARN", "widget", "ticks_unreadable", { length: String(raw).length });
         return false;
       }
+      reportTickQueueProblems(read);
       const inQueue = new Set(queued.map(pendingTickKey));
       for (const k of ticksAwaitingAck) if (!inQueue.has(k)) ticksAwaitingAck.delete(k);
       const ticks = queued.filter((t) => !ticksAwaitingAck.has(pendingTickKey(t)));

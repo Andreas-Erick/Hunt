@@ -9,6 +9,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterAll, describe, expect, it } from "vitest";
+import { hasJdk, runJavaProbe } from "./helpers/javaProbe";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const APP = path.join(ROOT, "android-app");
@@ -155,7 +156,7 @@ describe("MainActivity.java: secret hygiene and token storage", () => {
     expect(persist).toMatch(/envelope\s*=\s*encryptToken\(token\)/);
     // An older token finishing its encryption late must never overwrite a newer one.
     expect(persist).toMatch(
-      /synchronized\s*\(FILE_LOCK\)\s*\{\s*if\s*\(\s*!token\.equals\(syncTokenCache\.get\(\)\)\s*\)\s*return;\s*writeConfigFile\(SYNC_TOKEN_FILE,\s*envelope\);/,
+      /synchronized\s*\(HuntFiles\.LOCK\)\s*\{\s*if\s*\(\s*!token\.equals\(syncTokenCache\.get\(\)\)\s*\)\s*return;\s*writeConfigFile\(SYNC_TOKEN_FILE,\s*envelope\);/,
     );
     expect(javaCode.match(/writeConfigFile\(SYNC_TOKEN_FILE,[^)]*\)/g)).toEqual([
       "writeConfigFile(SYNC_TOKEN_FILE, envelope)",
@@ -430,7 +431,9 @@ describe("Day Widget (ADR-0006)", () => {
     .readdirSync(JAVA_DIR)
     .filter((f) => f.endsWith(".java") && f !== "MainActivity.java")
     .map((f) => ({ name: f, code: stripJavaComments(read(path.join(JAVA_DIR, f))) }));
+  // Every widget class: the Widget* files plus the Day Widget's helpers named after what they hold.
   const widgetSources = widgetJava.filter((f) => /Widget/.test(f.name));
+  const widgetHelpers = widgetJava.filter((f) => ["DayNav.java", "DaySelection.java", "SelectedDay.java", "UndoWindow.java", "TickKeys.java"].includes(f.name));
   const widgetLayouts = fs
     .readdirSync(path.join(RES, "layout"))
     .filter((f) => f.startsWith("widget_"))
@@ -459,8 +462,10 @@ describe("Day Widget (ADR-0006)", () => {
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
       "WidgetLook.java",
+      "WidgetSupport.java",
     ]);
-    for (const { name, code } of widgetSources) {
+    expect(widgetHelpers).toHaveLength(5);
+    for (const { name, code } of [...widgetSources, ...widgetHelpers]) {
       expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
       expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
       // The only queue operation a widget may use is appending; reading back is for hiding queued Tasks.
@@ -494,9 +499,9 @@ describe("Day Widget (ADR-0006)", () => {
     const queue = widgetJava.find((f) => f.name === "PendingTicks.java")?.code ?? "";
     // The queue itself announces each new tick, after the write and outside the lock, so whatever
     // widget path appends (direct tap or after an undo window) reaches the page.
-    const append = blockAfter(queue, /static\s+boolean\s+append\([^)]*\)\s*\{/);
+    const append = blockAfter(queue, /static\s+Queued\s+append\([^)]*\)\s*\{/);
     expect(append).toMatch(/notifyTickQueued\(\)/);
-    expect(append.indexOf("notifyTickQueued()")).toBeGreaterThan(append.lastIndexOf("HuntFiles.writeText("));
+    expect(append.indexOf("notifyTickQueued()")).toBeGreaterThan(append.lastIndexOf("synchronized (HuntFiles.LOCK)"));
     const notify = blockAfter(queue, /private\s+static\s+void\s+notifyTickQueued\(\)\s*\{/);
     expect(notify).not.toMatch(/synchronized/);
     // MainActivity listens only while it exists; the signal is gated on a loaded page on the UI thread.
@@ -864,19 +869,10 @@ describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK", () => {
 });
 
 // Day Widget ‹ › navigation (#7): today to today + 6, back to today at local midnight.
-const DAY_PROVIDER_FILE = path.join(path.dirname(JAVA_FILE), "DayWidgetProvider.java");
-const dayProviderCode = stripJavaComments(read(DAY_PROVIDER_FILE));
+const JAVA_DIR_SHELL = path.dirname(JAVA_FILE);
+const dayProviderCode = stripJavaComments(read(path.join(JAVA_DIR_SHELL, "DayWidgetProvider.java")));
+const dayNavCode = stripJavaComments(read(path.join(JAVA_DIR_SHELL, "DayNav.java")));
 const dayLayoutXml = read(path.join(MAIN, "res", "layout", "widget_day_neon.xml"));
-
-/** A package-private `static` field or method (header + body) from DayWidgetProvider.java. */
-function dayProviderMember(name: string): string {
-  const field = new RegExp(`static\\s+final\\s+[\\w\\[\\]]+\\s+${name}\\s*=[^;]*;`).exec(dayProviderCode);
-  if (field) return field[0];
-  const header = new RegExp(`static\\s+[\\w\\[\\]]+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`);
-  const m = header.exec(dayProviderCode);
-  if (!m) throw new Error(`member ${name} not found in DayWidgetProvider.java`);
-  return dayProviderCode.slice(m.index, m.index + m[0].length - 1) + blockAfter(dayProviderCode, header);
-}
 
 describe("Day Widget ‹ › navigation", () => {
   const tagOf = (id: string) => new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(dayLayoutXml)?.[0] ?? "";
@@ -897,20 +893,17 @@ describe("Day Widget ‹ › navigation", () => {
   });
 
   it("the arrows are explicit, immutable broadcasts to the non-exported provider", () => {
-    expect(dayProviderMember("MAX_DAY_OFFSET")).toMatch(/=\s*6\s*;/);
-    expect(dayProviderMember("ACTION_NAV")).toMatch(/"com\.hunt\.companion\.action\.DAY_WIDGET_NAV"/);
     const nav = blockAfter(dayProviderCode, /static\s+PendingIntent\s+navIntent\s*\([^)]*\)\s*\{/);
     expect(nav).toContain("new Intent(ctx, DayWidgetProvider.class)");
     expect(nav).toContain("setAction(ACTION_NAV)");
     expect(nav).toContain("PendingIntent.getBroadcast(");
     expect(nav).toContain("PendingIntent.FLAG_IMMUTABLE");
-    expect(blockAfter(dayProviderCode, /public\s+void\s+onReceive\s*\([^)]*\)\s*\{/)).toContain("ACTION_NAV.equals(action)");
     // Explicit only: no intent filter lets another app send the nav action.
     expect(manifest).not.toContain("DAY_WIDGET_NAV");
   });
 
   it("the selected day lives only in the widget's own private preferences", () => {
-    const prefs = captures(dayProviderCode, /getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g, 1, 2);
+    const prefs = captures(dayNavCode, /getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g, 1, 2);
     expect(prefs.length).toBeGreaterThan(0);
     for (const [name, mode] of prefs) {
       expect(name).toBe("NAV_PREFS");
@@ -919,54 +912,51 @@ describe("Day Widget ‹ › navigation", () => {
   });
 });
 
-/** Reads "<probe>\t<args...>" lines on stdin and prints one result per line. */
-function dayNavProbeSource(): string {
-  return [
-    "import java.time.LocalDate;",
-    "import java.time.format.DateTimeFormatter;",
-    "import java.util.Locale;",
-    "public class DayNavProbe {",
-    ...["MAX_DAY_OFFSET", "SHORT_DAY", "selectedOffset", "viewFor", "shortDayLabel"].map(dayProviderMember),
-    "  public static void main(String[] args) throws Exception {",
-    "    java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, \"UTF-8\"));",
-    "    StringBuilder out = new StringBuilder();",
-    "    for (String line; (line = in.readLine()) != null; ) {",
-    '      String[] p = line.split("\\t", -1);',
-    '      String r = p[0].equals("offset") ? String.valueOf(selectedOffset(p[1].equals("-") ? null : p[1], Integer.parseInt(p[2]), p[3]))',
-    '          : p[0].equals("view") ? viewFor(p[1], p[2])',
-    "          : shortDayLabel(LocalDate.parse(p[1]));",
-    "      out.append(r).append('\\n');",
-    "    }",
-    "    System.out.print(out);",
-    "  }",
-    "}",
-  ].join("\n");
-}
+describe.skipIf(!hasJdk)("Day Widget day selection and labels, run on the JDK", () => {
+  const nothingLeft = /name="day_widget_nothing_left">([^<]*)</.exec(read(path.join(MAIN, "res", "values", "strings.xml")))?.[1] ?? "";
 
-describe.skipIf(!javaExe)("Day Widget navigation helpers, run on the JDK", () => {
-  const cases: Array<[string, string]> = [
-    ["offset\t2026-11-22\t3\t2026-11-22", "3"],
-    ["offset\t2026-11-22\t6\t2026-11-22", "6"],
-    ["offset\t2026-11-22\t7\t2026-11-22", "6"], // stops at today + 6
-    ["offset\t2026-11-22\t-1\t2026-11-22", "0"], // stops at today
-    ["offset\t2026-11-22\t3\t2026-11-23", "0"], // local midnight passed: back to today
-    ["offset\t-\t3\t2026-11-22", "0"], // never navigated
-    ["view\t2026-11-22\t2026-11-22", "today"],
-    ["view\t2026-11-23\t2026-11-22", "future"],
-    ["day\t2026-11-24", "Tue 24"],
-    ["day\t2026-12-01", "Tue 1"],
-  ];
+  it("clamps the selected day to today .. today + 6 and expires it at local midnight", () => {
+    // [savedOn, savedOffset, todayKey] -> offset
+    const cases: Array<[string | null, number, string, string]> = [
+      ["2026-11-22", 3, "2026-11-22", "3"],
+      ["2026-11-22", 6, "2026-11-22", "6"],
+      ["2026-11-22", 7, "2026-11-22", "6"], // stops at today + 6
+      ["2026-11-22", -1, "2026-11-22", "0"], // stops at today
+      ["2026-11-22", 3, "2026-11-23", "0"], // local midnight passed: back to today
+      [null, 3, "2026-11-22", "0"], // never navigated
+    ];
+    const main = cases
+      .map(([on, off, today]) => `System.out.println(DaySelection.selectedOffset(${on ? `"${on}"` : "null"}, ${off}, "${today}"));`)
+      .join("\n");
+    expect(runJavaProbe({ classes: ["DaySelection.java"], main })).toEqual(cases.map((c) => c[3]));
+  }, 60_000);
 
-  it("clamps the selected day, expires it at midnight, picks the view and labels the day", () => {
-    const file = path.join(tmpRoot, "DayNavProbe.java");
-    fs.writeFileSync(file, dayNavProbeSource(), "utf8");
-    const r = spawnSync(javaExe ?? "java", [file], {
-      cwd: tmpRoot,
-      input: cases.map(([line]) => line).join("\n"),
-      encoding: "utf8",
+  it("draws today's view only on the current date, and labels the header Today, Tomorrow, then Tue 24", () => {
+    const lines = runJavaProbe({
+      classes: ["DaySelection.java"],
+      imports: ["java.time.LocalDate"],
+      main: [
+        'System.out.println(DaySelection.viewFor("2026-11-22", "2026-11-22"));',
+        'System.out.println(DaySelection.viewFor("2026-11-23", "2026-11-22"));',
+        'System.out.println(DaySelection.headerLabel(0, LocalDate.parse("2026-11-22")));',
+        'System.out.println(DaySelection.headerLabel(1, LocalDate.parse("2026-11-23")));',
+        'System.out.println(DaySelection.headerLabel(2, LocalDate.parse("2026-11-24")));',
+        'System.out.println(DaySelection.headerLabel(6, LocalDate.parse("2026-12-01")));',
+      ].join("\n"),
     });
-    expect(r.status, r.stderr).toBe(0);
-    expect(r.stdout.trim().split("\n")).toEqual(cases.map(([, want]) => want));
+    expect(lines).toEqual(["today", "future", "Today", "Tomorrow", "Tue 24", "Tue 1"]);
+  }, 60_000);
+
+  it("an empty day reads 'Nothing left for today', '… for tomorrow', then '… for Tue 24'", () => {
+    expect(nothingLeft).toBe("Nothing left for %1$s");
+    const lines = runJavaProbe({
+      classes: ["DaySelection.java"],
+      imports: ["java.time.LocalDate"],
+      main: [0, 1, 2]
+        .map((i) => `System.out.println(String.format("${nothingLeft}", DaySelection.inSentence(${i}, LocalDate.parse("2026-11-2${2 + i}"))));`)
+        .join("\n"),
+    });
+    expect(lines).toEqual(["Nothing left for today", "Nothing left for tomorrow", "Nothing left for Tue 24"]);
   }, 60_000);
 });
 

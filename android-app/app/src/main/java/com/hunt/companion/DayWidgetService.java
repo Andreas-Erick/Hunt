@@ -11,15 +11,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Collections;
-import java.util.Map;
 import java.util.Set;
 
 /**
- * Rows of the Day Widget's list for its selected day, drawn from the Widget Snapshot
- * (ADR-0006). It reads the snapshot (and the Pending Tick queue, to hide queued Tasks) and never
- * writes anything; a tick is handled by DayWidgetProvider. A Task in its Undo window (#9) draws
- * as "✓ Done · Undo" in a row of the same height; one whose window ended but is not queued yet
- * is hidden, like a queued one. The class name is part of the manifest contract.
+ * Rows of the Day Widget's list for its selected day, as {@link SelectedDay} reads them from the
+ * Widget Snapshot (ADR-0006). It only draws and never writes anything. Taps go through the list's
+ * template to {@link DayWidgetTapActivity}: a tickable row's marker ticks it, the row itself opens
+ * Hunt, and a row in its Undo window (#9) draws as "✓ Done · Undo" in a row of the same height,
+ * whose only target is Undo. The class name is part of the manifest contract.
  */
 public class DayWidgetService extends RemoteViewsService {
     @Override
@@ -38,7 +37,7 @@ public class DayWidgetService extends RemoteViewsService {
         /** Tasks of the day in their Undo window, drawn as "✓ Done · Undo". */
         private Set<String> undoable = Collections.emptySet();
         /** The snapshot's look, so every row uses the same look's layout and Quest accents. */
-        private String look = "neon";
+        private WidgetLook look = WidgetLook.NEON;
 
         Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
@@ -52,20 +51,11 @@ public class DayWidgetService extends RemoteViewsService {
         /** Binder thread: after notifyAppWidgetViewDataChanged, re-reads the snapshot and the day. */
         @Override
         public void onDataSetChanged() {
-            DayWidgetProvider.Today today =
-                    DayWidgetProvider.readDay(ctx, DayWidgetProvider.savedOffset(ctx, widgetId));
-            dateKey = today.date.toString();
-            look = today.look;
-            Map<String, ?> held = DayWidgetUndo.held(ctx);
-            undoable = UndoWindow.openTaskIds(held, dateKey, System.currentTimeMillis());
-            Set<String> hidden = UndoWindow.heldTaskIds(held, dateKey);
-            hidden.removeAll(undoable);
-            rows = new JSONArray();
-            if (today.noData || today.stale) return;
-            for (int i = 0; i < today.rows.length(); i++) {
-                JSONObject row = today.rows.optJSONObject(i);
-                if (row != null && !hidden.contains(row.optString("id"))) rows.put(row);
-            }
+            SelectedDay day = SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId));
+            dateKey = day.date.toString();
+            look = day.look;
+            undoable = day.undoable;
+            rows = day.hasList() ? day.rows : new JSONArray();
         }
 
         @Override
@@ -82,12 +72,11 @@ public class DayWidgetService extends RemoteViewsService {
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
             if (row != null && undoable.contains(row.optString("id", ""))) return undoRow(row);
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayRowLayout(look));
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayRowLayout);
             if (row == null) return views;
             String title = row.optString("title", "");
             boolean focus = row.optBoolean("focus", false);
-            boolean tickable = row.optBoolean("tickable", false) && !focus;
-            int accent = ctx.getColor(WidgetLook.questAccent(look, row.optString("accent", "slate")));
+            int accent = ctx.getColor(look.questAccent(row.optString("accent", "slate")));
 
             views.setTextViewText(R.id.widget_row_title, title);
             views.setInt(R.id.widget_row_bar, "setColorFilter", accent);
@@ -102,10 +91,10 @@ public class DayWidgetService extends RemoteViewsService {
 
             views.setContentDescription(R.id.widget_row,
                     ctx.getString(focus ? R.string.day_widget_row_focus : R.string.day_widget_row_open, title));
-            // The row opens Hunt; a tickable row's 48dp marker box ticks it (the list's template
-            // sends both to DayWidgetProvider). The Focus Task has no tick target.
+            // The row opens Hunt; a tickable row's 48dp marker box ticks it. The snapshot never marks
+            // the Focus Task tickable (HuntCore's rule), so it has no tick target.
             views.setOnClickFillInIntent(R.id.widget_row, rowTap(DayWidgetProvider.ROW_OPEN, row));
-            if (tickable) {
+            if (row.optBoolean("tickable", false)) {
                 views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetProvider.ROW_TICK, row));
                 views.setContentDescription(R.id.widget_row_tick, ctx.getString(R.string.day_widget_row_tick, title));
             }
@@ -117,7 +106,7 @@ public class DayWidgetService extends RemoteViewsService {
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayUndoRowLayout(look));
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayUndoRowLayout);
             String title = row.optString("title", "");
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
             views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));
@@ -140,7 +129,7 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public int getViewTypeCount() {
             // Two row kinds (task, Undo) per look; a look change swaps them all.
-            return WidgetLook.COUNT * ROW_KINDS;
+            return WidgetLook.values().length * ROW_KINDS;
         }
 
         @Override

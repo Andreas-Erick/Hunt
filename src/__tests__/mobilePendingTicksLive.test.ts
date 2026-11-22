@@ -48,7 +48,7 @@ class FakeShell {
   }
   read() {
     this.calls.push("readPendingTicks");
-    return JSON.stringify(this.queue);
+    return JSON.stringify({ ticks: this.queue });
   }
   ack(json: string) {
     this.calls.push("ackPendingTicks");

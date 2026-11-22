@@ -3,11 +3,10 @@
 // Static guards for the Stats Widget (GLOSSARY.md, ADR-0006). The Java code cannot run under
 // vitest, so these read the manifest, provider XML, layouts and sources. The Day Widget's own
 // guards (48dp targets for every widget click id, no file writes) live in androidShell.test.ts.
-import { spawnSync } from "child_process";
 import fs from "fs";
-import os from "os";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { hasJdk, runJavaProbe } from "./helpers/javaProbe";
 
 const MAIN = path.resolve(__dirname, "..", "..", "android-app", "app", "src", "main");
 const JAVA_DIR = path.join(MAIN, "java", "com", "hunt", "companion");
@@ -22,6 +21,8 @@ const code = (file: string): string =>
 const manifest = read(MAIN, "AndroidManifest.xml");
 const info = read(RES, "xml", "stats_widget_info.xml");
 const provider = code("StatsWidgetProvider.java");
+/** What both widgets share: the snapshot read, the "Open Hunt" message and the midnight alarm. */
+const support = code("WidgetSupport.java");
 const layout = read(RES, "layout", "widget_stats_neon.xml");
 const strings = read(RES, "values", "strings.xml");
 const attr = (xml: string, name: string): string | undefined =>
@@ -61,8 +62,10 @@ describe("Stats Widget (ADR-0006)", () => {
   it("redraws when resized, when the snapshot changes and just after midnight (inexact alarm)", () => {
     expect(provider).toMatch(/public\s+void\s+onAppWidgetOptionsChanged\(/);
     expect(provider).toMatch(/OPTION_APPWIDGET_MIN_HEIGHT/);
-    expect(provider).toMatch(/alarms\.set\(AlarmManager\.RTC,/);
-    expect(provider).not.toMatch(/setExact|setAlarmClock|RTC_WAKEUP/);
+    expect(provider).toMatch(/OPTION_APPWIDGET_MAX_HEIGHT/);
+    expect(provider).toMatch(/WidgetSupport\.armMidnightAlarm\(ctx, StatsWidgetProvider\.class/);
+    expect(support).toMatch(/alarms\.set\(AlarmManager\.RTC,/);
+    for (const src of [provider, support]) expect(src).not.toMatch(/setExact|setAlarmClock|RTC_WAKEUP/);
     const main = code("MainActivity.java");
     expect(main).toMatch(/StatsWidgetProvider\.refreshAll\(appContext\)/);
   });
@@ -70,14 +73,17 @@ describe("Stats Widget (ADR-0006)", () => {
   it("only reads: never writes a file or the state", () => {
     expect(provider).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
     expect(provider).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
-    expect(provider).toMatch(/HuntFiles\.WIDGET_SNAPSHOT_FILE/);
+    expect(support).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
+    expect(provider).toMatch(/WidgetSupport\.readSnapshot\(/);
+    expect(support).toMatch(/HuntFiles\.WIDGET_SNAPSHOT_FILE/);
   });
 
   it("has copy for every state: no data, stale, no Quests and hidden streaks", () => {
     expect(strings).toMatch(/name="stats_widget_no_quests">Set up a Quest in Hunt</);
     expect(strings).toMatch(/name="stats_widget_more">\+%1\$d more</);
-    expect(provider).toMatch(/R\.string\.day_widget_get_started/);
-    expect(provider).toMatch(/R\.string\.day_widget_refresh/);
+    expect(provider).toMatch(/WidgetSupport\.messageViews\(/);
+    expect(support).toMatch(/R\.string\.day_widget_get_started/);
+    expect(support).toMatch(/R\.string\.day_widget_refresh/);
     expect(attr(tagOf(layout, "widget_stats_no_quests"), "text")).toBe("@string/stats_widget_no_quests");
     expect(provider).toMatch(/R\.id\.widget_stats_no_quests/);
     expect(provider).toMatch(/R\.string\.stats_widget_more/);
@@ -116,39 +122,9 @@ describe("Stats Widget (ADR-0006)", () => {
 
 // StatsWidgetFit is plain Java (no Android imports), so its row budget and number formats run
 // here on the JDK as the real code. Skipped when no JDK 11+ is found (Android Studio bundles one).
-const javaExe = ((): string | null => {
-  const exe = process.platform === "win32" ? "java.exe" : "java";
-  const homes = [
-    process.env.JAVA_HOME,
-    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Android Studio", "jbr"),
-    "C:/Program Files/Android/Android Studio/jbr",
-  ];
-  const found = homes.flatMap((home) => (home ? [path.join(home, "bin", exe)] : [])).filter((p) => fs.existsSync(p));
-  return [...found, "java"].find((java) => spawnSync(java, ["--version"]).status === 0) ?? null;
-})();
+const runFit = (main: string) => runJavaProbe({ classes: ["StatsWidgetFit.java"], main });
 
-/** Runs `main` (Java statements printing lines) against StatsWidgetFit; returns the lines. */
-function runFit(main: string): string[] {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hunt-stats-fit-"));
-  try {
-    const source = read(JAVA_DIR, "StatsWidgetFit.java").replace(/^package [\w.]+;/m, "");
-    const imports = source.match(/^import [\w.]+;$/gm) ?? [];
-    const fit = source.replace(/^import [\w.]+;$/gm, "");
-    const file = path.join(dir, "StatsFitProbe.java");
-    const probe = `${imports.join("\n")}\npublic class StatsFitProbe {\n  public static void main(String[] a) {\n${main}\n  }\n}\n${fit}`;
-    fs.writeFileSync(file, probe, "utf8");
-    const r = spawnSync(javaExe ?? "java", ["-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", file], {
-      cwd: dir,
-      encoding: "utf8",
-    });
-    expect(r.status, r.stderr).toBe(0);
-    return r.stdout.trim().split(/\r?\n/);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-describe.skipIf(!javaExe)("StatsWidgetFit, run on the JDK", () => {
+describe.skipIf(!hasJdk)("StatsWidgetFit, run on the JDK", () => {
   it("shows more streaks at larger sizes and counts the rest as +N more", () => {
     // [height dp, quests, streaks] -> "questRows questsMore streakRows streaksMore"
     const cases: Array<[number, number, number, string]> = [
@@ -169,6 +145,24 @@ describe.skipIf(!javaExe)("StatsWidgetFit, run on the JDK", () => {
       )
       .join("\n");
     expect(runFit(main)).toEqual(cases.map((c) => c[3]));
+  }, 60_000);
+
+  it("fits rows to the portrait height in portrait and the landscape height in landscape", () => {
+    // Launchers report a widget's size as min height (landscape) and max height (portrait).
+    // [minHeight, maxHeight, portrait] -> height dp used
+    const cases: Array<[number, number, boolean, string]> = [
+      [110, 250, true, "250"], // portrait: the taller size, so streak rows fill the widget
+      [110, 250, false, "110"], // landscape: the shorter size, so nothing is clipped
+      [0, 0, true, "110"], // no size reported yet: the provider's default
+      [180, 0, true, "180"], // a launcher that reports only one height
+      [0, 200, false, "200"],
+    ];
+    const main = cases
+      .map(([min, max, portrait]) => `System.out.println(StatsWidgetFit.heightDp(${min}, ${max}, ${portrait}, 110));`)
+      .join("\n");
+    expect(runFit(main)).toEqual(cases.map((c) => c[3]));
+    // A portrait widget 250dp tall shows all 5 streaks; sized by its landscape height it showed none.
+    expect(runFit("{ StatsWidgetFit f = StatsWidgetFit.fit(StatsWidgetFit.heightDp(110, 250, true, 110), 3, 5); System.out.println(f.streakRows + \" \" + f.streaksMore); }")).toEqual(["5 0"]);
   }, 60_000);
 
   it("formats focus time and Quest hours in fixed-width figures", () => {
