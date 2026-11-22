@@ -16,4 +16,11 @@
     <string name="day_widget_row_open">%1$s, open Hunt</string>
     <string name="day_widget_row_tick">Mark %1$s done</string>
     <string name="day_widget_row_focus">%1$s, in Focus, open Hunt</string>
+    <string name="stats_widget_description">Quest hours this week, today\'s focus time and Habit streaks</string>
+    <string name="stats_widget_week">This week</string>
+    <string name="stats_widget_today">today</string>
+    <string name="stats_widget_streaks">Streaks</string>
+    <string name="stats_widget_no_quests">Set up a Quest in Hunt</string>
+    <string name="stats_widget_more">+%1$d more</string>
+    <string name="stats_widget_open">Hunt stats, %1$s of Quest focus today. Open Hunt</string>
 </resources>
