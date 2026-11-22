@@ -4,7 +4,8 @@ import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import QRCode from "qrcode";
-import { db, type Quest, type Task } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Quest, Task } from "@/lib/domainTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import { TopTelemetryBar } from "@/components/TopTelemetryBar";
 import { DesktopWindowControls } from "@/components/DesktopWindowControls";
@@ -86,9 +87,9 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// P32-01: fonts are self-hosted through next/font (no Google request at runtime)
+// fonts are self-hosted through next/font (no Google request at runtime)
 // ---------------------------------------------------------------------------
-describe("root layout fonts (P32-01)", () => {
+describe("root layout fonts", () => {
   it("loads no stylesheet or preconnect from Google and sets both font variables on <html>", async () => {
     const source = fs.readFileSync(path.join(ROOT, "src", "app", "layout.tsx"), "utf8");
     expect(source).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
@@ -122,10 +123,10 @@ describe("root layout fonts (P32-01)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TopTelemetryBar: session pill title (P08-03), nav overflow (P15-01), press states (P14-03)
+// TopTelemetryBar: session pill title, nav overflow, press states
 // ---------------------------------------------------------------------------
 describe("TopTelemetryBar", () => {
-  it("the running-session pill exposes the full task title on hover (P08-03)", async () => {
+  it("the running-session pill exposes the full task title on hover", async () => {
     await db.tasks.add(makeTask("tsk-long", LONG_TITLE));
     useCommandStore.setState({ activeTaskId: "tsk-long" });
     render(<TopTelemetryBar />);
@@ -138,7 +139,7 @@ describe("TopTelemetryBar", () => {
     expect(clipped).not.toHaveClass("md:inline");
   });
 
-  it("the nav shows an edge scroll cue and keeps the active tab scrolled into view (P15-01)", () => {
+  it("the nav shows an edge scroll cue and keeps the active tab scrolled into view", () => {
     const rects = vi
       .spyOn(HTMLElement.prototype, "getBoundingClientRect")
       .mockImplementation(function (this: HTMLElement) {
@@ -171,7 +172,7 @@ describe("TopTelemetryBar", () => {
     }
   });
 
-  it("nav tabs, Phone and sound buttons have a pressed state (P14-03)", () => {
+  it("nav tabs, Phone and sound buttons have a pressed state", () => {
     render(<TopTelemetryBar />);
     expect(screen.getByRole("button", { name: "Plan" })).toHaveClass("active:opacity-80");
     expect(screen.getByRole("button", { name: /^Phone sync:/ })).toHaveClass("active:scale-[0.98]");
@@ -182,7 +183,7 @@ describe("TopTelemetryBar", () => {
 });
 
 // ---------------------------------------------------------------------------
-// DesktopWindowControls: spacing (P12-02) and pressed state (P14-03)
+// DesktopWindowControls: spacing and pressed state
 // ---------------------------------------------------------------------------
 describe("DesktopWindowControls", () => {
   const TOKEN_KEY = "hunt-sync-token-v1";
@@ -200,7 +201,7 @@ describe("DesktopWindowControls", () => {
     }
   });
 
-  it("renders nothing outside the desktop launcher (no pairing key), where the controls cannot work (UI-18)", () => {
+  it("renders nothing outside the desktop launcher (no pairing key), where the controls cannot work", () => {
     window.localStorage.removeItem(TOKEN_KEY);
     render(<DesktopWindowControls />);
     expect(screen.queryByRole("group", { name: "Window controls" })).toBeNull();
@@ -209,12 +210,12 @@ describe("DesktopWindowControls", () => {
 });
 
 // ---------------------------------------------------------------------------
-// MobileSyncModal: QR failure (P08-01), recovery copy (P11-02), local-date filename (P29-01)
+// MobileSyncModal: QR failure, recovery copy, local-date filename
 // ---------------------------------------------------------------------------
 describe("MobileSyncModal", () => {
   const QR_FAILED = "Couldn't draw the QR code. Use Copy to get the pairing link instead.";
 
-  it("a rejected QR render explains the failure instead of loading forever (P08-01)", async () => {
+  it("a rejected QR render explains the failure instead of loading forever", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const failure = new Error("qr overflow");
     vi.spyOn(QRCode, "toString").mockRejectedValue(failure);
@@ -227,7 +228,7 @@ describe("MobileSyncModal", () => {
     expect(errors).toHaveBeenCalledWith("[hunt] qr_render_failed", failure);
   });
 
-  it("QR output that cannot be parsed is a failure too, not a loading state (P08-01)", async () => {
+  it("QR output that cannot be parsed is a failure too, not a loading state", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.spyOn(QRCode, "toString").mockImplementation(async () => "<svg></svg>");
     render(<MobileSyncModal isOpen onClose={() => undefined} />);
@@ -236,7 +237,7 @@ describe("MobileSyncModal", () => {
     expect(screen.queryByText("Generating QR...")).toBeNull();
   });
 
-  it("an invalid snapshot file says how to fix it (P11-02)", async () => {
+  it("an invalid snapshot file says how to fix it", async () => {
     render(<MobileSyncModal isOpen onClose={() => undefined} />);
     const input = screen.getByRole("dialog").querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, {
@@ -249,7 +250,7 @@ describe("MobileSyncModal", () => {
     );
   });
 
-  it("names the exported snapshot with the LOCAL calendar date (P29-01)", async () => {
+  it("names the exported snapshot with the LOCAL calendar date", async () => {
     // 00:30 local on Jan 1: in any zone east of UTC the UTC date is still Dec 31.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(2026, 0, 1, 0, 30, 0));
@@ -276,7 +277,7 @@ describe("MobileSyncModal", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Review scope listbox: keyboard (P10-01 / P16-01), radius (P12-07), titles (P10-06)
+// Review scope listbox: keyboard, radius, titles
 // ---------------------------------------------------------------------------
 describe("Review scope listbox", () => {
   beforeEach(async () => {
@@ -356,7 +357,7 @@ describe("Review scope listbox", () => {
     expect(trigger).toHaveAccessibleName("Filter review scope: Research");
   });
 
-  it("the period chevrons show their label as a tooltip (P10-06)", () => {
+  it("the period chevrons show their label as a tooltip", () => {
     render(<TelemetryDashboardView />);
     for (const name of [/previous/i, /next/i]) {
       const button = screen.getByRole("button", { name });
@@ -366,9 +367,9 @@ describe("Review scope listbox", () => {
 });
 
 // ---------------------------------------------------------------------------
-// P11-04: display headings get tight leading
+// display headings get tight leading
 // ---------------------------------------------------------------------------
-describe("display headings (P11-04)", () => {
+describe("display headings", () => {
   it("Review and Guide h1s set leading-tight", () => {
     const review = render(<TelemetryDashboardView />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveClass("leading-tight");

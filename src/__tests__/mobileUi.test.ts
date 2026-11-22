@@ -1,7 +1,7 @@
 // @vitest-environment node
-// Phone page UX: Undo toasts that cannot be cut short (MUI-03), no silent loss of typed quest edits or
-// New Task drafts (MUI-04), Enter-to-submit (MUI-08), 48 px touch targets (MUI-02), long-title overflow
-// (MUI-05), WCAG AA contrast (MUI-06), the 320 px header (MUI-11), zoom + side safe areas (MUI-12), and
+// Phone page UX: Undo toasts that cannot be cut short, no silent loss of typed quest edits or
+// New Task drafts, Enter-to-submit, 48 px touch targets, long-title overflow
+//, WCAG AA contrast, the 320 px header, zoom + side safe areas, and
 // the browser copy always syncing through its own origin (P01 request).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -163,7 +163,7 @@ function pressKey(p: MobileWindow, el: Element, init: KeyboardEventInit): Keyboa
   return e;
 }
 
-describe("Undo toasts (MUI-03)", () => {
+describe("Undo toasts", () => {
   it("a tap on an Undo toast's message keeps it, and the tombstone stays on the phone until the window ends", async () => {
     const net = recorder(() => jsonResponse(200, okBody()));
     const p = load({ seedState: baseState(), fetchImpl: net.impl });
@@ -240,7 +240,7 @@ const DISMISS: [string, (p: MobileWindow) => void][] = [
   ["the × button", (p) => click(p, p.document.querySelector("#sheetContainer .sheet-close"))],
 ];
 
-describe("unsaved quest edits and New Task drafts (MUI-04)", () => {
+describe("unsaved quest edits and New Task drafts", () => {
   it.each(DISMISS)("Edit Quest changed, then %s: 'Quest edits discarded', and Restore refills the form", (_label, dismiss) => {
     const p = load({ seedState: baseState() });
     p.openQuestEditorSheet("quest-1");
@@ -441,7 +441,7 @@ describe("unsaved quest edits and New Task drafts (MUI-04)", () => {
   });
 });
 
-describe("Enter submits the quest forms (MUI-08)", () => {
+describe("Enter submits the quest forms", () => {
   it("Enter in the New Quest title creates the quest; a blank title creates none", () => {
     const p = load({ seedState: baseState() });
     p.openNewQuestSheet();
@@ -533,7 +533,7 @@ function declPx(css: string, selector: string, prop: string): number {
   return Number(m[1]);
 }
 
-describe("touch targets (MUI-02)", () => {
+describe("touch targets", () => {
   it("--touch-min is 48px and the shared invisible hit area uses it", () => {
     const p = load({ seedState: baseState() });
     expect(p.getComputedStyle(p.document.documentElement).getPropertyValue("--touch-min").trim()).toBe("48px");
@@ -621,7 +621,7 @@ describe("touch targets (MUI-02)", () => {
   });
 });
 
-describe("long unbroken titles (MUI-05)", () => {
+describe("long unbroken titles", () => {
   const LONG = "X".repeat(300);
   function longState() {
     return baseState({
@@ -702,7 +702,7 @@ function contrast(a: Rgba, b: Rgba): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-describe("WCAG AA contrast (MUI-06)", () => {
+describe("WCAG AA contrast", () => {
   it("the contrast helper matches known WCAG values", () => {
     expect(contrast(parseColor("#000000"), parseColor("#ffffff"))).toBeCloseTo(21, 5);
     expect(contrast(parseColor("#777777"), parseColor("#ffffff"))).toBeCloseTo(4.48, 2);
@@ -762,7 +762,7 @@ describe("WCAG AA contrast (MUI-06)", () => {
   });
 });
 
-describe("narrow header (MUI-11)", () => {
+describe("narrow header", () => {
   it("the review button and the live timer never shrink; at <= 340 px the bar and the sync chip give way", () => {
     const p = load({ seedState: baseState() });
     expect(p.getComputedStyle(one(p, "#reviewBtn")).flexShrink).toBe("0");
@@ -773,7 +773,7 @@ describe("narrow header (MUI-11)", () => {
   });
 });
 
-describe("zoom and side safe areas (MUI-12)", () => {
+describe("zoom and side safe areas", () => {
   it("pinch-zoom is allowed; the fixed chrome respects the left/right insets; sheet fields are 16 px", () => {
     const p = load({ seedState: baseState() });
     const viewport = p.document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "";

@@ -24,10 +24,9 @@ import {
   type HabitChanges,
   type QuestChanges,
 } from "@/lib/localStore";
+import { SnapshotFormatError, importAndMergeSnapshotJson } from "@/lib/applySnapshot";
 import {
-  SnapshotFormatError,
   describeSyncError,
-  importAndMergeSnapshotJson,
   httpSyncTransport,
   performServerSync,
   type SyncErrorCode,

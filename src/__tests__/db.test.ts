@@ -1,12 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  db,
-  toLocalDateKey,
-  formatChronoMMSS,
-  formatTacticalDuration,
-  seedInitialDataIfNeeded as seedWithCheck,
-  QUEST_ACCENT_STYLES,
-} from "@/lib/db";
+import { db, seedInitialDataIfNeeded as seedWithCheck } from "@/lib/db";
+import { toLocalDateKey, formatChronoMMSS, formatTacticalDuration } from "@/lib/dateUtils";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
 import { SEED_SERVER_CHECK_TIMEOUT_MS, syncDataExistsElsewhere } from "@/lib/syncEngine";
 import { MAX_ENTITY_ID_LENGTH, isSafeSyncId } from "@/lib/syncTypes";
 
@@ -109,7 +104,7 @@ describe("Database & Formatting Utilities (db.ts)", () => {
       vi.unstubAllGlobals();
     });
 
-    // Spec (P07-01): a starter template, not fabricated history. Review and the
+    // Spec: a starter template, not fabricated history. Review and the
     // heatmap must start empty, and nothing fake may sync to the phone.
     it("seeds 3 quests and queued starter tasks, with no history, on an empty database", async () => {
       await seedInitialDataIfNeeded();

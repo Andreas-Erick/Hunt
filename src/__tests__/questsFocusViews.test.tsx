@@ -9,17 +9,10 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import {
-  db,
-  dateFromKey,
-  dateKeyFromOffset,
-  toLocalDateKey,
-  QUEST_ACCENT_STYLES,
-  type Quest,
-  type QuestAccent,
-  type Task,
-  type TimeLog,
-} from "@/lib/db";
+import { db } from "@/lib/db";
+import { dateFromKey, dateKeyFromOffset, toLocalDateKey } from "@/lib/dateUtils";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
+import type { Quest, QuestAccent, Task, TimeLog } from "@/lib/domainTypes";
 import { MAX_QUEST_TITLE_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import { FocusHudView } from "@/components/FocusHudView";
@@ -191,7 +184,7 @@ function watchForText(texts: readonly string[]) {
 }
 
 /**
- * DIX-04 class contract: a hover-only (opacity-0) control is revealed on
+ * Class contract: a hover-only (opacity-0) control is revealed on
  * keyboard focus, and a field without an outline shows focus another way.
  */
 function expectVisibleFocus(root: HTMLElement) {

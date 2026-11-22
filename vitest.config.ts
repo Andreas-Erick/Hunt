@@ -10,7 +10,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/__tests__/setup.ts"],
     // e2e/ holds the Playwright geometry suite (npm run test:geometry), not vitest tests.
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    exclude: [...configDefaults.exclude, "e2e/**", ".claude/**"],
   },
   resolve: {
     alias: {

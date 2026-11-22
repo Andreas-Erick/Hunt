@@ -14,16 +14,15 @@ import {
   Repeat,
   Trash2,
 } from "lucide-react";
+import { accentStyle } from "@/lib/questAccents";
 import {
-  accentStyle,
   dateFromKey,
   dateKeyFromOffset,
   formatChronoMMSS,
   isMissedHabitTask,
   toLocalDateKey,
-  type Quest,
-  type Task,
-} from "@/lib/db";
+} from "@/lib/dateUtils";
+import type { Quest, Task } from "@/lib/domainTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";

@@ -10,16 +10,10 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import {
-  db,
-  QUEST_ACCENT_STYLES,
-  dateKeyFromOffset,
-  habitTaskId,
-  toLocalDateKey,
-  type Habit,
-  type Quest,
-  type Task,
-} from "@/lib/db";
+import { db } from "@/lib/db";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
+import { dateKeyFromOffset, habitTaskId, toLocalDateKey } from "@/lib/dateUtils";
+import type { Habit, Quest, Task } from "@/lib/domainTypes";
 import {
   SETTLING_COMPLETED_CARD_CLASS,
   reopenDotBgClass,
@@ -145,7 +139,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// P03-03: one hook owns the highlight state, its timer and the unmount cleanup.
+// one hook owns the highlight state, its timer and the unmount cleanup.
 describe("useTransientHighlight", () => {
   it("highlights for the duration, restarts on a new flash and never clears a newer id", () => {
     vi.useFakeTimers();
@@ -189,7 +183,7 @@ describe("useTransientHighlight", () => {
   });
 });
 
-// P13-01: the dimmed Reopen dot of the slate "Other" accent meets 3:1.
+// the dimmed Reopen dot of the slate "Other" accent meets 3:1.
 describe("reopenDotBgClass", () => {
   it("lifts only the slate accent to slate-400", () => {
     expect(reopenDotBgClass(QUEST_ACCENT_STYLES.slate)).toBe("bg-slate-400");
@@ -203,7 +197,6 @@ describe("reopenDotBgClass", () => {
 });
 
 describe("Home (CommandCenterView)", () => {
-  // P07-03
   it("with no active quest, the empty queue points to Quests instead of 'add above'", async () => {
     await seed({ quests: [makeQuest("q-done", "Shipped", { archived: true })] });
     render(<CommandCenterView />);
@@ -229,7 +222,6 @@ describe("Home (CommandCenterView)", () => {
     expect(screen.queryByRole("button", { name: "Go to Quests" })).toBeNull();
   });
 
-  // P10-03
   it("Escape in the notes drawer returns focus to the row's notes toggle", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch")],
@@ -254,7 +246,6 @@ describe("Home (CommandCenterView)", () => {
     expect(bravoToggle).toHaveAttribute("aria-expanded", "false");
   });
 
-  // P16-02
   it("queue rows show grab cursors and their title announces the Alt+Arrow shortcut", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch")],
@@ -272,7 +263,6 @@ describe("Home (CommandCenterView)", () => {
     expect(notes.parentElement).toHaveClass("cursor-auto");
   });
 
-  // P13-01, P11-04, P14-01
   it("resting complete rings use the 3:1 border, the h1 has display leading and the week bar animates a transform", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch")],
@@ -310,7 +300,6 @@ describe("Home (CommandCenterView)", () => {
     expect(fill.style.transform).toBe("translateX(-100%)");
   });
 
-  // P12-06
   it("a settling completed card uses the shared settle surface", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch")],
@@ -343,7 +332,7 @@ describe("Plan the week (PlanWeekView)", () => {
       .filter((r) => (r.dataset.completedRow === "true") === completed)
       .map((r) => r.dataset.taskId);
 
-  // P19-02: one grouped index per render, same columns as before.
+  // one grouped index per render, same columns as before.
   it("puts each task in its day column, split and ordered by rank", async () => {
     const todayKey = toLocalDateKey();
     const tomorrowKey = dateKeyFromOffset(todayKey, 1);
@@ -396,7 +385,6 @@ describe("Plan the week (PlanWeekView)", () => {
     expect(screen.queryByText(/Alt\+Shift\+←\/→ moves a task/)).toBeNull();
   });
 
-  // P12-04, P16-02, P13-01, P11-04, P12-03, P12-06
   it("selector, cards, rings, Reopen dot, heading and settle surface follow the spec", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch")],
@@ -412,7 +400,7 @@ describe("Plan the week (PlanWeekView)", () => {
     await screen.findByRole("button", { name: "Alpha" });
 
     const selector = screen.getByRole("group", { name: "Quest for new tasks" });
-    // UI-19: 8px between quest chips so a near-miss does not switch quest.
+    // 8px between quest chips so a near-miss does not switch quest.
     expect(selector).toHaveClass("gap-2", "p-1", "rounded-2xl", "sm:rounded-full");
     expect(selector).not.toHaveClass("gap-1", "gap-1.5");
 
@@ -445,7 +433,7 @@ describe("Plan the week (PlanWeekView)", () => {
 });
 
 describe("Quests (QuestMatrixPanel)", () => {
-  // P19-01: grouped once per tasks change, same card contents as before.
+  // grouped once per tasks change, same card contents as before.
   it("each card lists only its open tasks in rank order, with the right count", async () => {
     await seed({
       quests: [makeQuest("q-0", "Launch"), makeQuest("q-1", "Write", { slotIndex: 1 })],
@@ -483,7 +471,6 @@ describe("Quests (QuestMatrixPanel)", () => {
     expect(within(card("q-1")).queryByText("First")).toBeNull();
   });
 
-  // P12-03, P14-01, P11-04
   it("Complete and Edit sit 8px apart, the hours bar animates a transform and the h1 has display leading", async () => {
     await seed({ quests: [makeQuest("q-0", "Launch")] });
     render(<QuestMatrixPanel />);
@@ -504,7 +491,7 @@ describe("Quests (QuestMatrixPanel)", () => {
 });
 
 describe("Daily habits (HabitsView)", () => {
-  // P05-03 / P19-04: the indexed habitId read returns exactly the habit tasks.
+  // the indexed habitId read returns exactly the habit tasks.
   it("reads habit tasks through the habitId index and ignores regular tasks", async () => {
     const todayKey = toLocalDateKey();
     const yesterdayKey = dateKeyFromOffset(todayKey, -1);
@@ -541,7 +528,7 @@ describe("Daily habits (HabitsView)", () => {
     expect(filter).not.toHaveBeenCalled();
   });
 
-  // P09-03: the habit editor's dirty guard.
+  // the habit editor's dirty guard.
   it("asks before discarding an edited habit; declining keeps the edits, accepting closes", async () => {
     await seed({ habits: [makeHabit("hab-1", "Stretch")] });
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -575,7 +562,6 @@ describe("Daily habits (HabitsView)", () => {
     expect((await db.habits.get("hab-1"))?.title).toBe("Stretch");
   });
 
-  // P13-01, P12-03, P11-04
   it("the resting ring meets 3:1, the delete trigger has extra clearance and the h1 has display leading", async () => {
     await seed({ habits: [makeHabit("hab-1", "Stretch")] });
     render(<HabitsView />);
@@ -592,7 +578,6 @@ describe("Daily habits (HabitsView)", () => {
   });
 });
 
-// P10-04 (desktop)
 describe("Focus (FocusHudView)", () => {
   it("the session notes field shows the cyan focus border", async () => {
     await seed({

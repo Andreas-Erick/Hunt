@@ -1,7 +1,8 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { db, type Habit, type Quest } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Habit, Quest } from "@/lib/domainTypes";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import HomePage from "@/app/page";
 
@@ -81,9 +82,9 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// P09-01: leaving a view with unsaved form edits asks first (same prompt as Cancel)
+// leaving a view with unsaved form edits asks first (same prompt as Cancel)
 // ---------------------------------------------------------------------------
-describe("view switch discard guard (P09-01)", () => {
+describe("view switch discard guard", () => {
   it("a dirty quest edit drawer asks before a nav tab switches views; declining keeps every edit", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderShellOn("quests");

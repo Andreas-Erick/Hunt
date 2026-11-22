@@ -9,7 +9,7 @@ import {
   minimizeDesktopWindow,
   toggleDesktopFullscreen,
 } from "@/lib/desktopWindow";
-import { getClientSyncToken } from "@/lib/syncEngine";
+import { getClientSyncToken } from "@/lib/syncToken";
 import { useCommandStore } from "@/store/useCommandStore";
 
 interface DesktopWindowControlsProps {

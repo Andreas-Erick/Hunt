@@ -18,16 +18,9 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import {
-  db,
-  dateFromKey,
-  dateKeyFromOffset,
-  toLocalDateKey,
-  type Quest,
-  type QuestAccent,
-  type Task,
-  type TimeLog,
-} from "@/lib/db";
+import { db } from "@/lib/db";
+import { dateFromKey, dateKeyFromOffset, toLocalDateKey } from "@/lib/dateUtils";
+import type { Quest, QuestAccent, Task, TimeLog } from "@/lib/domainTypes";
 import { compareRank, createEmptySyncPayload, mergeSyncPayloads } from "@/lib/syncTypes";
 import { applyMergedPayloadToLocalDB, buildLocalSyncPayload } from "@/lib/syncEngine";
 import { useCommandStore } from "@/store/useCommandStore";

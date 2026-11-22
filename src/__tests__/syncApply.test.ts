@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { db, type Quest, type Task, type TimeLog } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   compareRank,

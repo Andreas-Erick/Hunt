@@ -2751,11 +2751,15 @@ var HuntCore = (() => {
   // src/mobile/huntCore.ts
   var huntCore_exports = {};
   __export(huntCore_exports, {
+    SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
+    TOMBSTONE_KEY: () => TOMBSTONE_KEY,
+    buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
     canonicalString: () => canonicalString,
     compareRank: () => compareRank,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    fromFocusSession: () => fromFocusSession,
     habitTaskId: () => habitTaskId,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -2764,9 +2768,12 @@ var HuntCore = (() => {
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
     nextStamp: () => nextStamp,
+    pickNextFocusTask: () => pickNextFocusTask,
     sameContent: () => sameContent,
     sessionLogId: () => sessionLogId,
-    toLocalDateKey: () => toLocalDateKey
+    toFocusSession: () => toFocusSession,
+    toLocalDateKey: () => toLocalDateKey,
+    transitionFocus: () => transitionFocus
   });
 
   // src/lib/dateUtils.ts
@@ -2926,127 +2933,79 @@ var HuntCore = (() => {
     lime: true
   };
   var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
+  var TOMBSTONE_KEY = {
+    quests: "deletedQuestIds",
+    tasks: "deletedTaskIds",
+    timeLogs: "deletedLogIds",
+    habits: "deletedHabitIds"
+  };
+  var SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY);
+  function mergeRowsById(baseRows, incomingRows, deleted, spec) {
+    var _a;
+    const normalize = (_a = spec.normalize) != null ? _a : (row) => row;
+    const rows = /* @__PURE__ */ new Map();
+    for (const row of baseRows != null ? baseRows : []) {
+      if (!deleted.has(row.id)) rows.set(row.id, normalize(row));
+    }
+    for (const raw of incomingRows != null ? incomingRows : []) {
+      if (deleted.has(raw.id)) continue;
+      const incoming = normalize(raw);
+      const existing = rows.get(raw.id);
+      rows.set(raw.id, existing ? spec.resolve(existing, incoming) : incoming);
+    }
+    return rows;
+  }
   function mergeSyncPayloads(base, incoming) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+    var _a, _b, _c, _d, _e, _f, _g;
     const now = Date.now();
-    const deletedQuestSet = /* @__PURE__ */ new Set([
-      ...(_a = base.deletedQuestIds) != null ? _a : [],
-      ...(_b = incoming.deletedQuestIds) != null ? _b : []
-    ]);
-    const deletedTaskSet = /* @__PURE__ */ new Set([
-      ...(_c = base.deletedTaskIds) != null ? _c : [],
-      ...(_d = incoming.deletedTaskIds) != null ? _d : []
-    ]);
-    const deletedLogSet = /* @__PURE__ */ new Set([
-      ...(_e = base.deletedLogIds) != null ? _e : [],
-      ...(_f = incoming.deletedLogIds) != null ? _f : []
-    ]);
-    const deletedHabitSet = /* @__PURE__ */ new Set([
-      ...(_g = base.deletedHabitIds) != null ? _g : [],
-      ...(_h = incoming.deletedHabitIds) != null ? _h : []
-    ]);
-    const questMap = /* @__PURE__ */ new Map();
-    for (const q of (_i = base.quests) != null ? _i : []) {
-      if (!deletedQuestSet.has(q.id)) {
-        questMap.set(q.id, q);
+    const deleted = {};
+    for (const key of SYNCED_ENTITY_KEYS) {
+      const tombstoneKey = TOMBSTONE_KEY[key];
+      deleted[key] = /* @__PURE__ */ new Set([...(_a = base[tombstoneKey]) != null ? _a : [], ...(_b = incoming[tombstoneKey]) != null ? _b : []]);
+    }
+    const unlinkDeletedQuest = (row) => ({
+      ...row,
+      questId: row.questId && deleted.quests.has(row.questId) ? null : row.questId
+    });
+    const specs = {
+      // R1: newer wins; equal stamps → deterministic content tie-break.
+      quests: {
+        resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+        order: (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
+      },
+      habits: {
+        normalize: unlinkDeletedQuest,
+        resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+        order: compareRank
+      },
+      // R1 on the questId-sanitised rows; the focus counter only grows (max).
+      tasks: {
+        normalize: unlinkDeletedQuest,
+        resolve: (a, b) => ({
+          ...pickRowWinner(a, taskRowStamp(a), b, taskRowStamp(b)),
+          accumulatedSeconds: Math.max(a.accumulatedSeconds || 0, b.accumulatedSeconds || 0)
+        }),
+        order: compareRank
+      },
+      // R2: two versions of one log id → the earlier end wins (deterministic).
+      timeLogs: {
+        resolve: pickLogWinner,
+        order: (a, b) => b.startTime - a.startTime
       }
-    }
-    for (const incQ of (_j = incoming.quests) != null ? _j : []) {
-      if (deletedQuestSet.has(incQ.id)) continue;
-      const existing = questMap.get(incQ.id);
-      if (!existing) {
-        questMap.set(incQ.id, incQ);
-      } else {
-        const existingTs = questOrHabitRowStamp(existing);
-        const incomingTs = questOrHabitRowStamp(incQ);
-        questMap.set(
-          incQ.id,
-          pickRowWinner(existing, existingTs, incQ, incomingTs)
-        );
-      }
-    }
-    const mergedQuests = Array.from(questMap.values()).sort(
-      (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
-    );
-    const habitMap = /* @__PURE__ */ new Map();
-    for (const h of (_k = base.habits) != null ? _k : []) {
-      if (!deletedHabitSet.has(h.id)) {
-        habitMap.set(h.id, {
-          ...h,
-          questId: h.questId && deletedQuestSet.has(h.questId) ? null : h.questId
-        });
-      }
-    }
-    for (const incH of (_l = incoming.habits) != null ? _l : []) {
-      if (deletedHabitSet.has(incH.id)) continue;
-      const existing = habitMap.get(incH.id);
-      const sanitizedInc = {
-        ...incH,
-        questId: incH.questId && deletedQuestSet.has(incH.questId) ? null : incH.questId
-      };
-      if (!existing) {
-        habitMap.set(incH.id, sanitizedInc);
-      } else {
-        const existingTs = questOrHabitRowStamp(existing);
-        const incomingTs = questOrHabitRowStamp(sanitizedInc);
-        habitMap.set(
-          incH.id,
-          pickRowWinner(existing, existingTs, sanitizedInc, incomingTs)
-        );
-      }
-    }
-    const mergedHabits = Array.from(habitMap.values()).sort(compareRank);
-    const taskMap = /* @__PURE__ */ new Map();
-    for (const t of (_m = base.tasks) != null ? _m : []) {
-      if (!deletedTaskSet.has(t.id)) {
-        taskMap.set(t.id, {
-          ...t,
-          questId: t.questId && deletedQuestSet.has(t.questId) ? null : t.questId
-        });
-      }
-    }
-    for (const incT of (_n = incoming.tasks) != null ? _n : []) {
-      if (deletedTaskSet.has(incT.id)) continue;
-      const existing = taskMap.get(incT.id);
-      const sanitizedInc = {
-        ...incT,
-        questId: incT.questId && deletedQuestSet.has(incT.questId) ? null : incT.questId
-      };
-      if (!existing) {
-        taskMap.set(incT.id, sanitizedInc);
-      } else {
-        const existingTs = taskRowStamp(existing);
-        const incomingTs = taskRowStamp(sanitizedInc);
-        const winner = pickRowWinner(existing, existingTs, sanitizedInc, incomingTs);
-        taskMap.set(incT.id, {
-          ...winner,
-          accumulatedSeconds: Math.max(
-            existing.accumulatedSeconds || 0,
-            sanitizedInc.accumulatedSeconds || 0
-          )
-        });
-      }
-    }
-    const logMap = /* @__PURE__ */ new Map();
-    for (const l of (_o = base.timeLogs) != null ? _o : []) {
-      if (!deletedLogSet.has(l.id)) {
-        logMap.set(l.id, l);
-      }
-    }
-    for (const incL of (_p = incoming.timeLogs) != null ? _p : []) {
-      if (deletedLogSet.has(incL.id)) continue;
-      const existing = logMap.get(incL.id);
-      logMap.set(incL.id, existing ? pickLogWinner(existing, incL) : incL);
-    }
-    const mergedLogs = Array.from(logMap.values()).sort(
-      (a, b) => b.startTime - a.startTime
-    );
+    };
+    const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
+    const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+    const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
+    const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
+    const mergedQuests = Array.from(questMap.values()).sort(specs.quests.order);
+    const mergedHabits = Array.from(habitMap.values()).sort(specs.habits.order);
+    const mergedLogs = Array.from(logMap.values()).sort(specs.timeLogs.order);
     const loggedByTask = /* @__PURE__ */ new Map();
     for (const l of mergedLogs) {
       if (!l.taskId) continue;
       loggedByTask.set(
         l.taskId,
-        ((_q = loggedByTask.get(l.taskId)) != null ? _q : 0) + (Number(l.durationSeconds) || 0)
+        ((_c = loggedByTask.get(l.taskId)) != null ? _c : 0) + (Number(l.durationSeconds) || 0)
       );
     }
     loggedByTask.forEach((logged, taskId) => {
@@ -3055,20 +3014,20 @@ var HuntCore = (() => {
         taskMap.set(taskId, { ...t, accumulatedSeconds: logged });
       }
     });
-    const mergedTasks = Array.from(taskMap.values()).sort(compareRank);
-    const baseFocus = (_r = base.activeFocus) != null ? _r : {
+    const mergedTasks = Array.from(taskMap.values()).sort(specs.tasks.order);
+    const baseFocus = (_d = base.activeFocus) != null ? _d : {
       activeTaskId: null,
       isRunning: false,
       sessionStartedAt: null,
       updatedAt: 0
     };
-    const incFocus = (_s = incoming.activeFocus) != null ? _s : {
+    const incFocus = (_e = incoming.activeFocus) != null ? _e : {
       activeTaskId: null,
       isRunning: false,
       sessionStartedAt: null,
       updatedAt: 0
     };
-    let mergedFocus = ((_t = incFocus.updatedAt) != null ? _t : 0) >= ((_u = baseFocus.updatedAt) != null ? _u : 0) ? incFocus : baseFocus;
+    let mergedFocus = ((_f = incFocus.updatedAt) != null ? _f : 0) >= ((_g = baseFocus.updatedAt) != null ? _g : 0) ? incFocus : baseFocus;
     if (mergedFocus.activeTaskId) {
       const activeTask = taskMap.get(mergedFocus.activeTaskId);
       if (!activeTask || activeTask.status === "completed") {
@@ -3088,18 +3047,153 @@ var HuntCore = (() => {
       tasks: mergedTasks,
       timeLogs: mergedLogs,
       habits: mergedHabits,
-      deletedQuestIds: Array.from(deletedQuestSet),
-      deletedTaskIds: Array.from(deletedTaskSet),
-      deletedLogIds: Array.from(deletedLogSet),
-      deletedHabitIds: Array.from(deletedHabitSet),
+      deletedQuestIds: Array.from(deleted.quests),
+      deletedTaskIds: Array.from(deleted.tasks),
+      deletedLogIds: Array.from(deleted.timeLogs),
+      deletedHabitIds: Array.from(deleted.habits),
       activeFocus: mergedFocus,
       lastSyncedAt: now
     };
   }
 
+  // src/lib/domainTypes.ts
+  function toFocusSession(focus) {
+    const updatedAt = typeof focus.updatedAt === "number" && Number.isFinite(focus.updatedAt) && focus.updatedAt >= 0 ? focus.updatedAt : 0;
+    if (!focus.activeTaskId) {
+      return { status: "idle", updatedAt };
+    }
+    if (focus.isRunning && typeof focus.sessionStartedAt === "number" && Number.isFinite(focus.sessionStartedAt) && focus.sessionStartedAt > 0) {
+      return {
+        status: "running",
+        taskId: focus.activeTaskId,
+        sessionStartedAt: focus.sessionStartedAt,
+        updatedAt
+      };
+    }
+    return {
+      status: "paused",
+      taskId: focus.activeTaskId,
+      updatedAt
+    };
+  }
+  function fromFocusSession(session) {
+    switch (session.status) {
+      case "idle":
+        return {
+          activeTaskId: null,
+          isRunning: false,
+          sessionStartedAt: null,
+          updatedAt: session.updatedAt
+        };
+      case "paused":
+        return {
+          activeTaskId: session.taskId,
+          isRunning: false,
+          sessionStartedAt: null,
+          updatedAt: session.updatedAt
+        };
+      case "running":
+        return {
+          activeTaskId: session.taskId,
+          isRunning: true,
+          sessionStartedAt: session.sessionStartedAt,
+          updatedAt: session.updatedAt
+        };
+    }
+  }
+
+  // src/lib/focusSession.ts
+  function nextFocusStamp(session, now) {
+    return Math.max(now, (session.updatedAt || 0) + 1);
+  }
+  function flushIfRunning(session, endAt) {
+    if (session.status !== "running") return [];
+    return [
+      endAt === void 0 ? { kind: "flush", taskId: session.taskId, sessionStartedAt: session.sessionStartedAt } : { kind: "flush", taskId: session.taskId, sessionStartedAt: session.sessionStartedAt, endAt }
+    ];
+  }
+  var UNCHANGED = (session) => ({ session, effects: [] });
+  function transitionFocus(session, event, now) {
+    const stamp = () => nextFocusStamp(session, now);
+    switch (event.type) {
+      case "start": {
+        if (session.status === "running" && session.taskId === event.taskId) {
+          return UNCHANGED(session);
+        }
+        const leaving = session.status !== "idle" && session.taskId !== event.taskId ? [...flushIfRunning(session), { kind: "requeueIfActive", taskId: session.taskId }] : [];
+        return {
+          session: { status: "running", taskId: event.taskId, sessionStartedAt: now, updatedAt: stamp() },
+          effects: [...leaving, { kind: "markActive", taskId: event.taskId }]
+        };
+      }
+      case "leave":
+        if (session.status === "idle") return UNCHANGED(session);
+        return {
+          session: { status: "idle", updatedAt: stamp() },
+          effects: [...flushIfRunning(session), { kind: "requeueIfActive", taskId: session.taskId }]
+        };
+      case "pause":
+        if (session.status !== "running") return UNCHANGED(session);
+        return {
+          session: { status: "paused", taskId: session.taskId, updatedAt: stamp() },
+          effects: flushIfRunning(session)
+        };
+      case "resume":
+        if (session.status !== "paused") return UNCHANGED(session);
+        return {
+          session: { status: "running", taskId: session.taskId, sessionStartedAt: now, updatedAt: stamp() },
+          effects: []
+        };
+      case "stop":
+        return {
+          session: { status: "idle", updatedAt: stamp() },
+          effects: session.status === "idle" ? [] : [...flushIfRunning(session), { kind: "markQueued", taskId: session.taskId }]
+        };
+      case "clear":
+        return { session: { status: "idle", updatedAt: stamp() }, effects: [] };
+      case "remote": {
+        const { remote, timeLogs } = event;
+        if ((remote.updatedAt || 0) <= (session.updatedAt || 0)) return UNCHANGED(session);
+        const remoteSession = toFocusSession(remote);
+        const sameSession = session.status !== "idle" && remote.activeTaskId === session.taskId && remote.sessionStartedAt === (session.status === "running" ? session.sessionStartedAt : null);
+        if (sameSession || session.status === "idle") {
+          return { session: remoteSession, effects: [] };
+        }
+        const endAt = session.status === "running" ? losingSessionEndAt(session.taskId, session.sessionStartedAt, remote, timeLogs, now) : void 0;
+        const effects = [...flushIfRunning(session, endAt)];
+        if (remote.activeTaskId !== session.taskId) {
+          effects.push({ kind: "requeueIfActive", taskId: session.taskId });
+        }
+        return { session: remoteSession, effects };
+      }
+    }
+  }
+
   // src/lib/taskQueue.ts
   function sessionLogId(taskId, sessionStartedAt) {
     return `log-${sessionStartedAt}-${taskId}`;
+  }
+  function burstSeconds(sessionStartedAt, endAt) {
+    return Math.max(1, Math.round((endAt - sessionStartedAt) / 1e3));
+  }
+  function buildBurstLog(task, quest, sessionStartedAt, endAt) {
+    return {
+      id: sessionLogId(task.id, sessionStartedAt),
+      taskId: task.id,
+      taskTitleSnapshot: task.title,
+      questId: task.questId,
+      questCodeSnapshot: quest ? quest.title : "Other",
+      accentColorSnapshot: quest ? quest.accentColor : "slate",
+      startTime: sessionStartedAt,
+      endTime: endAt,
+      durationSeconds: burstSeconds(sessionStartedAt, endAt),
+      dateKey: toLocalDateKey(endAt)
+    };
+  }
+  function pickNextFocusTask(tasks, todayKey) {
+    var _a, _b;
+    const today = tasks.filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    return (_b = (_a = today.find((t) => t.questId !== null)) != null ? _a : today[0]) != null ? _b : null;
   }
   var RANK_STEP = 1e3;
   function buildHabitTaskRow(habit, dateKey) {
@@ -3375,17 +3469,25 @@ var HuntCore = (() => {
       return !!(window.AndroidBridge && window.AndroidBridge.saveState);
     }
 
-    // An unparseable copy is kept under its own key so it can be recovered (stored once, not per launch).
+    // A copy that couldn't be used is kept so it can be recovered (stored once, not per launch): in a file
+    // next to the state file when the Android shell offers one (localStorage usually already holds the same
+    // large state and can be full), else under its own localStorage key. False only when no copy could be
+    // kept; the caller then must not write over the original (persistBlocked).
     function quarantineCorruptState(raw) {
+      if (bridgeCall("saveCorruptState", raw) === true) return true;
       try {
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith("hunt-mobile-corrupt-") && localStorage.getItem(k) === raw) return;
+          if (k && k.startsWith("hunt-mobile-corrupt-") && localStorage.getItem(k) === raw) return true;
         }
         let key = "hunt-mobile-corrupt-" + Date.now();
         while (localStorage.getItem(key) !== null) key += "x";
         localStorage.setItem(key, raw);
-      } catch (e) {}
+        return true;
+      } catch (e) {
+        console.error("[hunt] state.quarantine_failed", JSON.stringify({ bytes: raw.length, error: String((e && e.name) || e) }));
+        return false;
+      }
     }
 
     function readNativeStateRaw() {
@@ -3407,6 +3509,7 @@ var HuntCore = (() => {
     function loadInitialState() {
       const sources = [["native", readNativeStateRaw], ["local", readLocalStateRaw]];
       let unusable = 0;
+      let quarantineFailed = false;
       for (const [name, read] of sources) {
         const raw = read();
         if (!raw) continue;
@@ -3419,17 +3522,17 @@ var HuntCore = (() => {
         if (isPlainRecord(parsed)) {
           const loaded = normalizeLoadedState(parsed);
           if (loaded.dropped) {
-            quarantineCorruptState(raw);
+            if (!quarantineCorruptState(raw)) quarantineFailed = true;
             console.warn("[hunt] state.load.quarantine", JSON.stringify({ source: name, bytes: raw.length, dropped: loaded.dropped }));
           }
-          return { state: loaded.state, raw, source: name };
+          return { state: loaded.state, raw, source: name, unusable, quarantineFailed };
         }
-        quarantineCorruptState(raw);
+        if (!quarantineCorruptState(raw)) quarantineFailed = true;
         console.warn("[hunt] state.load.quarantine", JSON.stringify({ source: name, bytes: raw.length }));
         unusable++;
       }
       if (unusable) console.warn("[hunt] state.load.empty_fallback", JSON.stringify({ unusable }));
-      return { state: getEmptyState(), raw: null, source: "empty" };
+      return { state: getEmptyState(), raw: null, source: "empty", unusable, quarantineFailed };
     }
 
     const initialLoad = loadInitialState();
@@ -3437,6 +3540,9 @@ var HuntCore = (() => {
     // JSON last handed to the stores: persistState() skips all I/O while it is unchanged. Trusted only
     // when it came from this environment's primary store, so a fallback load re-writes both copies.
     let lastPersistedJson = initialLoad.source === (hasNativeStore() ? "native" : "local") ? initialLoad.raw : null;
+    // A copy that couldn't be used could not be set aside either: nothing is written over it until the user
+    // chooses in the recovery sheet (openLoadRecoverySheet), so the original stays recoverable.
+    let persistBlocked = initialLoad.quarantineFailed;
     let lastKeepScreenOn = null;
 
     let activeView = "command";
@@ -3814,6 +3920,7 @@ var HuntCore = (() => {
     function persistState(json) {
       const text = typeof json === "string" ? json : JSON.stringify(state);
       syncKeepScreenOn();
+      if (persistBlocked) return false;
       if (text === lastPersistedJson) return false;
       lastPersistedJson = text;
       bridgeCall("saveState", text);
@@ -3949,18 +4056,18 @@ var HuntCore = (() => {
       if (flushed) raiseCountersToLoggedTotals(tMap, lMap);
       if (report) report.createdLocal = !!(flushed || requeued);
 
-      return {
-        ...base, // keeps base.lastSyncedAt (no stamp: merging identical data yields identical JSON) and unknown fields
-        quests: shared.quests,
-        tasks: Array.from(tMap.values()).sort(compareRank),
-        timeLogs: Array.from(lMap.values()).sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
-        habits: shared.habits.map(h => (h.questId ? h : { ...h, questId: null })),
-        deletedQuestIds: shared.deletedQuestIds,
-        deletedTaskIds: shared.deletedTaskIds,
-        deletedLogIds: shared.deletedLogIds,
-        deletedHabitIds: shared.deletedHabitIds,
-        activeFocus: mf
-      };
+      // Every synced collection and tombstone list comes from the shared merge (the core's own list),
+      // so a collection added there can never silently keep the phone's pre-merge copy.
+      const merged = { ...base }; // keeps base.lastSyncedAt (no stamp: identical data -> identical JSON) and unknown fields
+      for (const key of HuntCore.SYNCED_ENTITY_KEYS) {
+        merged[key] = shared[key];
+        merged[HuntCore.TOMBSTONE_KEY[key]] = shared[HuntCore.TOMBSTONE_KEY[key]];
+      }
+      merged.tasks = Array.from(tMap.values()).sort(compareRank);
+      merged.timeLogs = Array.from(lMap.values()).sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+      merged.habits = shared.habits.map(h => (h.questId ? h : { ...h, questId: null }));
+      merged.activeFocus = mf;
+      return merged;
     }
 
     function isRunningSession(f) {
@@ -3987,21 +4094,10 @@ var HuntCore = (() => {
       const logId = sessionLogId(bf.activeTaskId, bf.sessionStartedAt);
       if (maps.lMap.has(logId) || maps.delLogs.has(logId) || isSessionLogged(maps.lMap, bf)) return false;
       const end = HuntCore.losingSessionEndAt(bf.activeTaskId, bf.sessionStartedAt, mf, Array.from(maps.lMap.values()), now);
-      const secs = Math.max(1, Math.round((end - bf.sessionStartedAt) / 1000));
       const quest = task.questId ? maps.qMap.get(task.questId) : null;
-      maps.lMap.set(logId, {
-        id: logId,
-        taskId: task.id,
-        taskTitleSnapshot: task.title,
-        questId: task.questId,
-        questCodeSnapshot: quest ? quest.title : "Other",
-        accentColorSnapshot: quest ? quest.accentColor : "slate",
-        startTime: bf.sessionStartedAt,
-        endTime: end,
-        durationSeconds: secs,
-        dateKey: toLocalDateKey(end)
-      });
-      maps.tMap.set(task.id, { ...task, accumulatedSeconds: (task.accumulatedSeconds || 0) + secs });
+      const log = HuntCore.buildBurstLog(task, quest, bf.sessionStartedAt, end);
+      maps.lMap.set(logId, log);
+      maps.tMap.set(task.id, { ...task, accumulatedSeconds: (task.accumulatedSeconds || 0) + log.durationSeconds });
       return true;
     }
 
@@ -5153,23 +5249,40 @@ var HuntCore = (() => {
         isSessionLogged(state.timeLogs, af)) return 0;
       const now = Date.now();
       const end = Number.isFinite(endAt) ? endAt : now;
-      const elapsed = Math.max(1, Math.round((end - af.sessionStartedAt) / 1000));
-      task.accumulatedSeconds = (task.accumulatedSeconds || 0) + elapsed;
-      task.updatedAt = nextStamp(task, now);
       const q = state.quests.find(x => x.id === task.questId);
-      state.timeLogs.unshift({
-        id: logId,
-        taskId: task.id,
-        taskTitleSnapshot: task.title,
-        questId: task.questId,
-        questCodeSnapshot: q ? q.title : "Other",
-        accentColorSnapshot: q ? q.accentColor : "slate",
-        startTime: af.sessionStartedAt,
-        endTime: end,
-        durationSeconds: elapsed,
-        dateKey: toLocalDateKey(end)
-      });
-      return elapsed;
+      const log = HuntCore.buildBurstLog(task, q, af.sessionStartedAt, end);
+      task.accumulatedSeconds = (task.accumulatedSeconds || 0) + log.durationSeconds;
+      task.updatedAt = nextStamp(task, now);
+      state.timeLogs.unshift(log);
+      return log.durationSeconds;
+    }
+
+    // Runs one event through the SHARED focus state machine (HuntCore.transitionFocus, the same one the
+    // desktop uses) and applies the local writes it asks for to `state`, in order. Returns the transition.
+    function applyFocusEvent(event, now) {
+      const transition = HuntCore.transitionFocus(HuntCore.toFocusSession(state.activeFocus), event, now);
+      for (const effect of transition.effects) {
+        if (effect.kind === "flush") {
+          flushActiveBurst(effect.endAt, { activeTaskId: effect.taskId, isRunning: true, sessionStartedAt: effect.sessionStartedAt, updatedAt: 0 });
+          continue;
+        }
+        const task = state.tasks.find(t => t.id === effect.taskId);
+        if (!task) continue;
+        if (effect.kind === "requeueIfActive") {
+          if (task.status === "active") setTaskStatus(task, "queued", now);
+        } else if (effect.kind === "markQueued") {
+          setTaskStatus(task, "queued", now);
+        } else if (effect.kind === "markActive") {
+          setTaskStatus(task, "active", now);
+        }
+      }
+      state.activeFocus = HuntCore.fromFocusSession(transition.session);
+      return transition;
+    }
+
+    function setTaskStatus(task, status, now) {
+      task.status = status;
+      task.updatedAt = nextStamp(task, now);
     }
 
     // The Plan the week column a task renders in: its scheduledDate, or today when unscheduled. A dateless
@@ -5216,37 +5329,21 @@ var HuntCore = (() => {
       }
       playLockSound();
       const now = Date.now();
-      const af = state.activeFocus;
-      let endedPrevious = false;
-      if (af && af.activeTaskId && af.activeTaskId !== taskId) {
-        if (af.isRunning && af.sessionStartedAt) flushActiveBurst();
-        const prev = state.tasks.find(t => t.id === af.activeTaskId);
-        if (prev && prev.status === "active") {
-          prev.status = "queued";
-          prev.updatedAt = nextStamp(prev, now);
-        }
-        endedPrevious = true;
-      }
-
       let target = taskId ? state.tasks.find(t => t.id === taskId) : null;
       if (!target) {
+        // No task named: leave the current session first (logged, its task back in the queue), so the
+        // shared "next task" rule can pick it again.
+        const left = state.activeFocus && state.activeFocus.activeTaskId ? applyFocusEvent({ type: "leave" }, now) : null;
         const todayKey = toLocalDateKey(now);
-        const queued = state.tasks.filter(t => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
-        const questTasks = queued.filter(t => t.questId !== null);
-        target = questTasks[0] || queued[0] || state.tasks.find(t => t.status === "queued" && !isMissedHabitTask(t, todayKey));
-      }
-      if (!target) {
-        // The previous session was already flushed: clear it so it cannot be counted twice.
-        if (endedPrevious) {
-          state.activeFocus = emptyFocus(nextStamp(state.activeFocus, now));
-          commitLocalChange();
+        target = HuntCore.pickNextFocusTask(state.tasks, todayKey) ||
+          state.tasks.find(t => t.status === "queued" && !isMissedHabitTask(t, todayKey));
+        if (!target) {
+          if (left) commitLocalChange();
+          return;
         }
-        return;
       }
-
-      target.status = "active";
-      target.updatedAt = nextStamp(target, now);
-      state.activeFocus = { activeTaskId: target.id, isRunning: true, sessionStartedAt: now, updatedAt: nextStamp(state.activeFocus, now) };
+      // "start" ends a session on another task (log + requeue) and marks the target active.
+      applyFocusEvent({ type: "start", taskId: target.id }, now);
       setActiveView("focus");
       commitLocalChange();
     }
@@ -5255,30 +5352,14 @@ var HuntCore = (() => {
       playClickSound();
       const af = state.activeFocus;
       if (!af || !af.activeTaskId) return;
-      const now = Date.now();
-      const fStamp = nextStamp(af, now);
-      if (af.isRunning) {
-        flushActiveBurst();
-        state.activeFocus = { activeTaskId: af.activeTaskId, isRunning: false, sessionStartedAt: null, updatedAt: fStamp };
-      } else {
-        state.activeFocus = { activeTaskId: af.activeTaskId, isRunning: true, sessionStartedAt: now, updatedAt: fStamp };
-      }
+      const running = HuntCore.toFocusSession(af).status === "running";
+      applyFocusEvent({ type: running ? "pause" : "resume" }, Date.now());
       commitLocalChange();
     }
 
     function returnToQueueFromFocus() {
       playClickSound();
-      const af = state.activeFocus;
-      const now = Date.now();
-      if (af && af.activeTaskId) {
-        if (af.isRunning && af.sessionStartedAt) flushActiveBurst();
-        const t = state.tasks.find(x => x.id === af.activeTaskId);
-        if (t && t.status === "active") {
-          t.status = "queued";
-          t.updatedAt = nextStamp(t, now);
-        }
-      }
-      state.activeFocus = emptyFocus(nextStamp(state.activeFocus, now));
+      applyFocusEvent({ type: "leave" }, Date.now());
       setActiveView("command");
       commitLocalChange();
     }
@@ -5295,9 +5376,8 @@ var HuntCore = (() => {
       if (af.isRunning && af.sessionStartedAt) {
         flushActiveBurst();
       } else if ((currentTask.accumulatedSeconds || 0) === 0) {
-        state.activeFocus.sessionStartedAt = now - 1000;
-        state.activeFocus.isRunning = true;
-        flushActiveBurst();
+        // completed without ever running: log one second so the task shows in the done-list
+        flushActiveBurst(now, { ...af, isRunning: true, sessionStartedAt: now - 1000 });
       }
 
       currentTask.status = "completed";
@@ -5305,13 +5385,9 @@ var HuntCore = (() => {
       currentTask.updatedAt = nextStamp(currentTask, now);
       justCompletedTaskId = currentTask.id;
 
-      const todayKey = toLocalDateKey(now);
-      const remaining = state.tasks.filter(t => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
-      const nextQuest = remaining.filter(t => t.questId !== null);
-      const nextTask = nextQuest[0] || remaining[0] || null;
-
-      const fStamp = nextStamp(state.activeFocus, now);
-      state.activeFocus = emptyFocus(fStamp);
+      const nextTask = HuntCore.pickNextFocusTask(state.tasks, toLocalDateKey(now));
+      // the task is done: focus goes idle with no further writes
+      applyFocusEvent({ type: "clear" }, now);
       if (activeView === "focus" && !nextTask) {
         setActiveView("command");
       }
@@ -5928,6 +6004,31 @@ var HuntCore = (() => {
       const closeBtn = sc.querySelector(".sheet-close");
       if (closeBtn && !sc.contains(document.activeElement)) focusQuietly(closeBtn);
       return sc;
+    }
+
+    // Shown at boot when the saved state couldn't be used. Never silent: the app would otherwise look empty.
+    function openLoadRecoverySheet() {
+      const blocked = persistBlocked;
+      const text = blocked
+        ? "Hunt couldn't read the data saved on this phone, and there wasn't room to keep a backup copy. Nothing will be written over it until you choose. Changes you make now are not saved yet."
+        : "Hunt couldn't read the data saved on this phone, so it started empty. A copy of the unreadable data was kept on the phone.";
+      showSheet("loadRecovery", `
+          ${sheetHeaderHtml("Saved data couldn't be loaded")}
+          <p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--text-2);">${text}</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:var(--text-2);">Syncing with your laptop brings back everything it has.</p>
+          <div class="sheet-footer-row">
+            ${blocked ? `<button class="danger-outline-btn" onclick="allowSavingAfterLoadFailure()">Save over it</button>` : "<span></span>"}
+            <button class="pressable" onclick="closeSheet();openSyncSheet();" style="min-height:var(--touch-min);padding:0 18px;border-radius:13px;border:none;background:var(--cyan);color:#05070a;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">Sync from laptop</button>
+          </div>
+      `);
+    }
+
+    function allowSavingAfterLoadFailure() {
+      persistBlocked = false;
+      recordMobileBreadcrumb("WARN", "storage", "persist_unblocked", {});
+      closeSheet();
+      persistState();
+      showToast("Changes on this phone are saved again");
     }
 
     // discardDraftOnClose: × of the New Task sheet drops the unsent text (closeSheet(true)).
@@ -9476,6 +9577,10 @@ var HuntCore = (() => {
     syncKeepScreenOn();
     installLifecycleHooks();
     installUiHooks();
+    if ((initialLoad.source === "empty" && initialLoad.unusable > 0) || persistBlocked) {
+      recordMobileBreadcrumb("ERROR", "storage", "load_failed", { unusable: initialLoad.unusable, persistBlocked });
+      try { openLoadRecoverySheet(); } catch (e) { console.error("[hunt] boot.recovery_sheet_failed", e); }
+    }
     installKeyboardHooks();
     afterFirstPaint(() => scheduleSync(0));
   </script>

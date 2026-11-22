@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Flame, Sparkles } from "lucide-react";
-import type { QuestAccent } from "@/lib/db";
+import type { QuestAccent } from "@/lib/domainTypes";
 import {
   formatTelemetryDuration,
   type ActivityHeatmapReport,

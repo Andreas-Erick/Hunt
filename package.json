@@ -1,7 +1,8 @@
 {
-  "name": "hunt-command-hud",
+  "name": "hunt",
   "version": "1.11.0",
   "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
@@ -10,10 +11,12 @@
     "build": "next build --webpack",
     "build:mobile-core": "node scripts/build-mobile-core.mjs",
     "start": "next start",
-    "lint": "eslint --max-warnings 0 src",
+    "lint": "eslint --max-warnings 0 src e2e scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:geometry": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "prepare": "node scripts/install-hooks.mjs",
     "hunt": "Start-Hunt.bat"
   },
   "dependencies": {

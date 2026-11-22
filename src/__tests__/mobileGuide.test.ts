@@ -79,7 +79,7 @@ describe("mobile Quest & Task Guide", () => {
     expect(p.document.getElementById("mainContainer")?.textContent).toContain("Cap active Quests at 1 to 3");
 
     // A segmented control (role=group + aria-pressed, like the app's other pill groups), not a
-    // half-implemented ARIA tablist (P10-05).
+    // half-implemented ARIA tablist.
     const group = p.document.querySelector('[role="group"][aria-label="Guide sections"]');
     expect(group).not.toBeNull();
     expect(p.document.querySelector('[role="tablist"], [role="tab"]')).toBeNull();
