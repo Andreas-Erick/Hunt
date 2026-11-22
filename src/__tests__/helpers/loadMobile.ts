@@ -58,6 +58,15 @@ export interface AndroidBridgeStub {
   vibrateClick?: () => void;
   getAppVersion?: () => string;
   saveWidgetSnapshot?: (json: string) => void;
+  readPendingTicks?: () => string;
+  ackPendingTicks?: (json: string) => void;
+}
+
+export interface Breadcrumb {
+  level: string;
+  domain: string;
+  event: string;
+  context?: Record<string, unknown>;
 }
 
 export interface FocusShape {
@@ -140,6 +149,7 @@ export interface MobilePageGlobals {
   __huntNetwork(info: { online: boolean }): void;
   __huntBack(): boolean;
   setLook(look: string): void;
+  __huntDiagnostics: { getBreadcrumbs(): Breadcrumb[] };
   __pwned?: unknown;
 }
 

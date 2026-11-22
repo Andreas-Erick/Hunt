@@ -2,7 +2,8 @@
 <!--
     One Day Widget row, Neon look: 48dp marker box (open ring tinted with the Quest accent, or
     ▶ for the Focus Task), accent bar, one-line title (ellipsized), optional Focus/Habit tag.
-    The whole row is one open-Hunt target in this read-only widget; ticking comes later.
+    The marker box is the tick target (48x48dp, not for the Focus Task); the rest of the row
+    opens Hunt. The title starts 8dp after the bar, so the two targets never touch.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_row"
@@ -15,8 +16,12 @@
     android:paddingEnd="12dp">
 
     <FrameLayout
+        android:id="@+id/widget_row_tick"
         android:layout_width="48dp"
-        android:layout_height="48dp">
+        android:layout_height="48dp"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        android:background="@drawable/widget_tick_neon">
 
         <ImageView
             android:id="@+id/widget_row_ring"

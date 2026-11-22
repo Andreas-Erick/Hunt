@@ -37,3 +37,12 @@ on its next start, or at once if it is already running.
 - The task currently in Focus is not tickable from the
   widget, because finishing it would need a TimeLog and a
   Focus transition.
+- The queue is `hunt-pending-ticks.json`, a JSON array of
+  `{taskId, dateKey, tickedAt}`. The page reads it with
+  `readPendingTicks`, applies it with HuntCore's
+  `applyPendingTicks`, saves, then calls `ackPendingTicks`
+  with the ticks it read. The shell removes exactly those,
+  so a tick queued meanwhile survives. While the page
+  cannot save, it acknowledges nothing.
+- A stale tick (Task gone, already done, archived, or in
+  Focus) is skipped and logged, never forced through.

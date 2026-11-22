@@ -2888,6 +2888,7 @@ var HuntCore = (() => {
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
+    applyPendingTicks: () => applyPendingTicks,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
     buildWidgetSnapshot: () => buildWidgetSnapshot,
@@ -3405,6 +3406,46 @@ var HuntCore = (() => {
       noData,
       days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }]
     };
+  }
+
+  // src/lib/pendingTicks.ts
+  var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
+  function isWellFormed(tick) {
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+  }
+  function habitRowFor(state, tick) {
+    var _a, _b;
+    if (((_a = state.deletedTaskIds) != null ? _a : []).includes(tick.taskId)) return null;
+    const habit = ((_b = state.habits) != null ? _b : []).find((h) => habitTaskId(h.id, tick.dateKey) === tick.taskId);
+    return habit ? buildHabitTaskRow(habit, tick.dateKey) : null;
+  }
+  function skipReason(state, task) {
+    var _a;
+    if (task.status === "completed") return "already-done";
+    if (task.status === "archived") return "archived";
+    if (((_a = state.activeFocus) == null ? void 0 : _a.activeTaskId) === task.id) return "in-focus";
+    return null;
+  }
+  function applyPendingTicks(state, ticks) {
+    let tasks = state.tasks;
+    const skipped = [];
+    for (const tick of ticks) {
+      if (!isWellFormed(tick)) {
+        skipped.push({ tick, reason: "missing" });
+        continue;
+      }
+      const existing = tasks.find((t) => t.id === tick.taskId);
+      if (existing) {
+        const reason = skipReason(state, existing);
+        if (reason) skipped.push({ tick, reason });
+        else tasks = tasks.map((t) => t === existing ? completeTaskRow(t, tick.tickedAt) : t);
+        continue;
+      }
+      const created = habitRowFor(state, tick);
+      if (!created) skipped.push({ tick, reason: "missing" });
+      else tasks = [...tasks, completeTaskRow(created, tick.tickedAt)].sort(compareRank);
+    }
+    return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
   }
   return __toCommonJS(huntCore_exports);
 })();
@@ -4142,6 +4183,42 @@ var HuntCore = (() => {
         // A snapshot bug must never break saving: the state is already stored, the widget just stays stale.
         recordMobileBreadcrumb("WARN", "widget", "snapshot_failed", { message: e && e.message });
       }
+    }
+
+    // Pending Ticks (ADR-0006): Tasks ticked done on the Day Widget wait in a queue the shell owns.
+    // Apply them through HuntCore (completion time = the tap), save, log stale ticks, and only then
+    // acknowledge exactly these ticks so the shell keeps any that arrived meanwhile. While saving is
+    // blocked nothing is acknowledged: the ticks stay queued for a start that can save them.
+    // Returns true when the state changed.
+    function drainPendingTicks() {
+      if (!isApkShell()) return false;
+      const raw = bridgeCall("readPendingTicks");
+      if (!raw) return false;
+      let ticks;
+      try {
+        ticks = JSON.parse(raw);
+      } catch (e) {
+        ticks = null;
+      }
+      if (!Array.isArray(ticks)) {
+        recordMobileBreadcrumb("WARN", "widget", "ticks_unreadable", { length: String(raw).length });
+        return false;
+      }
+      if (!ticks.length) return false;
+      const result = HuntCore.applyPendingTicks(state, ticks);
+      const changed = result.state !== state;
+      if (changed) {
+        state = result.state;
+        syncMeta.localRev++;
+        persistState();
+        recordMobileBreadcrumb("INFO", "widget", "ticks_applied", { count: ticks.length - result.skipped.length });
+      }
+      for (const s of result.skipped) {
+        recordMobileBreadcrumb("WARN", "widget", "tick_skipped", { taskId: s.tick && s.tick.taskId, reason: s.reason });
+      }
+      if (persistBlocked) return changed;
+      bridgeCall("ackPendingTicks", JSON.stringify(ticks));
+      return changed;
     }
 
     function syncKeepScreenOn() {
@@ -9863,6 +9940,7 @@ var HuntCore = (() => {
       persistState();
       syncMeta.localRev++;
     }
+    drainPendingTicks(); // widget ticks made while Hunt was closed, applied before the first paint
     publishWidgetSnapshot(); // opening Hunt refreshes the widget even when nothing needed saving
     try {
       renderApp();
