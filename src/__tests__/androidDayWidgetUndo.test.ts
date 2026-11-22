@@ -174,8 +174,10 @@ describe("Day Widget Undo window (#9): boundaries", () => {
       // Undo sits at the end of its row; the next row's tick target sits at the start of its row.
       const ids = [...undoRow.matchAll(/android:id="@\+id\/(\w+)"/g)].map((m) => m[1]);
       expect(ids[ids.length - 1]).toBe("widget_row_undo");
+      // The Done mark (a drawn tick, not a glyph) sits where the row's ring was.
+      expect(undoRow).toMatch(new RegExp(`android:background="@drawable/widget_done_${look}"`));
     }
-    expect(read(RES, "values", "strings.xml")).toMatch(/name="day_widget_done">✓ Done</);
+    expect(read(RES, "values", "strings.xml")).toMatch(/name="day_widget_done">Done</);
   });
 });
 

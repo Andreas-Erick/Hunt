@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focus mark (a rounded play triangle, the app's Start Focus icon); white so the layout tints it per look. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4.5,2.9C4.5,2.13 5.33,1.65 6,2.03L13.2,6.26C13.86,6.65 13.86,7.6 13.2,7.99L6,12.22C5.33,12.6 4.5,12.12 4.5,11.35Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineJoin="round" />
+</vector>

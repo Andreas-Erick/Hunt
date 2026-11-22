@@ -1,31 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    A Day Widget row in its Undo window (#9), Neon look: "✓ Done · <title>" and an Undo target.
-    Exactly the task row's height and surface, so ticking never shifts the list. The ✓ sits in
-    the same 48dp column as the tick ring it replaces. Undo is a 48dp-high target at the far end
-    of the row, so it sits across the widget from the next row's tick target (start of its row)
-    and 8dp of list gap below. The rest of the row is not a target: a stray tap near Undo does
-    nothing.
+    A Day Widget row in its Undo window (#9), Neon look: the Done mark, "Done · <title>" and an
+    Undo target. Exactly the task row's height and card, so ticking never shifts the list; the
+    Done mark sits where the ring was (after the bar's 3dp, in the same 48dp column). Undo is a
+    48dp-high target at the far end of the row, so it sits across the widget from the next row's
+    tick target (start of its row) and 8dp of list gap below. The rest of the row is not a
+    target: a stray tap near Undo does nothing.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_row"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
+    android:layout_height="52dp"
     android:minHeight="48dp"
     android:background="@drawable/widget_row_neon"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:paddingEnd="4dp">
+
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="3dp">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:background="@drawable/widget_done_neon" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/widget_row_done"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
         android:maxLines="1"
-        android:paddingStart="14dp"
+        android:paddingStart="2dp"
         android:text="@string/day_widget_done"
         android:textColor="@color/widget_neon_success"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:id="@+id/widget_row_done_title"
@@ -35,11 +50,12 @@
         android:ellipsize="end"
         android:fontFamily="sans-serif"
         android:importantForAccessibility="no"
+        android:includeFontPadding="false"
         android:maxLines="1"
         android:paddingStart="6dp"
         android:paddingEnd="8dp"
         android:textColor="@color/widget_neon_dim"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:id="@+id/widget_row_undo"
@@ -47,16 +63,17 @@
         android:layout_height="48dp"
         android:minWidth="72dp"
         android:minHeight="48dp"
-        android:background="@drawable/widget_header_neon"
+        android:background="@drawable/widget_undo_neon"
         android:contentDescription="@string/day_widget_undo_label"
         android:fontFamily="sans-serif-medium"
         android:gravity="center"
-        android:letterSpacing="0.14"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.08"
         android:maxLines="1"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
         android:text="@string/day_widget_undo"
         android:textAllCaps="true"
         android:textColor="@color/widget_neon_accent"
-        android:textSize="13sp" />
+        android:textSize="12sp" />
 </LinearLayout>
