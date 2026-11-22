@@ -1,209 +1,214 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/logo/hunt-readme-dark.svg" />
-    <source media="(prefers-color-scheme: light)" srcset="brand/logo/hunt-readme-light.svg" />
-    <img src="brand/logo/hunt-readme-dark.svg" alt="Hunt logo" width="96" height="96" />
+    <source media="(prefers-color-scheme: dark)"
+      srcset="brand/logo/hunt-readme-dark.svg" />
+    <source media="(prefers-color-scheme: light)"
+      srcset="brand/logo/hunt-readme-light.svg" />
+    <img src="brand/logo/hunt-readme-dark.svg"
+      alt="Hunt logo" width="96" />
   </picture>
 </p>
 
 <h1 align="center">Hunt</h1>
 
 <p align="center">
-  <strong>Local-first single-task focus, daily habits, and weekly quest telemetry across Desktop and native Android — synchronized over LAN via a deterministic CRDT merge engine with zero cloud dependency.</strong>
+  Local-first focus timer, daily habits and weekly quests for
+  one person. Runs on a Windows desktop and an Android phone,
+  syncs over your own Wi-Fi, and needs no account or cloud.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml">
-    <img alt="CI" src="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml/badge.svg" />
-  </a>
-  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-0B0C0E?style=flat-square&logo=nextdotjs&logoColor=white" />
-  <img alt="TypeScript 5.7" src="https://img.shields.io/badge/TypeScript-5.7-0B0C0E?style=flat-square&logo=typescript&logoColor=00F0FF" />
-  <img alt="Android API 26-36" src="https://img.shields.io/badge/Android-API%2026--36-0B0C0E?style=flat-square&logo=android&logoColor=00FF9D" />
+  <a href="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Andreas-Erick/Hunt/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-0B0C0E?style=flat-square&logo=nextdotjs" />
+  <img alt="TypeScript 5.9 strict" src="https://img.shields.io/badge/TypeScript-5.9%20strict-0B0C0E?style=flat-square&logo=typescript" />
+  <img alt="Android min 26, target 34" src="https://img.shields.io/badge/Android-min%2026%20%C2%B7%20target%2034-0B0C0E?style=flat-square&logo=android" />
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0B0C0E?style=flat-square" />
 </p>
 
----
+![Hunt desktop: today's queue and done-list](docs/screenshots/desktop-home.png)
 
-## Overview
+<p align="center">
+  <img src="docs/screenshots/mobile-today.png"
+    alt="Android: today" width="48%" />
+  <img src="docs/screenshots/mobile-habits.png"
+    alt="Android: habits" width="48%" />
+</p>
 
-Hunt is built for deep-work practitioners who want calm, single-task execution instead of crowded Kanban boards or cloud-tethered SaaS subscriptions. You define up to three active **Quests** with weekly hour targets, schedule **Tasks** and recurring **Daily Habits**, lock into a distraction-free **Focus** timer, and review real **Done-List Telemetry** across your week.
+<details>
+<summary><b>More screenshots</b></summary>
 
-All data lives locally on your devices — IndexedDB (Dexie) on desktop and atomic JSON files on Android — and converges automatically over your local Wi-Fi or Tailscale network through an authenticated `/api/sync` merge server.
+![Focus mode](docs/screenshots/desktop-focus.png)
+![Habits](docs/screenshots/desktop-habits.png)
+![Weekly review](docs/screenshots/desktop-review.png)
 
-### Desktop Interface
+<img src="docs/screenshots/mobile-review.png"
+  alt="Android: weekly review" width="48%" />
 
-| Today & Done-List Timeline | Distraction-Free Focus Mode |
-| :---: | :---: |
-| ![Hunt Desktop Home](docs/screenshots/desktop-home.png) | ![Hunt Desktop Focus](docs/screenshots/desktop-focus.png) |
+</details>
 
-| Daily Habits & Consistency | Weekly Review Telemetry |
-| :---: | :---: |
-| ![Hunt Desktop Habits](docs/screenshots/desktop-habits.png) | ![Hunt Desktop Review](docs/screenshots/desktop-review.png) |
+## What it does
 
-### Android Companion (`Pixel 9 Pro XL`)
+You pick up to three **quests** with weekly hour targets,
+queue **tasks** and daily **habits** under them, work on one
+task at a time in **Focus**, and see where the hours went in
+**Review** (day to year, plus an activity heatmap).
 
-| Today Queue & Spotlight | Daily Habits & Streaks | Weekly Review Telemetry |
-| :---: | :---: | :---: |
-| <img src="docs/screenshots/mobile-today.png" alt="Hunt Android Today" width="240" /> | <img src="docs/screenshots/mobile-habits.png" alt="Hunt Android Habits" width="240" /> | <img src="docs/screenshots/mobile-review.png" alt="Hunt Android Review" width="240" /> |
+The desktop app keeps its data in IndexedDB. The phone keeps
+an atomic JSON file through its Android shell. When both are
+on the same network (or Tailscale), they converge through a
+small sync server that runs inside the desktop app.
 
----
+## Goals
 
-## System Architecture
+- **One person, several devices, no account.**
+- **Offline first.** Every device works on its own; sync
+  only converges state and is never needed to use the app.
+- **Merges can't depend on order.** The merge is
+  commutative, associative and idempotent, checked by a
+  400-seed property test.
+- **Never overwrite data that can't be read.** The server
+  and the phone keep a copy of an unreadable file before
+  anything replaces it, and the server returns HTTP 507
+  rather than merge over files it can't read at all.
+- **Touch-first.** 44px targets on touch screens; layout is
+  tested in a real browser from 360px to 2560px wide.
+
+## Non-goals
+
+- Multiple users, sharing, or permissions.
+- Cloud hosting or sync over the public internet
+  (use Tailscale for remote access).
+- Real-time co-editing or character-level merges.
+- iOS, or Play Store distribution.
+
+## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph Desktop["Desktop App (Next.js 16 + React 19)"]
-        UI["Views: Home · Habits · Plan · Quests · Focus · Review · Guide"]
-        Store["Zustand Store + Dexie IndexedDB v3"]
-        DiagD["Structured Diagnostics & Breadcrumb Ring Buffer"]
-        UI <--> Store
-        Store --> DiagD
-    end
-
-    subgraph Server["Local LAN Sync Server (/api/sync)"]
-        Auth["Timing-Safe X-Hunt-Token Auth + Streaming 16 MB Cap"]
-        CRDT["Deterministic LWW CRDT Merge + Tombstone Sets"]
-        Disk["Atomic Temp-Rename + 14-Day Backup Rotation"]
-        Auth --> CRDT --> Disk
-    end
-
-    subgraph Android["Native Android Companion (API 26–36)"]
-        Shell["MainActivity.java (Safe-Area FrameLayout + Zero-Shift IME Shell)"]
-        Keystore["AndroidKeyStore AES-256-GCM Token Vault"]
-        Web["Single-File HTML WebView (assets/hunt-mobile.html)"]
-        Shell <--> Web
-        Shell <--> Keystore
-    end
-
-    Store <-->|"Same-origin HTTP POST (localhost) + X-Hunt-Correlation-Id"| Auth
-    Shell <-->|"LAN/Tailscale HTTP + X-Hunt-Token (HttpURLConnection + Backoff)"| Auth
+flowchart TB
+  V[Desktop views] --> S[Zustand store]
+  S --> C[Domain core]
+  S --> D[(IndexedDB)]
+  S <--> H["/api/sync hub"]
+  P[Android WebView] <--> H
+  C -. bundled .-> P
 ```
 
-### Engineering Highlights
+These dependency rules are enforced by
+[`architectureTopology.test.ts`](src/__tests__/architectureTopology.test.ts):
 
-- **Clock-Independent CRDT Sync & Crash-Safe Storage:** [`src/lib/syncTypes.ts`](src/lib/syncTypes.ts) and [`src/app/api/sync/route.ts`](src/app/api/sync/route.ts) implement a commutative, associative, idempotent last-write-wins merge over quests, tasks, habits, time logs, and bounded tombstone sets — verified across 400-seed property tests in [`syncProperties.test.ts`](src/__tests__/syncProperties.test.ts). Open and completed tasks, habits, quests, and focus logs support safe deletion (two-step confirm on desktop; 5-second Undo hold pill on Android) with deterministic cross-device tombstone convergence. Writes use temp-file + atomic rename with automatic rollback recovery across main, backup, and 14-day snapshots.
-- **Deterministic Offline Daily Habits:** Daily habits materialize into per-day tasks using deterministic IDs (`habtsk-<YYYY-MM-DD>-<habitId>`), allowing laptop and phone to materialize identical tasks independently offline and converge without duplicate rows upon reconnect.
-- **Multi-Horizon Review Telemetry & Activity Heatmap:** [`src/lib/reviewAnalytics.ts`](src/lib/reviewAnalytics.ts), [`TelemetryDashboardView.tsx`](src/components/TelemetryDashboardView.tsx), and the Android Review view provide DST-safe analytics across **Day, Week, Month, Quarter, and Year** horizons — counting both **focus hours** and **completed tasks** (split by regular steps vs. daily habits), session bout duration, active-day consistency, Quest "X" drill-down filtering, and a Monday–Sunday **Activity Heatmap** with streak and peak-rhythm insights.
-- **Zero-Gradle Direct Android Build & Zero-Shift Mobile UX:** [`android-app/build-apk.sh`](android-app/build-apk.sh) compiles and signs the Android companion directly with `aapt2`, `javac`, `d8`, `zipalign`, and `apksigner` (verifying the pinned signing certificate and scanning for leaked secrets). [`MainActivity.java`](android-app/app/src/main/java/com/hunt/companion/MainActivity.java) stores pairing tokens exclusively in AndroidKeyStore AES-256-GCM envelopes, locks WebView navigation to an explicit origin allowlist, and pairs `SOFT_INPUT_ADJUST_NOTHING` inside a safe-area-padded `FrameLayout` with top-anchored floating composer sheets, a spacious 5-tab navigation bar (**Today · Plan · Focus · Quests · Habits**) + 1-tap **Review** header access, and compact bottom-anchored confirmation/Undo capsules.
-- **Structured Observability & Root-Cause Diagnostics:** [`src/lib/diagnostics.ts`](src/lib/diagnostics.ts) propagates `X-Hunt-Correlation-Id` end-to-end across desktop, `/api/sync`, and mobile, records `durationMs` I/O telemetry, maintains bounded circular breadcrumb flight recorders, wires global unhandled fault traps (`error` / `unhandledrejection`), and recursively redacts bearer tokens and 64-hex keys (`[REDACTED]`).
-- **Adversarial Security & Chaos Test Suite:** 1,250+ Vitest tests exercise boundary inputs, XSS/prototype-pollution/timing-safe auth pentesting ([`syncRouteSecurity.test.ts`](src/__tests__/syncRouteSecurity.test.ts), [`mobileSecurity.test.ts`](src/__tests__/mobileSecurity.test.ts)), 300-seed payload sanitizer fuzzing, 400-step random store fuzzing, 150-step mobile delete/Undo/sync chaos fuzzing, 100-seed multi-horizon telemetry property checks, Europe/Berlin DST rollover fuzzing, architectural DAG topology & intrinsic fluid layout audits, WCAG AA contrast ratios, and JDK compilation of `MainActivity.java` helpers.
+- No import cycles, including type-only imports.
+- Domain modules (`syncTypes`, `focusSession`,
+  `reviewAnalytics`, `habitDay`, …) never import React,
+  Dexie or the store.
+- Views never import the database module. Reads go
+  through `lib/reads.ts`, writes through the store.
 
----
+The phone doesn't reimplement the rules. The same
+TypeScript (merge, focus state machine, burst logs, habit
+rows) is bundled into it by
+[`build-mobile-core.mjs`](scripts/build-mobile-core.mjs).
+One test fails if that copy is stale, and another drives the
+phone's focus buttons against the desktop modules step by
+step.
 
-## Project Structure
+<details>
+<summary><b>Where things live</b></summary>
 
-```text
-.
-├── src/
-│   ├── app/
-│   │   ├── api/sync/route.ts       # Authenticated CRDT merge API + atomic backup store
-│   │   ├── layout.tsx              # Root shell, typography, icons & 100dvh layout
-│   │   └── page.tsx                # View router, boot pipeline & global fault traps
-│   ├── components/                 # Home, Habits, Plan, Quests, Focus, Review, Heatmap, Guide & Sync UI
-│   ├── lib/
-│   │   ├── db.ts                   # Dexie IndexedDB v3 schema, DST-safe dates & formatters
-│   │   ├── diagnostics.ts          # Structured logging, redaction, breadcrumbs & fault traps
-│   │   ├── hudAudio.ts             # Silent-by-default audio state & context lifecycle
-│   │   ├── reviewAnalytics.ts      # Multi-horizon focus/task telemetry & activity heatmap engine
-│   │   ├── syncEngine.ts           # Client diff-apply, AbortController timeout & tombstones
-│   │   ├── syncTypes.ts            # Strict runtime schema validators & LWW CRDT merge
-│   │   └── taskCompletionMotion.ts # Two-beat Things 3 / Linear task completion choreography
-│   ├── store/useCommandStore.ts    # Zustand state machine, focus sessions & habit engine
-│   └── __tests__/                  # Vitest unit, property, fuzz & security suites
-├── public/
-│   └── hunt-mobile.html            # Self-contained mobile web & Android WebView UI
-├── android-app/
-│   ├── build-apk.sh                # Direct aapt2/javac/d8/apksigner APK build + verification
-│   └── app/src/main/
-│       ├── AndroidManifest.xml     # Least-privilege permissions & backup exclusion rules
-│       ├── assets/hunt-mobile.html # Byte-identical mirror verified by mobileMirror.test.ts
-│       └── java/com/hunt/companion/MainActivity.java
-├── .github/workflows/
-│   ├── ci.yml                      # Vitest, tsc, ESLint & Next.js build verification
-│   └── release.yml                 # Builds & publishes Windows .exe/.zip + Android .apk
-├── installer/hunt-desktop.iss      # Inno Setup script for Hunt-Desktop-Setup.exe
-├── docs/screenshots/               # Desktop & Pixel 9 Pro XL app screenshots
-├── brand/logo/                     # Vector logo marks and icon assets
-├── Start-Hunt.bat                  # Windows standalone app-mode launcher
-├── Start-Server.bat                # Production/dev server bootstrapper
-└── .env.example                    # Optional runtime environment variables
-```
+- `src/lib/` — domain core, sync contract, analytics
+- `src/store/` — Zustand store and habit engine
+- `src/components/` — desktop views
+- `src/app/api/sync/` — sync hub, atomic file, backups
+- `src/mobile/` — entry point of the phone bundle
+- `public/hunt-mobile.html` — the phone app (one file)
+- `android-app/` — WebView shell and APK build script
+- `e2e/` — Playwright layout tests, 360–2560px
+- `installer/` — Inno Setup script for Windows
+- `docs/adr/` — design decisions
 
----
+</details>
+
+## Design decisions
+
+| ADR | Decision | Trade-off |
+| --- | --- | --- |
+| [0001](docs/adr/0001-row-level-lww-merge.md) | Row-level LWW merge | Clock skew picks winners |
+| [0002](docs/adr/0002-laptop-as-sync-hub.md) | Laptop is the hub | No sync while it's off |
+| [0003](docs/adr/0003-single-file-phone-app.md) | One-file phone app | Types stop at HuntCore |
+| [0004](docs/adr/0004-direct-apk-build.md) | No-Gradle signed APK | Custom build script |
 
 ## Quickstart
 
-### Prerequisites
-
-- **Node.js** 22+ and **npm** (CI and the release installer use the version pinned in [`.nvmrc`](.nvmrc))
-- *(Optional, for Android APK builds)* **JDK 11+** and **Android SDK** (`build-tools` + `platforms` + `adb`)
-
-### Installation
+Needs Node 22 or newer (CI uses the version in `.nvmrc`).
 
 ```bash
 git clone https://github.com/Andreas-Erick/Hunt.git
 cd Hunt
-npm install
+npm ci
+npm run dev        # http://localhost:3000
 ```
 
-*(Optional)* Copy `.env.example` to `.env.local` if you want to customize `HUNT_DATA_DIR` or `LOG_LEVEL`.
+On Windows, `Start-Hunt.bat` opens Hunt in its own app
+window. Optional settings (`HUNT_DATA_DIR`, `LOG_LEVEL`) are
+listed in [`.env.example`](.env.example).
 
-### Running Locally
-
-**Development mode:**
+## Checks
 
 ```bash
-npm run dev
+npm run check          # lint, types, tests, build
+npm run test:geometry  # Playwright, 360–2560px
 ```
 
-**Production build & server:**
+`check` runs the same steps as CI's `verify` job, and CI
+runs the geometry suite as a second job. The 1,250+ Vitest
+tests are hermetic: virtual clocks, seeded random inputs,
+`fake-indexeddb`, and temp directories.
+
+<details>
+<summary><b>Building the Android app</b></summary>
+
+Needs a JDK and the Android SDK. Releases are signed with a
+key kept in CI secrets, so a local build uses your own key:
 
 ```bash
-npm run build
-npm run start
+keytool -genkeypair -keystore my.jks -alias hunt \
+  -keyalg RSA -keysize 2048 -validity 10000
+
+KEYSTORE=my.jks KEY_ALIAS=hunt KS_PASS=yourpass \
+EXPECTED_CERT_SHA256=skip \
+bash android-app/build-apk.sh ./android-app ./Hunt.apk
+
+adb install -r ./Hunt.apk
 ```
 
-Open `http://localhost:3000` in your browser. On Windows, you can also run `Start-Hunt.bat` to launch Hunt in a standalone desktop app window.
+An APK signed with a different key can't update an existing
+install. Android makes you uninstall first, which deletes
+the phone's data. See
+[ADR-0004](docs/adr/0004-direct-apk-build.md).
 
-### Running Tests, Lint & Typechecking
+To pair, open **Phone & Sync** on the desktop and scan the
+QR code. To revoke a phone, delete `data/hunt-sync.key`. A
+new key is created on the next request, and the old one
+stops working at once.
 
-These are the same gates CI runs:
+</details>
 
-```bash
-npm run lint
-npm run typecheck
-npm test
-```
+<details>
+<summary><b>Releases</b></summary>
 
-All test suites are deterministic and hermetic (virtual clocks, seeded PRNGs, `fake-indexeddb`, and isolated temp directories).
+Pushing a `v*` tag runs
+[`release.yml`](.github/workflows/release.yml). It reruns
+the tests, lint and typecheck. It stops if `package.json` or
+the Android `versionName` doesn't match the tag. Then it
+publishes:
 
-### Building & Installing the Android Companion APK
+- `Hunt-Desktop-Setup-<version>.exe`: Windows installer
+  with a bundled Node.js runtime
+- `Hunt-Desktop-Windows-<version>.zip`: portable bundle
+- `Hunt-Mobile-<version>.apk`: signed Android app
+- `SHA256SUMS.txt`
 
-1. Ensure `public/hunt-mobile.html` and `android-app/app/src/main/assets/hunt-mobile.html` are synced (enforced automatically by `mobileMirror.test.ts` and `build-apk.sh`).
-2. Build and verify the signed APK:
+</details>
 
-```bash
-bash android-app/build-apk.sh "./android-app" "./Hunt-Mobile.apk"
-```
+## License
 
-3. Install in-place over ADB without wiping existing phone data:
-
-```bash
-adb install -r "./Hunt-Mobile.apk"
-```
-
-Pair the phone once by opening **Phone & Sync** on desktop and scanning/entering the local LAN URL and pairing token stored in `data/hunt-sync.key`.
-
-To revoke a paired phone (lost or compromised), delete `data/hunt-sync.key`. The server generates a new key on the next request and the old key stops working at once. Then re-open Hunt with the launcher and re-pair the phone from **Phone & Sync**.
-
----
-
-## Releases & Automated Installers
-
-Pushing a version tag (e.g., `git tag v1.11.0 && git push origin v1.11.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,250+ tests, ESLint, and TypeScript and publishes a GitHub Release containing:
-
-- **`Hunt-Desktop-Setup-<version>.exe`** — Windows Inno Setup installer (bundles Node.js + standalone Next.js server + Desktop/Start Menu shortcuts with `HUNT.ico`; no Node.js install required).
-- **`Hunt-Desktop-Windows-<version>.zip`** — Self-contained portable Windows bundle.
-- **`Hunt-Mobile-<version>.apk`** — Signed Android companion APK built via `build-apk.sh` (installs in-place over prior releases without wiping app data).
-- **`SHA256SUMS.txt`** — Verification checksums for all release assets.
-
-The release always builds the tagged commit. It fails if the tag does not exist, or if the `package.json` version or the `AndroidManifest.xml` `versionName` differs from the tag, so bump both before tagging.
+[MIT](LICENSE)
