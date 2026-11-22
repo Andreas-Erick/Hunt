@@ -33,7 +33,7 @@ export function FocusSunArc({ elapsedSeconds }: { elapsedSeconds: number }) {
       role="img"
       aria-label={`Minute ${minutes} of hour ${hour + 1} on this task`}
       data-testid="focus-sun-arc"
-      className="focus-sun-arc mt-4 sm:mt-6 -mb-2 w-full max-w-xl"
+      className="focus-sun-arc mt-4 sm:mt-6 -mb-2 w-full max-w-xl max-h-[18vh]"
     >
       <path
         d={`M${start.x} ${GROUND} A${RX} ${RY} 0 0 1 ${CX + RX} ${GROUND}`}

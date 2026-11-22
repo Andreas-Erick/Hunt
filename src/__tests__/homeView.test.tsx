@@ -1126,7 +1126,7 @@ describe("CommandCenterView (Home)", () => {
       fireEvent.click(toggle);
       const notes = await screen.findByPlaceholderText("Add session notes...");
       fireEvent.keyDown(notes, { key: "Escape" });
-      expect(screen.queryByPlaceholderText("Add session notes...")).toBeNull();
+      await waitFor(() => expect(screen.queryByPlaceholderText("Add session notes...")).toBeNull());
     });
 
     it("animates newly completed tasks into Completed with arrival highlight and clears timer cleanly", async () => {

@@ -203,7 +203,7 @@ export function FocusHudView() {
                 type="button"
                 onClick={clearFeedback}
                 aria-label="Dismiss"
-                className="-my-1.5 -mr-2 shrink-0 rounded-lg p-1.5 coarse:p-2.5 text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
+                className="-my-1.5 -mr-2 shrink-0 rounded-lg p-1.5 coarse:p-3.5 text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -238,7 +238,7 @@ export function FocusHudView() {
                 hudAudio.playLockOn();
                 initializeFocus(topQueuedTask.id);
               }}
-              className="rounded-xl border border-white/15 bg-white/[0.06] px-7 py-3.5 text-sm font-medium text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out hover:bg-white/[0.12] active:scale-[0.98]"
+              className="rounded-xl bg-accent px-7 py-3.5 text-sm font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98]"
             >
               Start Focus Session
             </button>
@@ -288,7 +288,7 @@ export function FocusHudView() {
             }}
             title="Return to Home"
             aria-label="Return to Home"
-            className="shrink-0 rounded-lg p-2 coarse:p-3 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-colors"
+            className="shrink-0 rounded-lg p-2 coarse:p-3 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.98]"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

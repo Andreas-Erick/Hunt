@@ -54,7 +54,7 @@ const VIEWS: Record<HudView, ViewEntry> = {
 };
 
 const NOTICE_BUTTON_CLASS =
-  "shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:opacity-80";
+  "shrink-0 min-h-8 coarse:min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:opacity-80";
 
 /** A failed local action (store actionError) or an unopenable database, shown in every view. */
 function PageNotice({

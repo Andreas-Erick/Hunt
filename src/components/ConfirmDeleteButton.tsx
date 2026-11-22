@@ -13,7 +13,7 @@ const BASE_CLASS =
  * on touch, with a padded 30px+ target that does not shift the row's layout.
  */
 export const ROW_DELETE_CLASS =
-  "-m-2 shrink-0 rounded-md p-2 text-hud-muted opacity-0 hoverless:opacity-60 hover:bg-danger/10 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity,background-color]";
+  "-m-2 coarse:-m-3 shrink-0 rounded-md p-2 coarse:p-3 text-hud-muted opacity-0 hoverless:opacity-60 hover:bg-danger/10 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity,background-color]";
 /** Keeps the caller's flex gap between an icon and its label inside the live span. */
 const LABEL_CLASS = "flex items-center gap-[inherit]";
 
