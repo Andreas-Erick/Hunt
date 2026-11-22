@@ -17,9 +17,8 @@ import java.util.Set;
  * place that hides rows ({@link UndoWindow#hiddenTaskIds}).
  */
 final class SelectedDay {
-    WidgetLook look = WidgetLook.NEON;
-    /** No snapshot yet, or the user has nothing in Hunt: "Open Hunt to get started". */
-    boolean noData = true;
+    /** The snapshot file: look, and noData ("Open Hunt to get started"). */
+    WidgetSupport.Snapshot snapshot = new WidgetSupport.Snapshot();
     /** The snapshot is from an earlier day than today: "Open Hunt to refresh". */
     boolean stale;
     /**
@@ -43,7 +42,7 @@ final class SelectedDay {
 
     /** True when there is a list to draw (not the get-started or refresh message). */
     boolean hasList() {
-        return !noData && !stale;
+        return !snapshot.noData && !stale;
     }
 
     /**
@@ -53,20 +52,10 @@ final class SelectedDay {
      */
     static SelectedDay read(Context ctx, int offset) {
         SelectedDay day = new SelectedDay();
-        WidgetSupport.Snapshot snap = WidgetSupport.readSnapshot(ctx);
-        day.look = snap.look;
-        day.noData = snap.noData;
-        if (snap.json == null) return day;
+        day.snapshot = WidgetSupport.readSnapshot(ctx);
         String todayKey = WidgetSupport.localDateKey();
-        JSONArray days = snap.json.optJSONArray("days");
-        int first = -1;
-        for (int i = 0; days != null && i < days.length(); i++) {
-            JSONObject d = days.optJSONObject(i);
-            if (d != null && todayKey.equals(d.optString("dateKey"))) {
-                first = i;
-                break;
-            }
-        }
+        JSONArray days = day.snapshot.entries(WidgetSupport.Snapshot.DAYS);
+        int first = WidgetSupport.Snapshot.indexOf(days, todayKey);
         day.stale = first < 0;
         if (day.stale) return day;
         day.lastOffset = Math.min(DaySelection.MAX_DAY_OFFSET, days.length() - 1 - first);
@@ -83,7 +72,7 @@ final class SelectedDay {
         day.ticksPaused = !queued.readable;
         Set<String> hidden = UndoWindow.hiddenTaskIds(queued.keys, held, dateKey, now);
         day.undoable = UndoWindow.openTaskIds(held, dateKey, now);
-        JSONArray rows = entry.optJSONArray(DaySelection.viewFor(dateKey, todayKey));
+        JSONArray rows = entry.optJSONArray(DaySelection.viewFor(dateKey, todayKey).key);
         for (int i = 0; rows != null && i < rows.length(); i++) {
             JSONObject row = rows.optJSONObject(i);
             if (row != null && !hidden.contains(row.optString("id"))) day.rows.put(row);

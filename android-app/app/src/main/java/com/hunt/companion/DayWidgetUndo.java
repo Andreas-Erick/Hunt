@@ -170,7 +170,7 @@ final class DayWidgetUndo {
     /** Explicit, immutable broadcast to the non-exported provider: an Undo window has ended. */
     private static PendingIntent dueIntent(Context ctx) {
         Intent intent = new Intent(ctx, DayWidgetProvider.class).setAction(DayWidgetProvider.ACTION_UNDO_DUE);
-        return PendingIntent.getBroadcast(ctx, 2, intent,
+        return PendingIntent.getBroadcast(ctx, WidgetRequestCodes.DAY_UNDO_DUE, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 

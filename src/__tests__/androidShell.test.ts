@@ -463,6 +463,7 @@ describe("Day Widget (ADR-0006)", () => {
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
       "WidgetLook.java",
+      "WidgetRequestCodes.java",
       "WidgetSupport.java",
     ]);
     expect(widgetHelpers).toHaveLength(5);
@@ -939,8 +940,8 @@ describe.skipIf(!hasJdk)("Day Widget day selection and labels, run on the JDK", 
       classes: ["DaySelection.java"],
       imports: ["java.time.LocalDate"],
       main: [
-        'System.out.println(DaySelection.viewFor("2026-11-22", "2026-11-22"));',
-        'System.out.println(DaySelection.viewFor("2026-11-23", "2026-11-22"));',
+        'System.out.println(DaySelection.viewFor("2026-11-22", "2026-11-22").key);',
+        'System.out.println(DaySelection.viewFor("2026-11-23", "2026-11-22").key);',
         'System.out.println(DaySelection.headerLabel(0, LocalDate.parse("2026-11-22")));',
         'System.out.println(DaySelection.headerLabel(1, LocalDate.parse("2026-11-23")));',
         'System.out.println(DaySelection.headerLabel(2, LocalDate.parse("2026-11-24")));',

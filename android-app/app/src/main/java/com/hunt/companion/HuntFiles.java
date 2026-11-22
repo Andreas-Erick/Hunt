@@ -8,6 +8,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The shell's file primitives, shared by MainActivity and the widget code (same process).
@@ -35,10 +36,8 @@ final class HuntFiles {
      */
     static String readText(File f) {
         try {
-            return new String(new AtomicFile(f).readFully(), StandardCharsets.UTF_8).trim();
-        } catch (FileNotFoundException e) {
-            return "";
-        } catch (IOException | RuntimeException e) {
+            return readExisting(f);
+        } catch (IOException e) {
             Log.w(TAG, "Reading " + f.getName() + " failed", e);
             return "";
         }
@@ -58,6 +57,50 @@ final class HuntFiles {
             return "";
         } catch (RuntimeException e) {
             throw new IOException("Reading " + f.getName() + " failed", e);
+        }
+    }
+
+    /**
+     * A file written from the newest value handed to it (coalescing): any number of
+     * {@link #set} calls lead to at most one write of the last value, and a value identical to
+     * what the file already holds is never rewritten. Used for the state file and the Widget
+     * Snapshot. Instances live in static fields, so they outlive an Activity.
+     */
+    static final class CoalescedWrite {
+        /** Newest value not yet handed to a write. Writers take it with getAndSet(null). */
+        private final AtomicReference<String> pending = new AtomicReference<>();
+        /** What the file currently holds, to skip identical rewrites. Guarded by LOCK. */
+        private String lastWritten;
+
+        /** Any thread: records the newest value; schedule {@link #flushTo} to write it. */
+        void set(String text) {
+            pending.set(text);
+        }
+
+        /** Caller holds LOCK: what the file held when read, unless something was written since. */
+        void knownOnDisk(String text) {
+            if (lastWritten == null) lastWritten = text;
+        }
+
+        /**
+         * Writes the newest pending value to `f` under LOCK. Taking the value inside the lock
+         * means the write that runs last always carries the newest value (last write wins).
+         * Returns true when the file was written. If the write fails the value stays pending
+         * (unless something newer arrived) for the next flush, and the error is thrown.
+         */
+        boolean flushTo(File f) throws IOException {
+            synchronized (LOCK) {
+                String text = pending.getAndSet(null);
+                if (text == null || text.equals(lastWritten)) return false;
+                try {
+                    writeText(f, text);
+                    lastWritten = text;
+                    return true;
+                } catch (IOException | RuntimeException e) {
+                    pending.compareAndSet(null, text);
+                    throw e;
+                }
+            }
         }
     }
 

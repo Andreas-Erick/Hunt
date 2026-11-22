@@ -30,7 +30,10 @@ export interface WidgetTaskRow {
   title: string;
   /** Quest accent key; "slate" for Other work. Java maps it to the look's colour. */
   accent: QuestAccent | "slate";
-  /** False for the Focus Task: finishing it needs a TimeLog and a Focus transition. */
+  /**
+   * The snapshot's decision whether the widget offers a tick (Java never decides it): false for
+   * the Focus Task, since finishing it needs a TimeLog and a Focus transition.
+   */
   tickable: boolean;
   /** The Task currently in Focus (drawn with ▶; a tap opens Hunt). */
   focus: boolean;
