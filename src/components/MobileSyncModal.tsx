@@ -490,7 +490,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             title="Close"
             aria-label="Close"
-            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
+            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -544,14 +544,14 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             )}
 
             {lanUrls.length > 1 && (
-              <div className="mt-3 flex flex-wrap justify-center gap-1">
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {lanUrls.map((u) => (
                   <button
                     key={u}
                     type="button"
                     onClick={() => setSelectedUrl(u)}
                     title={u}
-                    className={`rounded px-2 py-0.5 font-mono text-[10px] ${
+                    className={`inline-flex min-h-8 coarse:min-h-11 items-center rounded px-2.5 py-1 font-mono text-[10px] transition-colors duration-150 ease-out active:opacity-80 ${
                       u === activeUrl
                         ? "bg-[#00f0ff]/20 text-[#00f0ff]"
                         : "text-hud-muted hover:text-neutral-300"
@@ -589,7 +589,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                       >
                         {phone.label}
                       </div>
-                      <div className="mt-0.5 text-[11px] leading-relaxed text-hud-muted">
+                      <div className="mt-0.5 text-[11px] leading-relaxed text-hud-muted tabular-nums">
                         {phone.detail}
                       </div>
                     </div>
@@ -616,7 +616,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                       </div>
                       <div className="mt-0.5 text-[11px] text-hud-muted">
                         Last synced:{" "}
-                        <span className="text-neutral-300">{lastSyncedStr}</span>
+                        <span className="text-neutral-300 tabular-nums">{lastSyncedStr}</span>
                       </div>
                     </div>
                   </div>
@@ -627,7 +627,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                   onClick={handleManualSync}
                   disabled={syncing}
                   aria-busy={syncing}
-                  className="flex min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-all duration-150 ease-out active:scale-[0.98]"
+                  className="flex min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
                 >
                   {syncing ? (
                     <>
@@ -663,7 +663,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                 type="button"
                 onClick={handleCopyUrl}
                 title={token ? "Copy the pairing link" : "Copy the address"}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-neutral-300 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
+                className="flex min-h-8 coarse:min-h-11 shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-neutral-300 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
               >
                 {copied ? (
                   <>
@@ -721,7 +721,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             <a
               href="/Hunt-Mobile.apk"
               download="Hunt-Mobile.apk"
-              className="flex items-center gap-1.5 rounded-lg border border-[#00f0ff]/35 bg-[#00f0ff]/10 px-3 py-1.5 font-medium text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-all duration-150 ease-out active:scale-[0.98]"
+              className="flex items-center gap-1.5 rounded-lg border border-[#00f0ff]/35 bg-[#00f0ff]/10 px-3 py-1.5 font-medium text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               <Smartphone className="h-3.5 w-3.5" />
               <span>Download Android APK</span>
@@ -732,7 +732,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={handleExportJson}
               disabled={busy}
               aria-busy={exporting}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-all duration-150 ease-out active:scale-[0.98]"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               {exported ? (
                 <>
@@ -761,7 +761,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={() => fileInputRef.current?.click()}
               disabled={busy}
               aria-busy={importing}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-all duration-150 ease-out active:scale-[0.98]"
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               <Upload className="h-3.5 w-3.5" />
               <span>Merge Snapshot</span>

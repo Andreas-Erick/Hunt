@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   darkMode: "class",
@@ -64,7 +65,14 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Touch tablets: `coarse:` raises targets toward 44px; `hoverless:` reveals
+    // controls that mouse users only see on hover.
+    plugin(({ addVariant }) => {
+      addVariant("coarse", "@media (pointer: coarse)");
+      addVariant("hoverless", "@media (hover: none)");
+    }),
+  ],
 };
 
 export default config;

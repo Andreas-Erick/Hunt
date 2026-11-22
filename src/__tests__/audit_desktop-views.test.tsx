@@ -412,8 +412,9 @@ describe("Plan the week (PlanWeekView)", () => {
     await screen.findByRole("button", { name: "Alpha" });
 
     const selector = screen.getByRole("group", { name: "Quest for new tasks" });
-    expect(selector).toHaveClass("gap-1", "p-1", "rounded-2xl", "sm:rounded-full");
-    expect(selector).not.toHaveClass("gap-1.5");
+    // UI-19: 8px between quest chips so a near-miss does not switch quest.
+    expect(selector).toHaveClass("gap-2", "p-1", "rounded-2xl", "sm:rounded-full");
+    expect(selector).not.toHaveClass("gap-1", "gap-1.5");
 
     const card = taskRow("t-a");
     expect(card).toHaveClass("cursor-grab", "active:cursor-grabbing");

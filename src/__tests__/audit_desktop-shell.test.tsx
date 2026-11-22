@@ -185,7 +185,11 @@ describe("TopTelemetryBar", () => {
 // DesktopWindowControls: spacing (P12-02) and pressed state (P14-03)
 // ---------------------------------------------------------------------------
 describe("DesktopWindowControls", () => {
+  const TOKEN_KEY = "hunt-sync-token-v1";
+  afterEach(() => window.localStorage.removeItem(TOKEN_KEY));
+
   it("spaces the controls >= 8px apart, Exit a little further, and gives each a press state", () => {
+    window.localStorage.setItem(TOKEN_KEY, "a".repeat(64));
     render(<DesktopWindowControls />);
     const group = screen.getByRole("group", { name: "Window controls" });
     expect(group).toHaveClass("gap-2");
@@ -194,6 +198,13 @@ describe("DesktopWindowControls", () => {
     for (const id of ["window-minimize-btn", "window-fullscreen-btn", "window-close-btn"]) {
       expect(screen.getByTestId(id), id).toHaveClass("active:scale-[0.98]");
     }
+  });
+
+  it("renders nothing outside the desktop launcher (no pairing key), where the controls cannot work (UI-18)", () => {
+    window.localStorage.removeItem(TOKEN_KEY);
+    render(<DesktopWindowControls />);
+    expect(screen.queryByRole("group", { name: "Window controls" })).toBeNull();
+    expect(screen.queryByTestId("window-close-btn")).toBeNull();
   });
 });
 

@@ -67,8 +67,16 @@
       html { overflow-x: hidden; }
     }
 
+    /* FAB clearance: the last row ends 8 px above the FAB's top edge in every layout
+       (--fab-clear = FAB bottom + FAB height + 8 px - .screen-body's bottom padding). While toasts are
+       up the FAB lifts by the real toast-stack height (--toast-stack, set in syncToastBodyClass), and
+       the page gains the same extra room so the last row can still scroll clear of it. */
     body {
-      padding-bottom: calc(104px + var(--safe-bottom));
+      --fab-clear: 120px; /* phone portrait: FAB 84 + 52, screen-body 24 */
+      padding-bottom: calc(var(--fab-clear) + var(--toast-lift, 0px) + var(--safe-bottom));
+    }
+    body.has-toast {
+      --toast-lift: var(--toast-stack, 48px);
     }
 
     button, input, textarea {
@@ -412,7 +420,7 @@
       font-weight: 600;
       border-radius: 10px;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
     }
 
     .seg-option.active {
@@ -523,6 +531,7 @@
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      overflow-wrap: anywhere; /* an unbroken URL wraps instead of being cut flat at the edge */
     }
 
     .spotlight-actions {
@@ -660,6 +669,11 @@
       margin-bottom: 6px;
       overflow-wrap: anywhere; /* never runs under the row's buttons */
       text-wrap: pretty;
+      /* Cap very long titles at 3 lines; the full title shows in Focus and the inspector. */
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     .queue-item-sub {
@@ -803,7 +817,7 @@
       transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.14s ease;
     }
     body.has-toast .fab-add {
-      transform: translate3d(0, -48px, 0);
+      transform: translate3d(0, calc(-1 * var(--toast-stack, 48px)), 0);
     }
 
     /* Bottom Navigation Bar (5 Primary Destinations) */
@@ -1078,7 +1092,7 @@
     .plan-strip {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 7px;
+      gap: 8px;
       margin-bottom: 18px;
     }
 
@@ -1119,6 +1133,12 @@
       background: var(--surface);
       padding: 18px;
       margin-bottom: 14px;
+    }
+    /* queue rows inside a card (quest cards) sit one step up, so they read as nested, not as a second
+       bordered box on the same surface */
+    .review-card .queue-item-card:not(.completed),
+    .review-card .queue-item-card.completed.just-completed {
+      background: var(--surface-2);
     }
 
     .review-horizon-bar {
@@ -1447,7 +1467,7 @@
       align-items: center;
       gap: 9px;
       width: auto;
-      max-width: min(calc(100vw - 28px), 400px);
+      max-width: min(100%, 400px); /* the host already subtracts the safe-area insets */
       min-height: 38px;
       padding: 7px 16px 7px 11px;
       border-radius: 999px;
@@ -1560,6 +1580,8 @@
       color: var(--text-2);
       line-height: 1.45;
       margin-top: 8px;
+      overflow-wrap: anywhere; /* a long MagicDNS host name wraps instead of panning the sheet sideways */
+      font-variant-numeric: tabular-nums; /* the countdown keeps its width every second */
     }
     .sync-meta-line .sub {
       color: var(--dim);
@@ -1717,7 +1739,7 @@
         --sheet-pad-bottom: 14px;
       }
       body {
-        padding-bottom: calc(68px + var(--safe-bottom));
+        --fab-clear: 102px; /* FAB 62 + 48, screen-body 16 */
       }
       .app-bar {
         height: calc(48px + var(--safe-top));
@@ -1855,7 +1877,7 @@
         --sheet-pad-bottom: 18px;
       }
       body {
-        padding-bottom: calc(104px + var(--safe-bottom));
+        --fab-clear: 120px; /* same as phone portrait: the page must not shift when the keyboard opens */
       }
       .app-bar {
         height: calc(58px + var(--safe-top));
@@ -2203,7 +2225,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-bottom: 6px;
+      margin-bottom: 12px; /* the 48 px "Paste link" hit area ends above the address field */
     }
     .url-label-row .sheet-label {
       margin-bottom: 0;
@@ -2258,6 +2280,28 @@
       flex: 1;
       min-width: 0;
     }
+    /* Narrow board columns: the play / options buttons drop to their own row so the title keeps
+       the full card width (it was crushed to one letter per line, and the dots got clipped). */
+    .plan-col-tasks .queue-item-card {
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      padding: 12px 12px 10px 16px;
+    }
+    .plan-col-tasks .queue-item-body {
+      flex: 1 1 0;
+    }
+    .plan-col-tasks .queue-item-right {
+      flex-basis: 100%;
+      justify-content: flex-end;
+      margin-top: 0;
+    }
+    /* Completed cards: the delete button wraps under the title too (ring 22px + 10px gap). */
+    .plan-col-tasks .queue-item-card.completed .queue-item-body {
+      min-width: calc(100% - 32px);
+    }
+    .plan-col-tasks .queue-item-card.completed .completed-delete-btn {
+      margin-left: auto;
+    }
     .plan-col-empty {
       padding: 20px 8px;
       text-align: center;
@@ -2294,7 +2338,7 @@
        ========================================================================= */
     @media (min-width: 768px) {
       body {
-        padding-bottom: calc(96px + var(--safe-bottom));
+        --fab-clear: 100px; /* FAB 82 + 52, screen-body 42 */
       }
       .app-bar {
         height: calc(66px + var(--safe-top));
@@ -2380,8 +2424,19 @@
         height: 52px;
         padding: 0 22px;
       }
-      body:not(.keyboard-open):not(.sheet-typing) .sheet-backdrop {
-        align-items: center;
+      /* One stable anchor: the sheet sits a little below the app bar whether or not a field is focused.
+         (Toggling centre <-> top on every focus made the card leap 150-300 px.) */
+      .sheet-backdrop {
+        --sheet-top-gap: clamp(14px, 8vh, 96px);
+        padding-top: calc(var(--safe-top) + var(--sheet-top-gap));
+      }
+      .bottom-sheet {
+        max-height: calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 14px - var(--sheet-top-gap));
+        max-height: calc(100dvh - var(--safe-top) - var(--eff-kb, 0px) - 14px - var(--sheet-top-gap));
+      }
+      body.sheet-typing .bottom-sheet {
+        max-height: min(54vh, calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 14px - var(--sheet-top-gap)));
+        max-height: min(54dvh, calc(100dvh - var(--safe-top) - var(--eff-kb, 0px) - 14px - var(--sheet-top-gap)));
       }
       .bottom-sheet {
         max-width: 640px;
@@ -2603,7 +2658,7 @@
         </svg>
         <span class="brand-word">Hunt</span>
       </button>
-      <span id="headerVersionBadge" class="brand-version-badge">v1.10.0</span>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.11.0</span>
     </div>
 
     <div class="app-bar-actions">
@@ -3100,7 +3155,7 @@ var HuntCore = (() => {
       }
     } catch (e) {}
 
-    const APP_VERSION = "1.10.0";
+    const APP_VERSION = "1.11.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -3396,10 +3451,18 @@ var HuntCore = (() => {
     let reviewScope = "ALL";
     let reviewChartMetric = "hours";
     let selectedReviewHeatmapKey = null;
+    let heatmapScrubPending = false; // a scrub moved the selection in place; render once on pointerup
     let showReviewSessionLog = false;
     let reviewSessionLimit = 50;
     const REVIEW_SESSION_PAGE = 50;
     let showAllCompletedToday = false;
+    const QUEST_STEPS_PREVIEW = 5; // open steps shown on a quest card before "Show all"
+    const expandedQuestIds = new Set(); // quest cards showing every open step (session-only UI state)
+    function toggleQuestExpanded(questId) {
+      if (expandedQuestIds.has(questId)) expandedQuestIds.delete(questId);
+      else expandedQuestIds.add(questId);
+      renderApp();
+    }
     const COMPLETED_PREVIEW = 4;
     let justCompletedTaskId = null;
 
@@ -4653,8 +4716,24 @@ var HuntCore = (() => {
 
     function switchView(view) {
       playClickSound();
+      const changed = (view === "review" ? "telemetry" : view) !== activeView;
       setActiveView(view);
       renderApp();
+      if (changed) scrollPageToTop(); // a new screen starts at its top, not at the old scroll offset
+    }
+
+    function scrollPageToTop() {
+      if (!((window.scrollY || window.pageYOffset || 0) > 0)) return;
+      const se = document.scrollingElement || document.documentElement;
+      if (se) se.scrollTop = 0;
+    }
+
+    function switchGuideTab(tab) {
+      playClickSound();
+      const changed = tab !== guideTab;
+      guideTab = tab;
+      renderApp();
+      if (changed) scrollPageToTop();
     }
 
     // ----- Lifecycle: native events + page visibility -----
@@ -4891,9 +4970,11 @@ var HuntCore = (() => {
     // UI-only listeners: keep the keyboard open while choosing a pill in a sheet, Escape closes a sheet
     // (browser copy), a no-op touchstart so :active press feedback also works in mobile Safari, and
     // press-and-scrub on the Review heatmap (scrubHeatmap).
+    // 5 weekday columns need ~1180px for readable titles; narrower screens use the day strip.
+    const PLAN_BOARD_QUERY = "(min-width: 1180px)";
     function isTabletPlanBoard() {
       try {
-        return !!(window.matchMedia && window.matchMedia("(min-width: 900px)").matches);
+        return !!(window.matchMedia && window.matchMedia(PLAN_BOARD_QUERY).matches);
       } catch (e) {
         return false;
       }
@@ -4918,8 +4999,16 @@ var HuntCore = (() => {
       };
       document.addEventListener("pointerdown", onHeatmapPointer);
       document.addEventListener("pointermove", onHeatmapPointer);
+      // the scrub only moved the outline and the readout in place: one full render when the finger lifts
+      const onHeatmapPointerEnd = () => {
+        if (!heatmapScrubPending) return;
+        heatmapScrubPending = false;
+        renderAppSafely();
+      };
+      document.addEventListener("pointerup", onHeatmapPointerEnd);
+      document.addEventListener("pointercancel", onHeatmapPointerEnd);
       try {
-        const planMq = window.matchMedia && window.matchMedia("(min-width: 900px)");
+        const planMq = window.matchMedia && window.matchMedia(PLAN_BOARD_QUERY);
         if (planMq && typeof planMq.addEventListener === "function") {
           planMq.addEventListener("change", () => {
             if (activeView === "plan") renderAppSafely();
@@ -4966,7 +5055,14 @@ var HuntCore = (() => {
     const SVG_TOAST_UNDO = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>`;
 
     function syncToastBodyClass() {
-      if (document.body) document.body.classList.toggle("has-toast", toasts.length > 0);
+      const body = document.body;
+      if (!body) return;
+      body.classList.toggle("has-toast", toasts.length > 0);
+      if (toasts.length) {
+        // the FAB lifts by the live stack (1 or more toasts, 8 px apart) plus an 8 px gap
+        const stack = toasts.reduce((h, t) => h + (t.el.offsetHeight || 40), 0) + 8 * (toasts.length - 1);
+        body.style.setProperty("--toast-stack", (stack + 8) + "px");
+      }
     }
 
     function showToast(message, opts) {
@@ -5657,17 +5753,25 @@ var HuntCore = (() => {
 
     // Plays a non-blocking GPU fade-out so closing/submitting a floating sheet dissolves smoothly
     // in place without racing the dismissing keyboard, while keeping #sheetContainer cleanup 100 % synchronous.
-    function playSheetExitGlide(sc) {
+    // Snapshot of the live sheet's box and scroll offset, taken by closeSheet() before it blurs the field
+    // and drops .sheet-typing (which would change the sheet's max-height and position).
+    function snapshotSheetGeometry(sc) {
+      const sheet = sc && sc.querySelector(".bottom-sheet");
+      if (!sheet) return null;
+      const r = sheet.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height, scrollTop: sheet.scrollTop };
+    }
+
+    function playSheetExitGlide(sc, geo) {
       if (!sc || !isSheetOpen() || typeof sc.animate !== "function" || prefersReducedMotionMobile()) return;
       const sheet = sc.querySelector(".bottom-sheet");
       if (!sheet) return;
+      geo = geo || snapshotSheetGeometry(sc);
       clearSheetExitLayer();
       const layer = document.createElement("div");
       layer.id = "sheetExitLayer";
       layer.setAttribute("aria-hidden", "true");
-      layer.style.cssText = "position:fixed;inset:0;z-index:59;pointer-events:none;background:rgba(5,7,11,0.76);display:flex;align-items:flex-start;justify-content:center;padding:calc(var(--safe-top) + 14px) calc(12px + var(--safe-right)) 14px calc(12px + var(--safe-left));";
-      const lift = document.createElement("div");
-      lift.className = "sheet-kb-lift";
+      layer.style.cssText = "position:fixed;inset:0;z-index:59;pointer-events:none;background:rgba(5,7,11,0.76);";
       const clone = sheet.cloneNode(true);
       clone.classList.remove("entering");
       clone.removeAttribute("role");
@@ -5681,9 +5785,18 @@ var HuntCore = (() => {
         node.removeAttribute("onkeydown");
       });
       clone.style.pointerEvents = "none";
-      lift.appendChild(clone);
-      layer.appendChild(lift);
+      // The ghost sits exactly where the live sheet was, at the same size and scroll offset.
+      clone.style.position = "fixed";
+      clone.style.left = geo.left + "px";
+      clone.style.top = geo.top + "px";
+      clone.style.width = geo.width + "px";
+      clone.style.height = geo.height + "px";
+      clone.style.maxWidth = "none";
+      clone.style.maxHeight = "none";
+      clone.style.margin = "0";
+      layer.appendChild(clone);
       document.body.appendChild(layer);
+      clone.scrollTop = geo.scrollTop;
 
       let done = false;
       const cleanup = () => {
@@ -5715,6 +5828,7 @@ var HuntCore = (() => {
     function closeSheet(discardDraft) {
       const sc = document.getElementById("sheetContainer");
       if (!sc) return;
+      const exitGeo = snapshotSheetGeometry(sc); // before the blur / class changes below move the sheet
       // Blur first so a pending onchange (Task Options title / notes) commits before the sheet goes away.
       const el = document.activeElement;
       if (el && el !== document.body && sc.contains(el) && typeof el.blur === "function") el.blur();
@@ -5731,11 +5845,11 @@ var HuntCore = (() => {
         }
         storeComposerDraft();
       }
-      playSheetExitGlide(sc);
+      playSheetExitGlide(sc, exitGeo);
       sc.style.display = "none";
       sc.innerHTML = "";
       delete sc.dataset.sheet;
-      ["topHeader", "mainContainer", "fabBtn", "bottomNav"].forEach(id => {
+      ["topHeader", "apkPairBannerHost", "mainContainer", "fabBtn", "bottomNav"].forEach(id => {
         const bgEl = document.getElementById(id);
         if (bgEl) bgEl.removeAttribute("inert");
       });
@@ -5805,7 +5919,7 @@ var HuntCore = (() => {
       if (sheetEl) {
         sheetEl.addEventListener("animationend", () => sheetEl.classList.remove("entering"), { once: true });
       }
-      ["topHeader", "mainContainer", "fabBtn", "bottomNav"].forEach(id => {
+      ["topHeader", "apkPairBannerHost", "mainContainer", "fabBtn", "bottomNav"].forEach(id => {
         const bgEl = document.getElementById(id);
         if (bgEl) bgEl.setAttribute("inert", "");
       });
@@ -5995,11 +6109,23 @@ var HuntCore = (() => {
       return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
     }
 
+    // Empty / invalid required field: focus it and outline it in rose until the user types again.
+    function flagInvalidField(el) {
+      if (!el) return;
+      el.focus();
+      el.style.borderColor = "var(--rose)";
+      el.setAttribute("aria-invalid", "true");
+      el.addEventListener("input", () => {
+        el.style.borderColor = "";
+        el.removeAttribute("aria-invalid");
+      }, { once: true });
+    }
+
     function submitNewTaskFromSheet(promoteToTop) {
       const titleEl = document.getElementById("sheetTaskTitle");
       const notesEl = document.getElementById("sheetTaskNotes");
       if (!titleEl || !titleEl.value.trim()) {
-        if (titleEl) titleEl.focus();
+        flagInvalidField(titleEl);
         return;
       }
       playClickSound();
@@ -6202,12 +6328,12 @@ var HuntCore = (() => {
       const dEl = document.getElementById("newQuestDescInput");
       const hEl = document.getElementById("newQuestTargetInput");
       if (!tEl || !tEl.value.trim()) {
-        if (tEl) tEl.focus();
+        flagInvalidField(tEl);
         return;
       }
       const target = hEl ? parseWeeklyTarget(hEl.value) : 10;
       if (target === null) {
-        hEl.focus();
+        flagInvalidField(hEl);
         return;
       }
       playCompleteSound();
@@ -6242,6 +6368,8 @@ var HuntCore = (() => {
       if (!q) return;
       selectedQuestColor = q.accentColor || "cyan";
 
+      // Complete / Delete sit in a footer row in the body, away from the sticky Save in the thumb zone
+      // (same pattern as Task Options).
       showSheet("quest:" + q.id, `
           ${sheetHeaderHtml("Edit Quest")}
 
@@ -6264,16 +6392,12 @@ var HuntCore = (() => {
             </div>
           </div>
 
-          ${!q.archived ? `
-            <button class="pressable" onclick="completeQuestItem(${jsArg(q.id)})" style="width:100%;height:var(--touch-min);margin-bottom:10px;border-radius:13px;border:1px solid rgba(0,255,157,0.35);background:rgba(0,255,157,0.08);color:var(--emerald);font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
-              ✓ Complete Quest
-            </button>
-          ` : ""}
+          <div class="sheet-footer-row" style="margin:4px 0 18px;justify-content:${!q.archived ? "space-between" : "flex-end"};">
+            ${!q.archived ? `<button class="text-action" onclick="completeQuestItem(${jsArg(q.id)})" style="color:var(--emerald);">✓ Complete Quest</button>` : ""}
+            <button class="danger-outline-btn" onclick="deleteQuestItem(${jsArg(q.id)})">Delete Quest</button>
+          </div>
 
-          <div class="sheet-actions" style="margin-top:-2px;">
-            <button class="pressable" onclick="deleteQuestItem(${jsArg(q.id)})" style="height:var(--touch-min);border-radius:13px;border:1px solid rgba(255,42,95,0.35);background:rgba(255,42,95,0.1);color:var(--rose);font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
-              Delete Quest
-            </button>
+          <div class="sheet-actions single" style="margin-top:-2px;">
             <button class="pressable" onclick="saveQuestFromSheet(${jsArg(q.id)})" style="height:var(--touch-min);border-radius:13px;border:none;background:var(--cyan);color:#05070a;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
               Save Changes
             </button>
@@ -6850,7 +6974,7 @@ var HuntCore = (() => {
       const nEl = document.getElementById("newHabitNotesInput");
       const title = tEl ? tEl.value.trim().slice(0, 300) : "";
       if (!title) {
-        if (tEl) { tEl.focus(); tEl.style.borderColor = "var(--rose)"; }
+        flagInvalidField(tEl);
         return;
       }
       playCompleteSound();
@@ -6905,7 +7029,7 @@ var HuntCore = (() => {
 
           <div class="sheet-footer-row" style="margin-top:8px;">
             <button class="danger-outline-btn" onclick="deleteHabitItem(${jsArg(h.id)})">Delete Habit</button>
-            <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:white;color:#05070a;font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
+            <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:var(--cyan);color:#05070a;font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
           </div>
       `);
     }
@@ -6917,7 +7041,7 @@ var HuntCore = (() => {
       const nEl = document.getElementById("editHabitNotesInput");
       const title = tEl ? tEl.value.trim().slice(0, 300) : "";
       if (!title) {
-        if (tEl) { tEl.focus(); tEl.style.borderColor = "var(--rose)"; }
+        flagInvalidField(tEl);
         return;
       }
       playClickSound();
@@ -7554,14 +7678,14 @@ var HuntCore = (() => {
     function renderGuideViewHtml() {
       const audit = auditGuideWorkspace();
       const tabBar = `
-        <div class="segmented-control" role="group" aria-label="Guide sections">
+        <div class="segmented-control" role="group" aria-label="Guide sections" style="grid-template-columns:repeat(4,minmax(0,1fr));">
           ${[
             ["quests", "Quests"],
             ["tasks", "Tasks"],
             ["system", "System"],
             ["workshop", "Workshop"]
           ].map(([id, label]) => `
-            <button class="seg-option ${guideTab === id ? "active" : ""}" aria-pressed="${guideTab === id}" onclick="playClickSound();guideTab=${jsArg(id)};renderApp();">${escapeHtml(label)}</button>
+            <button class="seg-option ${guideTab === id ? "active" : ""}" aria-pressed="${guideTab === id}" onclick="switchGuideTab(${jsArg(id)})" style="padding-left:4px;padding-right:4px;">${escapeHtml(label)}</button>
           `).join("")}
         </div>
       `;
@@ -7569,7 +7693,7 @@ var HuntCore = (() => {
       let bodyHtml = "";
       if (guideTab === "quests") {
         bodyHtml = `<div class="guide-principles-grid">${renderPrincipleCardsHtml(GUIDE_QUEST_PRINCIPLES)}</div>` + `
-          <button class="guide-entry-btn pressable" onclick="playClickSound();guideTab='tasks';renderApp();">
+          <button class="guide-entry-btn pressable" onclick="switchGuideTab('tasks')">
             <div>
               <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:white;">Next: Crafting Tasks</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Why concrete verbs and 20–90m sizing beat procrastination</div>
@@ -7579,7 +7703,7 @@ var HuntCore = (() => {
         `;
       } else if (guideTab === "tasks") {
         bodyHtml = `<div class="guide-principles-grid">${renderPrincipleCardsHtml(GUIDE_TASK_PRINCIPLES)}</div>` + `
-          <button class="guide-entry-btn pressable" onclick="playClickSound();guideTab='workshop';renderApp();">
+          <button class="guide-entry-btn pressable" onclick="switchGuideTab('workshop')">
             <div>
               <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:white;">Try the Workshop &amp; Audit</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Test your own drafts live and check your workspace</div>
@@ -8112,7 +8236,7 @@ var HuntCore = (() => {
                   <span style="width:8px;height:8px;border-radius:50%;background:${hex};box-shadow:0 0 8px ${hex};flex-shrink:0;"></span>
                   <span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Focus · ${escapeHtml(q ? q.title : "Other")}</span>
                 </div>
-                <button class="icon-circle-btn pressable" onclick="returnToQueueFromFocus()" aria-label="End session and go back to Today">${SVG_BACK}</button>
+                <button class="sync-chip pressable" onclick="returnToQueueFromFocus()" aria-label="End session and go back to Today" style="flex-shrink:0;">${SVG_BACK.replace('width="20" height="20"', 'width="15" height="15"')}<span aria-hidden="true">End session</span></button>
               </div>
 
               <div class="focus-center">
@@ -8238,7 +8362,7 @@ var HuntCore = (() => {
                 ${quest.description ? `<p style="font-size:13px;color:var(--muted);margin:8px 0 0;line-height:1.45;overflow-wrap:anywhere;">${escapeHtml(quest.description)}</p>` : ""}
 
                 <div style="margin-top:16px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--bg);">
-                  <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 8px;">
                     <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);">Quest Hours (7d)</span>
                     <span style="font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;"><strong style="font-family:var(--font-display);font-size:18px;color:white;">${formatTelemetryDuration(sec, "0.0h")}</strong> / ${Number(quest.targetWeeklyHours) || 0}h (${pct}%)</span>
                   </div>
@@ -8252,7 +8376,12 @@ var HuntCore = (() => {
                   <button class="text-action" onclick="openNewTaskSheet(${jsArg(quest.id)})" style="color:${hex};font-size:12px;margin:-14px -8px;" aria-label="Add a step to ${escapeHtml(quest.title)}">+ Add Step</button>
                 </div>
 
-                ${qTasks.map(t => renderCompactQueueCard(t)).join("")}
+                ${(expandedQuestIds.has(quest.id) ? qTasks : qTasks.slice(0, QUEST_STEPS_PREVIEW)).map(t => renderCompactQueueCard(t)).join("")}
+                ${qTasks.length > QUEST_STEPS_PREVIEW ? `
+                  <button class="show-more-btn" data-flip-key="${escapeHtml("quest-more:" + quest.id)}" onclick="toggleQuestExpanded(${jsArg(quest.id)})" aria-expanded="${expandedQuestIds.has(quest.id)}">
+                    ${expandedQuestIds.has(quest.id) ? "Show less ↑" : `Show all ${qTasks.length} ↓`}
+                  </button>
+                ` : ""}
                 ${qTasks.length === 0 ? `<div style="font-size:12px;color:var(--dim);padding:2px 2px 0;" data-flip-key="${escapeHtml("quest-empty:" + quest.id)}">No open steps yet.</div>` : ""}
                 ${qCompleted.length > 0 ? `
                   <div data-flip-key="${escapeHtml("quest-done:" + quest.id)}" style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);margin:14px 0 8px;">Completed today (${qCompleted.length})</div>
@@ -8791,7 +8920,10 @@ var HuntCore = (() => {
                 const barPct = val > 0 ? Math.max(8, Math.round((val / maxBucketVal) * 100)) : 3;
                 const topLabel = reviewChartMetric === "tasks"
                   ? (d.tasks >= 1000 ? (d.tasks / 1000).toFixed(1) + "k" : String(d.tasks))
-                  : formatTelemetryDuration(d.scopeSec, "0h", true);
+                  : chartBuckets.length > 8 && d.scopeSec > 0 && d.scopeSec < 360000
+                    // ~20 px year columns can't fit "42.5h": whole hours (or "<1h") stay readable
+                    ? (d.scopeSec < 3600 ? "&lt;1h" : Math.round(d.scopeSec / 3600) + "h")
+                    : formatTelemetryDuration(d.scopeSec, "0h", true);
                 return `
                   <div style="display:flex;flex-direction:column;align-items:center;min-width:0;">
                     <span style="font-family:var(--font-mono);font-size:${chartBuckets.length > 8 ? "9px" : "10px"};font-variant-numeric:tabular-nums;margin-bottom:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${d.isCurrent ? scopeHex : (val > 0 ? "var(--text-2)" : "var(--dim)")};">
@@ -8825,14 +8957,14 @@ var HuntCore = (() => {
                 ${hmCols.map(col => `
                   <div class="heatmap-col">
                     ${col.cells.map(cell => cell.isFuture ? `<span style="aspect-ratio:1/1;width:100%;"></span>` : `
-                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" data-hm-key="${escapeHtml(cell.dateKey)}" aria-label="${escapeHtml(cell.shortLbl + ": " + formatTelemetryDuration(cell.sec, "0h") + ", " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
+                      <div class="heatmap-cell ${inspectedCell && inspectedCell.dateKey === cell.dateKey ? "selected" : ""} ${cell.isToday ? "today" : ""}" role="button" tabindex="0" data-hm-key="${escapeHtml(cell.dateKey)}" data-hm-text="${escapeHtml(cell.shortLbl + " · " + formatTelemetryDuration(cell.sec, "0.0h") + " · " + cell.tasks + " " + (cell.tasks === 1 ? "task" : "tasks"))}" aria-label="${escapeHtml(cell.shortLbl + ": " + formatTelemetryDuration(cell.sec, "0h") + ", " + cell.tasks + " tasks")}" onclick="selectedReviewHeatmapKey=${jsArg(cell.dateKey)};renderApp();" style="background:${hmLevelBg[cell.lvl]};"></div>
                     `).join("")}
                   </div>
                 `).join("")}
               </div>
             </div>
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">
-              <span>${inspectedCell ? `${escapeHtml(inspectedCell.shortLbl)} · ${formatTelemetryDuration(inspectedCell.sec, "0.0h")} · ${inspectedCell.tasks} ${inspectedCell.tasks === 1 ? "task" : "tasks"}` : "Tap a day to inspect"}</span>
+              <span data-hm-readout>${inspectedCell ? `${escapeHtml(inspectedCell.shortLbl)} · ${formatTelemetryDuration(inspectedCell.sec, "0.0h")} · ${inspectedCell.tasks} ${inspectedCell.tasks === 1 ? "task" : "tasks"}` : "Tap a day to inspect"}</span>
               <span style="display:inline-flex;align-items:center;gap:3px;color:var(--dim);font-size:10px;">
                 Less
                 ${hmLevelBg.map(bg => `<span style="width:8px;height:8px;border-radius:2px;background:${bg};"></span>`).join("")}
@@ -8967,9 +9099,9 @@ var HuntCore = (() => {
           </div>
 
           ${habitsList.length > 0 ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px;margin:0 0 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;">
               <span>Added to Today automatically each day</span>
-              <span style="color:white;font-weight:600;">${doneTodayCount} / ${habitsList.length} done today</span>
+              <span style="color:white;font-weight:600;flex-shrink:0;white-space:nowrap;">${doneTodayCount} / ${habitsList.length} done today</span>
             </div>
           ` : ""}
 
@@ -8999,7 +9131,7 @@ var HuntCore = (() => {
                 </button>
                 <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})">
                   <div class="queue-item-title" style="${doneToday ? "text-decoration:line-through;color:var(--muted);" : ""}">${title}</div>
-                  ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;">${escapeHtml(h.notes)}</div>` : ""}
+                  ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(h.notes)}</div>` : ""}
                   <div class="queue-item-sub" style="margin-top:8px;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;">
                     <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1;">
                       <span style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
@@ -9052,7 +9184,15 @@ var HuntCore = (() => {
       const key = cells[ri] ? cells[ri].getAttribute("data-hm-key") : null; // a future day has none
       if (!key || key === selectedReviewHeatmapKey) return;
       selectedReviewHeatmapKey = key;
-      renderApp();
+      // Per-cell scrub: move the outline and update the readout in place (a full renderApp per cell
+      // rebuilt the whole Review screen and janked on mid-range phones). pointerup renders once.
+      cols.querySelectorAll(".heatmap-cell.selected").forEach(c => c.classList.remove("selected"));
+      cells[ri].classList.add("selected");
+      const card = cols.closest("[data-review-heatmap]");
+      const readout = card ? card.querySelector("[data-hm-readout]") : null;
+      const text = cells[ri].getAttribute("data-hm-text");
+      if (readout && text) readout.textContent = text;
+      heatmapScrubPending = true;
     }
 
     function computeTimelineLayout(items, defaultStartHr, defaultEndHr) {
@@ -9062,7 +9202,9 @@ var HuntCore = (() => {
         const d = new Date(it.startTime);
         const sHr = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
         const safeStart = Number.isFinite(sHr) ? Math.max(0, Math.min(23.75, sHr)) : defaultStartHr;
-        const durHr = Math.max(0.42, (Math.max(0, Number(it.durationSeconds) || 0)) / 3600);
+        // Blocks are drawn at least 32-34 px tall (48 px per hour): lay them out at that size too, so two
+        // short sessions 26-39 min apart get separate lanes instead of overlapping.
+        const durHr = Math.max(34 / 48, (Math.max(0, Number(it.durationSeconds) || 0)) / 3600);
         const safeEnd = Math.min(24, safeStart + durHr);
         if (safeStart < minStart) minStart = Math.max(0, Math.floor(safeStart));
         if (safeEnd > maxEnd) maxEnd = Math.min(24, Math.ceil(safeEnd));
@@ -9214,6 +9356,7 @@ var HuntCore = (() => {
     }
 
     // 500 ms ticker: live timers + relative sync ages. Skipped while hidden; writes only changed text.
+    let liveRenderMinute = null; // wall-clock minute of Today's last live refresh (see tick)
     function tick() {
       if (isAppHidden()) return;
       // midnight with the app open (e.g. screen kept awake by a running timer): materialize the new day's
@@ -9233,6 +9376,17 @@ var HuntCore = (() => {
 
       setTextIfChanged(document.getElementById("focusBigChrono"), formatted);
       setTextIfChanged(document.getElementById("headerChronoText"), formatted);
+      // Today's hours, week bar, live timeline block and now-line are drawn at render time: refresh them
+      // at most once a minute while the timer runs. renderAppSafely waits out a press or a focused field.
+      const minute = Math.floor(Date.now() / 60000);
+      if (activeView !== "command") {
+        liveRenderMinute = null;
+      } else if (liveRenderMinute === null) {
+        liveRenderMinute = minute; // just arrived on Today: it was rendered fresh
+      } else if (minute !== liveRenderMinute) {
+        liveRenderMinute = minute;
+        renderAppSafely();
+      }
       document.querySelectorAll("[data-task-timer]").forEach(el => {
         if (el.getAttribute("data-task-timer") !== task.id) return;
         const prefix = el.hasAttribute("data-prefix") ? el.getAttribute("data-prefix") : "· ";

@@ -35,7 +35,7 @@ import {
   reopenDotBgClass,
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
-import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useTransientHighlight } from "./useTransientHighlight";
 
@@ -70,7 +70,7 @@ function buildDayColumns(todayKey: string, dayOffset: number): DayColumn[] {
 }
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
-const ADD_BUTTON = `rounded border border-white/10 bg-white/[0.03] p-1 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
+const ADD_BUTTON = `rounded-md border border-white/10 bg-white/[0.03] p-2 coarse:p-2.5 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
 
 interface DayTasks {
@@ -357,7 +357,7 @@ export function PlanWeekView() {
           <div
             role="group"
             aria-label="Quest for new tasks"
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-2xl border border-white/[0.07] bg-[#111318] p-1 sm:rounded-full"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#111318] p-1 sm:rounded-full"
           >
             {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
@@ -371,7 +371,7 @@ export function PlanWeekView() {
                     setQuestChoice(q.id);
                   }}
                   aria-pressed={isSelected}
-                  className={`flex min-w-0 max-w-full sm:max-w-[200px] items-center gap-1.5 rounded-full px-3 py-1 text-xs ${PRESSABLE} ${
+                  className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full sm:max-w-[200px] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                     isSelected
                       ? "bg-white/10 text-white font-medium"
                       : "text-neutral-400 hover:text-neutral-200"
@@ -391,7 +391,7 @@ export function PlanWeekView() {
                 setQuestChoice(null);
               }}
               aria-pressed={otherSelected}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${PRESSABLE} ${
+              className={`flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                 otherSelected
                   ? "bg-white/10 text-white font-medium"
                   : "text-hud-muted hover:text-neutral-300"
@@ -412,14 +412,14 @@ export function PlanWeekView() {
             type="button"
             onClick={() => setDayOffset((d) => d - 1)}
             aria-label="Previous day"
-            className={`${NAV_BUTTON} p-2 text-neutral-400`}
+            className={`${NAV_BUTTON} p-2 coarse:p-3 text-neutral-400`}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={() => setDayOffset(0)}
-            className={`${NAV_BUTTON} px-4 py-2 text-xs font-medium text-white`}
+            className={`${NAV_BUTTON} px-4 py-2 coarse:py-3 text-xs font-medium text-white`}
           >
             Today
           </button>
@@ -427,7 +427,7 @@ export function PlanWeekView() {
             type="button"
             onClick={() => setDayOffset((d) => d + 1)}
             aria-label="Next day"
-            className={`${NAV_BUTTON} p-2 text-neutral-400`}
+            className={`${NAV_BUTTON} p-2 coarse:p-3 text-neutral-400`}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -454,7 +454,13 @@ export function PlanWeekView() {
                 e.preventDefault();
                 setDragOverDateKey(col.dateKey);
               }}
-              onDragLeave={() => setDragOverDateKey(null)}
+              onDragLeave={(e) => {
+                // Crossing into a child fires dragleave too; only clear the
+                // highlight when the pointer really leaves the column.
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setDragOverDateKey(null);
+                }
+              }}
               onDrop={() => handleDropOnDay(col.dateKey)}
               className={`flex min-h-[200px] xl:min-h-[560px] min-w-0 flex-col rounded-2xl border p-4 transition-colors ${
                 isDragTarget
@@ -494,7 +500,7 @@ export function PlanWeekView() {
 
               {/* Dashed Add Task Input (for Today & Future Columns) */}
               {!col.isPast && (
-                <div className="mb-3.5 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3 py-2.5 transition-colors duration-150 ease-out focus-within:border-white/40">
+                <div className="mb-3.5 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3 py-1 transition-colors duration-150 ease-out focus-within:border-white/40">
                   <div className="flex items-center justify-between gap-2">
                     <input
                       type="text"
@@ -513,9 +519,9 @@ export function PlanWeekView() {
                       }}
                       placeholder="Add a task..."
                       aria-label={`Add task for ${col.weekdayLong}`}
-                      className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
+                      className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-white placeholder:text-hud-muted focus:outline-none"
                     />
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleAddForDay(col.dateKey, true)}
@@ -536,7 +542,7 @@ export function PlanWeekView() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
+                  <div className="mt-1 border-t border-white/[0.05]">
                     <input
                       type="text"
                       value={notesByDay[col.dateKey] ?? ""}
@@ -554,7 +560,7 @@ export function PlanWeekView() {
                       }}
                       placeholder="Description (optional)..."
                       aria-label={`Task description for ${col.weekdayLong} (optional)`}
-                      className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+                      className="w-full bg-transparent py-1.5 text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
                     />
                   </div>
                 </div>
@@ -597,7 +603,9 @@ export function PlanWeekView() {
                         setDragOverDateKey(null);
                       }}
                       onKeyDown={(e) => void handleCardKeyDown(e, task, col.dateKey)}
-                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-colors duration-200 cursor-grab active:cursor-grabbing ${
+                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-[border-color,background-color,opacity] duration-200 cursor-grab active:cursor-grabbing ${
+                        draggedTaskId === task.id ? "opacity-40 " : ""
+                      }${
                         isHero
                           ? "border-[#ffb800]/40 bg-[#151820] shadow-[0_0_24px_-10px_rgba(255,184,0,0.2)]"
                           : "border-white/[0.08] bg-[#13151b] hover:border-white/20"
@@ -639,7 +647,7 @@ export function PlanWeekView() {
                             }}
                             title="Mark complete"
                             aria-label="Mark complete"
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
                                 : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
@@ -676,13 +684,12 @@ export function PlanWeekView() {
                           {isRunningHere && (
                             <span className="h-2 w-2 rounded-full bg-[#00ff9d] animate-pulse" />
                           )}
-                          {/* The arbitrary transition-property comes after the
-                              component's transition-colors in the compiled CSS,
-                              so both the colour and the hover fade transition. */}
+                          {/* ROW_DELETE_CLASS: revealed on row hover for mice,
+                              always visible (muted) on touch, padded target. */}
                           <ConfirmDeleteButton
                             label="Delete task"
                             onConfirm={() => deleteTask(task.id)}
-                            className="whitespace-nowrap text-xs text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                            className={`${ROW_DELETE_CLASS} whitespace-nowrap text-xs`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </ConfirmDeleteButton>
@@ -736,7 +743,7 @@ export function PlanWeekView() {
                             onClick={() => reopenTaskById(task.id)}
                             title="Reopen task"
                             aria-label="Reopen task"
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
+                            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
                           >
                             {isJustCompleted ? (
                               <motion.span
@@ -787,7 +794,7 @@ export function PlanWeekView() {
                         <ConfirmDeleteButton
                           label="Delete task"
                           onConfirm={() => deleteTask(task.id)}
-                          className="shrink-0 text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                          className={`${ROW_DELETE_CLASS} whitespace-nowrap text-xs`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </ConfirmDeleteButton>

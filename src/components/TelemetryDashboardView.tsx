@@ -32,7 +32,7 @@ import {
 } from "@/lib/reviewAnalytics";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
-import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { ReviewHeatmapCard } from "./ReviewHeatmapCard";
 import { useTodayDateKey } from "./useTodayDateKey";
 
@@ -305,7 +305,7 @@ export function TelemetryDashboardView() {
                 role="listbox"
                 aria-label="Quest filter options"
                 onKeyDown={handleScopeListKeyDown}
-                className="absolute left-0 sm:left-auto sm:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1 shadow-2xl"
+                className="absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1 shadow-2xl"
               >
                 <button
                   type="button"
@@ -400,7 +400,7 @@ export function TelemetryDashboardView() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => handleHorizonChange(opt.id)}
-                  className={`rounded-full px-2.5 sm:px-3 py-1.5 text-xs font-medium ${
+                  className={`min-h-8 coarse:min-h-11 rounded-full px-2.5 sm:px-3 py-1.5 text-xs font-medium ${
                     active
                       ? "bg-white/12 text-white"
                       : "text-hud-muted hover:text-neutral-200"
@@ -627,7 +627,7 @@ export function TelemetryDashboardView() {
                 type="button"
                 aria-pressed={chartMetric === "hours"}
                 onClick={() => setChartMetric("hours")}
-                className={`rounded-full px-3 py-1 text-[11px] font-medium ${
+                className={`min-h-8 coarse:min-h-11 rounded-full px-3 py-1.5 text-[11px] font-medium ${
                   chartMetric === "hours"
                     ? "bg-white/12 text-white"
                     : "text-hud-muted hover:text-neutral-200"
@@ -639,7 +639,7 @@ export function TelemetryDashboardView() {
                 type="button"
                 aria-pressed={chartMetric === "tasks"}
                 onClick={() => setChartMetric("tasks")}
-                className={`rounded-full px-3 py-1 text-[11px] font-medium ${
+                className={`min-h-8 coarse:min-h-11 rounded-full px-3 py-1.5 text-[11px] font-medium ${
                   chartMetric === "tasks"
                     ? "bg-white/12 text-white"
                     : "text-hud-muted hover:text-neutral-200"
@@ -661,10 +661,13 @@ export function TelemetryDashboardView() {
                   : 2;
               const valueLabel =
                 chartMetric === "hours"
-                  ? formatTelemetryDuration(bucket.seconds, {
-                      zeroAs: "0h",
-                      compactLarge: true,
-                    })
+                  ? horizon === "year" && bucket.seconds >= 36000
+                    ? // Year columns are ~28px wide: whole hours fit, "42.5h" truncates.
+                      `${Math.round(bucket.seconds / 3600)}h`
+                    : formatTelemetryDuration(bucket.seconds, {
+                        zeroAs: "0h",
+                        compactLarge: true,
+                      })
                   : bucket.completedTasks >= 1000
                   ? `${(bucket.completedTasks / 1000).toFixed(1)}k`
                   : `${bucket.completedTasks}`;
@@ -693,7 +696,7 @@ export function TelemetryDashboardView() {
                   <div className="flex h-56 w-full max-w-[44px] items-end justify-center">
                     <div
                       style={{ height: `${barPct}%` }}
-                      className={`w-full rounded-t-md transition-all duration-500 ${
+                      className={`w-full rounded-t-md transition-[height] duration-500 ease-out ${
                         bucket.isCurrent
                           ? primaryBarClass
                           : rawValue > 0
@@ -790,7 +793,7 @@ export function TelemetryDashboardView() {
                     </div>
                     <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.05]">
                       <div
-                        className={`h-full rounded-full ${style.bg} transition-all duration-500`}
+                        className={`h-full rounded-full ${style.bg} transition-[width] duration-500 ease-out`}
                         style={{ width: `${widthPct}%` }}
                       />
                     </div>
@@ -800,10 +803,10 @@ export function TelemetryDashboardView() {
             </div>
           </div>
 
-          {/* Card: QUEST WORK VS OTHER */}
+          {/* Card: FOCUS SPLIT (quest work vs other) */}
           <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
             <div className="mb-5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-              Quest Work vs Other
+              Focus Split
             </div>
 
             <div className="flex h-11 w-full overflow-hidden rounded-lg bg-[#1d1f26]">
@@ -815,11 +818,11 @@ export function TelemetryDashboardView() {
                       : 0
                   }%`,
                 }}
-                className="h-full bg-[#ffb800] transition-all duration-500"
+                className="h-full bg-[#ffb800] transition-[width] duration-500 ease-out"
               />
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-6 text-xs">
+            <div className="mt-4 flex flex-wrap items-center gap-6 text-xs tabular-nums">
               <div className="flex items-center gap-2 text-neutral-200">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#ffb800]" />
                 <span>Quest work · {durationText(report.questSeconds)}</span>
@@ -840,6 +843,7 @@ export function TelemetryDashboardView() {
       {/* ACTIVITY HEATMAP (26 Weeks, Scoped to All Quests or Quest X)      */}
       {/* ================================================================= */}
       <ReviewHeatmapCard
+        loading={heatmapLogs === undefined}
         heatmap={heatmap}
         scopeTitle={scopeTitle}
         paletteAccent={
@@ -857,7 +861,7 @@ export function TelemetryDashboardView() {
           type="button"
           onClick={() => setShowSessionHistory(!showSessionHistory)}
           aria-expanded={showSessionHistory}
-          className={`text-xs font-medium uppercase tracking-[0.16em] text-hud-muted hover:text-neutral-300 ${PRESSABLE}`}
+          className={`-mx-2 rounded-lg px-2 py-2 text-xs font-medium uppercase tracking-[0.16em] text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
         >
           {showSessionHistory
             ? "Hide Session Log ↑"
@@ -896,7 +900,7 @@ export function TelemetryDashboardView() {
                     <ConfirmDeleteButton
                       label="Delete session"
                       onConfirm={() => handleDeleteLog(log.id)}
-                      className="whitespace-nowrap font-sans text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                      className={`whitespace-nowrap font-sans ${ROW_DELETE_CLASS}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </ConfirmDeleteButton>

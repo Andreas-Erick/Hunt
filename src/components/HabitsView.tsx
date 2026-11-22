@@ -293,7 +293,7 @@ export function HabitsView() {
           <button
             type="submit"
             disabled={!newTitle.trim()}
-            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#00f0ff] px-4 py-2 text-xs font-semibold text-black transition-all duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#00f0ff] px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Habit</span>
@@ -328,7 +328,7 @@ export function HabitsView() {
                   setQuestChoice(q.id);
                 }}
                 aria-pressed={isSelected}
-                className={`flex min-w-0 max-w-full sm:max-w-[230px] items-center gap-2 rounded-full border px-3 py-1 text-xs transition-all duration-150 ease-out active:opacity-80 ${
+                className={`flex min-w-0 max-w-full sm:max-w-[230px] items-center gap-2 rounded-full border min-h-8 coarse:min-h-11 px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
                   isSelected
                     ? `${st.border} bg-white/[0.06] text-white font-medium`
                     : "border-white/[0.07] bg-transparent text-neutral-400 hover:border-white/15 hover:text-neutral-200"
@@ -349,7 +349,7 @@ export function HabitsView() {
               setQuestChoice(null);
             }}
             aria-pressed={otherSelected}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-all duration-150 ease-out active:opacity-80 ${
+            className={`flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
               otherSelected
                 ? "border-white/30 bg-white/[0.08] text-white font-medium"
                 : "border-white/[0.07] text-hud-muted hover:text-neutral-300"
@@ -420,7 +420,7 @@ export function HabitsView() {
                             : `Complete today's habit: ${habit.title}`
                         }
                         aria-pressed={doneToday}
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                        className={`relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[transform,opacity,background-color,border-color,color] duration-150 ease-out active:scale-90 active:opacity-80 ${
                           doneToday
                             ? `${style.bg} border-transparent text-black`
                             : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
@@ -478,7 +478,7 @@ export function HabitsView() {
                           onClick={() => void handleFocusToday(habit)}
                           aria-label={`Start focus: ${habit.title}`}
                           title="Start focus"
-                          className="rounded-lg p-2 text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
+                          className="grid h-9 w-9 coarse:h-11 coarse:w-11 place-items-center rounded-lg text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
                         >
                           <Play className="h-3.5 w-3.5 fill-current" />
                         </button>
@@ -489,7 +489,7 @@ export function HabitsView() {
                         aria-label={`Edit habit ${habit.title}`}
                         aria-expanded={isEditing}
                         title="Edit habit"
-                        className="rounded-lg p-2 text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
+                        className="grid h-9 w-9 coarse:h-11 coarse:w-11 place-items-center rounded-lg text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
                       >
                         <SlidersHorizontal className="h-4 w-4" />
                       </button>
@@ -497,7 +497,7 @@ export function HabitsView() {
                         label={`Delete habit ${habit.title}`}
                         confirmLabel="Delete habit?"
                         onConfirm={() => deleteHabit(habit.id)}
-                        className="ml-1 rounded-lg p-2 text-hud-muted hover:text-[#ff2a5f] data-[state=armed]:opacity-100"
+                        className="ml-1 flex h-9 min-w-9 coarse:h-11 coarse:min-w-11 items-center justify-center rounded-lg px-2 text-hud-muted hover:bg-white/[0.05] hover:text-[#ff2a5f] data-[state=armed]:opacity-100"
                       >
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
@@ -610,7 +610,7 @@ export function HabitsView() {
                       <div
                         role="group"
                         aria-label="Habit quest"
-                        className="flex min-w-0 flex-wrap items-center gap-1.5"
+                        className="flex min-w-0 flex-wrap items-center gap-2"
                       >
                         {activeQuests.map((q) => {
                           const qStyle = accentStyle(q.accentColor);
@@ -621,7 +621,7 @@ export function HabitsView() {
                               type="button"
                               aria-pressed={active}
                               onClick={() => setEditQuestId(q.id)}
-                              className={`flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+                              className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
                                 active
                                   ? "border-white/25 bg-white/10 text-white"
                                   : "border-transparent text-hud-muted hover:text-neutral-300"
@@ -640,7 +640,7 @@ export function HabitsView() {
                           type="button"
                           aria-pressed={editQuestId === null}
                           onClick={() => setEditQuestId(null)}
-                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+                          className={`min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
                             editQuestId === null
                               ? "border-white/25 bg-white/10 text-white"
                               : "border-transparent text-hud-muted hover:text-neutral-300"
@@ -654,7 +654,7 @@ export function HabitsView() {
                         <button
                           type="button"
                           onClick={cancelEdit}
-                          className="rounded-lg px-2.5 py-1.5 text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                          className="min-h-8 coarse:min-h-11 rounded-lg px-3 py-1.5 text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
                         >
                           Cancel
                         </button>
@@ -662,7 +662,7 @@ export function HabitsView() {
                           type="submit"
                           disabled={savingEdit || !editTitle.trim()}
                           aria-busy={savingEdit}
-                          className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-50"
+                          className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-50"
                         >
                           <Check className="h-3.5 w-3.5" />
                           <span>Save</span>

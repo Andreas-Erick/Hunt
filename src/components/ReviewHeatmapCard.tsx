@@ -93,13 +93,17 @@ interface ReviewHeatmapCardProps {
   heatmap: ActivityHeatmapReport;
   scopeTitle: string;
   paletteAccent: string | null | undefined;
+  /** True until the heatmap logs resolve: counts render "–" instead of real-looking zeros. */
+  loading?: boolean;
 }
 
 export function ReviewHeatmapCard({
   heatmap,
   scopeTitle,
   paletteAccent,
+  loading = false,
 }: ReviewHeatmapCardProps) {
+  const count = (value: React.ReactNode) => (loading ? "–" : value);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const palette = resolvePalette(paletteAccent);
   const shades = LEVEL_CLASSES[palette];
@@ -128,16 +132,16 @@ export function ReviewHeatmapCard({
       className="cq-card mt-6 rounded-2xl border border-white/[0.08] bg-[#111318] p-4 sm:p-7"
     >
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             Activity Heatmap · Last 26 Weeks
           </div>
-          <p className="mt-1 text-xs text-hud-muted">
-            {scopeTitle} · {heatmap.activeDays} active{" "}
-            {heatmap.activeDays === 1 ? "day" : "days"} ({heatmap.activePct}%) ·{" "}
-            {formatTelemetryDuration(heatmap.totalSeconds, { zeroAs: "0.0h" })} logged ·{" "}
-            {heatmap.totalCompletedTasks}{" "}
-            {heatmap.totalCompletedTasks === 1 ? "task" : "tasks"} completed
+          <p className="mt-1 text-xs text-hud-muted tabular-nums [overflow-wrap:anywhere]">
+            {scopeTitle} · {count(heatmap.activeDays)} active{" "}
+            {heatmap.activeDays === 1 && !loading ? "day" : "days"} ({count(heatmap.activePct)}%) ·{" "}
+            {count(formatTelemetryDuration(heatmap.totalSeconds, { zeroAs: "0.0h" }))} logged ·{" "}
+            {count(heatmap.totalCompletedTasks)}{" "}
+            {heatmap.totalCompletedTasks === 1 && !loading ? "task" : "tasks"} completed
           </p>
         </div>
 
@@ -145,12 +149,14 @@ export function ReviewHeatmapCard({
           <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-neutral-200 tabular-nums">
             <Flame className="h-3.5 w-3.5 text-[#ffb800]" />
             <span>
-              Streak: <strong>{heatmap.currentStreak}d</strong>
+              Streak: <strong>{loading ? "–" : `${heatmap.currentStreak}d`}</strong>
             </span>
-            <span className="text-hud-muted">· Best {heatmap.longestStreak}d</span>
+            <span className="text-hud-muted">
+              · Best {loading ? "–" : `${heatmap.longestStreak}d`}
+            </span>
           </div>
 
-          {heatmap.bestWeekday && (
+          {!loading && heatmap.bestWeekday && (
             <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-neutral-300 tabular-nums">
               <Sparkles className="h-3.5 w-3.5 text-[#00f0ff]" />
               <span>
@@ -163,14 +169,14 @@ export function ReviewHeatmapCard({
       </div>
 
       {/* Scrollable Grid Container */}
-      <div className="scroll-shadow-x mt-6 overflow-x-auto pb-1">
-        <div className="inline-flex min-w-full flex-col gap-1.5">
+      <div className="scroll-shadow-x mt-6 overflow-x-auto px-1 pb-1">
+        <div className="inline-flex min-w-full flex-col gap-1.5 coarse:gap-2">
           {/* Month Header Row */}
-          <div className="flex items-center gap-1.5 pl-9">
+          <div className="flex items-center gap-1.5 coarse:gap-2 pl-9">
             {heatmap.columns.map((col) => (
               <div
                 key={`m-${col.weekKey}`}
-                className="w-3.5 flex-1 text-[10px] font-medium text-hud-muted"
+                className="w-3.5 max-w-[1.5rem] flex-1 whitespace-nowrap text-[10px] font-medium text-hud-muted"
               >
                 {col.monthLabel ?? ""}
               </div>
@@ -179,26 +185,26 @@ export function ReviewHeatmapCard({
 
           {/* 7 Weekday Rows x 26 Week Columns */}
           <div className="flex items-start gap-2">
-            <div className="grid grid-rows-7 gap-1.5 pr-1 text-[10px] leading-3.5 text-hud-muted">
-              <span className="flex h-3.5 items-center">Mon</span>
-              <span className="flex h-3.5 items-center" aria-hidden="true" />
-              <span className="flex h-3.5 items-center">Wed</span>
-              <span className="flex h-3.5 items-center" aria-hidden="true" />
-              <span className="flex h-3.5 items-center">Fri</span>
-              <span className="flex h-3.5 items-center" aria-hidden="true" />
-              <span className="flex h-3.5 items-center">Sun</span>
+            <div className="grid grid-rows-7 gap-1.5 coarse:gap-2 pr-1 text-[10px] leading-3.5 text-hud-muted">
+              <span className="flex h-3.5 coarse:h-6 items-center">Mon</span>
+              <span className="flex h-3.5 coarse:h-6 items-center" aria-hidden="true" />
+              <span className="flex h-3.5 coarse:h-6 items-center">Wed</span>
+              <span className="flex h-3.5 coarse:h-6 items-center" aria-hidden="true" />
+              <span className="flex h-3.5 coarse:h-6 items-center">Fri</span>
+              <span className="flex h-3.5 coarse:h-6 items-center" aria-hidden="true" />
+              <span className="flex h-3.5 coarse:h-6 items-center">Sun</span>
             </div>
 
-            <div className="flex flex-1 gap-1.5">
+            <div className="flex flex-1 gap-1.5 coarse:gap-2">
               {heatmap.columns.map((col) => (
-                <div key={col.weekKey} className="grid flex-1 grid-rows-7 gap-1.5">
+                <div key={col.weekKey} className="grid max-w-[1.5rem] flex-1 grid-rows-7 gap-1.5 coarse:gap-2">
                   {col.cells.map((cell) => {
                     if (cell.isFuture) {
                       return (
                         <div
                           key={cell.dateKey}
                           aria-hidden="true"
-                          className="h-3.5 min-w-[12px] rounded-[3px] bg-transparent"
+                          className="h-3.5 coarse:h-6 min-w-[12px] rounded-[3px] bg-transparent"
                         />
                       );
                     }
@@ -217,7 +223,7 @@ export function ReviewHeatmapCard({
                         aria-pressed={isSelected}
                         title={summary}
                         onClick={() => setSelectedDateKey(cell.dateKey)}
-                        className={`h-3.5 min-w-[12px] rounded-[3px] ${shades[cell.level]} ${
+                        className={`h-3.5 coarse:h-6 min-w-[12px] rounded-[3px] ${shades[cell.level]} ${
                           isSelected
                             ? "ring-1 ring-white ring-offset-1 ring-offset-[#111318]"
                             : cell.isToday

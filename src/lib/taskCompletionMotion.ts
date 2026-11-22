@@ -8,10 +8,11 @@ export const COMPLETION_HIGHLIGHT_MS = 650;
 /**
  * Surface of a completed card while it settles in (`COMPLETION_HIGHLIGHT_MS`):
  * raised above its siblings with an emerald border and one shared shadow, the
- * same on Home and Plan the week.
+ * same on Home and Plan the week. z-10 keeps it under the z-20 sticky
+ * PageNotice it can scroll beneath.
  */
 export const SETTLING_COMPLETED_CARD_CLASS =
-  "z-20 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]";
+  "z-10 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]";
 
 /**
  * Fill of a completed card's dimmed (opacity-65) Reopen dot. The slate "Other"

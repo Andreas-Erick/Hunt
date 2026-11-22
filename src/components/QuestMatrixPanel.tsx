@@ -1,6 +1,8 @@
 "use client";
 
 import React, {
+  memo,
+  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
@@ -123,7 +125,7 @@ function AccentPills({
     <div
       role="group"
       aria-label="Quest color"
-      className="flex flex-wrap items-center gap-1.5"
+      className="flex flex-wrap items-center gap-2"
     >
       {ACCENT_OPTIONS.map((opt) => {
         const selected = value === opt.id;
@@ -133,7 +135,7 @@ function AccentPills({
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(opt.id)}
-            className={`flex items-center rounded-full border py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+            className={`flex min-h-8 coarse:min-h-11 items-center rounded-full border py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
               compact ? "gap-1.5 px-2.5" : "gap-2 px-3"
             } ${
               selected
@@ -182,6 +184,299 @@ function WeeklyTargetInput({
     />
   );
 }
+
+/**
+ * A callback whose identity never changes but always runs the latest `fn`, so
+ * memoized quest cards are not re-rendered by a new closure on every keystroke.
+ */
+function useStableCallback<T extends (...args: never[]) => unknown>(fn: T): T {
+  const ref = useRef(fn);
+  useLayoutEffect(() => {
+    ref.current = fn;
+  });
+  return useCallback(
+    ((...args: Parameters<T>) => ref.current(...args)) as T,
+    []
+  );
+}
+
+type CreateTaskFn = (params: {
+  title: string;
+  notes?: string;
+  questId: string | null;
+  promoteToTop?: boolean;
+}) => Promise<boolean>;
+
+const QUEST_CARD_LAYOUT_TRANSITION = {
+  layout: {
+    type: "spring",
+    stiffness: 300,
+    damping: 30,
+    mass: 0.9,
+  },
+} as const;
+
+interface QuestCardProps {
+  quest: Quest;
+  weeklySeconds: number;
+  pct: number;
+  weekLogsLoaded: boolean;
+  questTasks: readonly Task[];
+  tasksLoaded: boolean;
+  isEditing: boolean;
+  /** The edit drawer, only for the card being edited (null otherwise). */
+  editDrawer: React.ReactNode;
+  flowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
+  onCompleteQuest: (questId: string) => Promise<void>;
+  onToggleEdit: (quest: Quest, toggle: HTMLButtonElement) => void;
+  onCompleteStep: (taskId: string, questId: string, accent: QuestAccent) => void;
+  onStartFocus: (taskId: string) => void;
+  createTask: CreateTaskFn;
+}
+
+/**
+ * One active quest card. Memoized with stable callbacks and its own quick-add
+ * state, so typing in any form re-renders (and framer re-measures) only the
+ * card that changed instead of every card in the LayoutGroup.
+ */
+const QuestCard = memo(function QuestCard({
+  quest,
+  weeklySeconds,
+  pct,
+  weekLogsLoaded,
+  questTasks,
+  tasksLoaded,
+  isEditing,
+  editDrawer,
+  flowRefs,
+  onCompleteQuest,
+  onToggleEdit,
+  onCompleteStep,
+  onStartFocus,
+  createTask,
+}: QuestCardProps) {
+  const style = accentStyle(quest.accentColor);
+  const [quickTask, setQuickTask] = useState("");
+  const [quickNotes, setQuickNotes] = useState("");
+  // Set while this card's quick-add write is in flight.
+  const quickAddInFlight = useRef(false);
+
+  const handleQuickAdd = async () => {
+    const text = quickTask.trim();
+    const rawNotes = quickNotes;
+    const trimmedNotes = rawNotes.trim();
+    if (!text || quickAddInFlight.current) return;
+    quickAddInFlight.current = true;
+    setQuickTask("");
+    setQuickNotes("");
+    hudAudio.playClick();
+    let created = false;
+    try {
+      created = await createTask({
+        title: text,
+        questId: quest.id,
+        promoteToTop: false,
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
+      });
+    } finally {
+      quickAddInFlight.current = false;
+      if (!created) {
+        setQuickTask((prev) => (prev === "" ? text : prev));
+        setQuickNotes((prev) => (prev === "" ? rawNotes : prev));
+      }
+    }
+  };
+
+  return (
+    <motion.div
+      layout="position"
+      layoutId={`quest-card-${quest.id}`}
+      transition={QUEST_CARD_LAYOUT_TRANSITION}
+      data-testid="quest-card"
+      data-quest-id={quest.id}
+      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
+    >
+      <div>
+        {/* Top Row: Colored Dot + Quest Title + Complete & Edit Buttons */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <span
+              className={`mt-2 h-3 w-3 shrink-0 rounded-full ${style.bg}`}
+            />
+            <h2 className="min-w-0 break-words [text-wrap:balance] text-xl font-medium leading-snug text-white">
+              {quest.title}
+            </h2>
+          </div>
+
+          {/* Not shrink-0: the armed label wraps inside the card instead of spilling past it. */}
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            <ConfirmDeleteButton
+              label={`Complete quest ${quest.title}`}
+              confirmLabel={completeQuestConfirmLabel(questTasks.length)}
+              armedClassName="text-hud-emerald font-medium"
+              onConfirm={() => onCompleteQuest(quest.id)}
+              className="flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-left text-xs text-neutral-300 hover:border-[#00ff9d]/40 hover:bg-[#00ff9d]/10 hover:text-[#00ff9d] data-[state=armed]:border-[#00ff9d]/45 data-[state=armed]:bg-[#00ff9d]/15"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#00ff9d]" />
+              <span>Complete</span>
+            </ConfirmDeleteButton>
+
+            <button
+              type="button"
+              onClick={(e) => onToggleEdit(quest, e.currentTarget)}
+              title="Edit or Delete Quest"
+              aria-label={`Edit quest ${quest.title}`}
+              aria-expanded={isEditing}
+              className="shrink-0 rounded-lg p-2 coarse:p-3 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {quest.description && (
+          <p className="mt-2.5 max-w-[65ch] break-words text-sm leading-relaxed text-neutral-400">
+            {quest.description}
+          </p>
+        )}
+
+        {/* Inline Edit & Delete Drawer */}
+        {isEditing && editDrawer}
+
+        {/* Weekly Quest Hours Progress */}
+        <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
+              Quest Hours (7d)
+            </span>
+            <span className="text-sm text-neutral-400 tabular-nums">
+              <strong className="text-lg font-medium text-white">
+                {!weekLogsLoaded
+                  ? "–"
+                  : formatTelemetryDuration(weeklySeconds, {
+                      zeroAs: "0.0h",
+                    })}
+              </strong>{" "}
+              / {quest.targetWeeklyHours}h
+            </span>
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+            {/* Full-width fill slid in from the left (compositor-only);
+                the track's overflow-hidden clips it, keeping the rounded end. */}
+            <div
+              data-testid="quest-progress-fill"
+              className={`h-full w-full rounded-full ${style.bg} transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]`}
+              style={{ transform: `translateX(${pct - 100}%)` }}
+            />
+          </div>
+        </div>
+
+        {/* Linked Open Tasks */}
+        <div
+          ref={(el) => {
+            flowRefs.current[quest.id] = el;
+          }}
+          className="relative mt-6 space-y-2.5"
+        >
+          <div className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
+            Next Steps
+            {tasksLoaded ? ` (${questTasks.length})` : ""}
+          </div>
+
+          {questTasks.map((t) => (
+            <div
+              key={t.id}
+              data-task-id={t.id}
+              className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    // The second click of a double-click would hit
+                    // the next row, which slides up under the cursor.
+                    if (e.detail > 1) return;
+                    onCompleteStep(t.id, quest.id, quest.accentColor);
+                  }}
+                  title="Mark complete"
+                  aria-label="Mark complete"
+                  className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 before:content-[''] hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
+                >
+                  <Check className="h-2.5 w-2.5" />
+                </button>
+                <span
+                  data-task-title="true"
+                  className="truncate text-neutral-200"
+                  title={t.title}
+                >
+                  {t.title}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onStartFocus(t.id)}
+                aria-label={`Start focus: ${t.title}`}
+                className="-my-1.5 -mr-2 flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+              >
+                {t.accumulatedSeconds > 0 && (
+                  <span className="font-mono tabular-nums">
+                    {formatChronoMMSS(t.accumulatedSeconds).formatted}
+                  </span>
+                )}
+                <Play className="h-3.5 w-3.5 fill-current" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick Add Task to this Quest */}
+      <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
+        <div className="flex items-center gap-2 focus-within:border-white/40">
+          <input
+            type="text"
+            value={quickTask}
+            onChange={(e) => setQuickTask(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleQuickAdd();
+              }
+            }}
+            placeholder={`Add task to ${quest.title}...`}
+            aria-label={`Add quest work to ${quest.title}`}
+            className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => void handleQuickAdd()}
+            aria-label={`Add task to ${quest.title}`}
+            className="-my-1.5 -mr-2 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
+          <input
+            type="text"
+            value={quickNotes}
+            onChange={(e) => setQuickNotes(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleQuickAdd();
+              }
+            }}
+            placeholder="Description (optional)..."
+            aria-label={`Task description for ${quest.title} (optional)`}
+            className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+});
 
 export function QuestMatrixPanel() {
   const {
@@ -309,15 +604,6 @@ export function QuestMatrixPanel() {
   // React re-renders with the cleared title.
   const creatingQuestRef = useRef(false);
   const newQuestToggleRef = useRef<HTMLButtonElement | null>(null);
-
-  const [quickTaskByQuest, setQuickTaskByQuest] = useState<
-    Record<string, string>
-  >({});
-  const [quickNotesByQuest, setQuickNotesByQuest] = useState<
-    Record<string, string>
-  >({});
-  // Quest ids whose quick-add write is in flight.
-  const quickAddInFlight = useRef(new Set<string>());
 
   const editIsDirty = () =>
     editingQuest !== null &&
@@ -494,40 +780,108 @@ export function QuestMatrixPanel() {
     }
   };
 
-  const handleQuickAdd = async (questId: string) => {
-    const text = (quickTaskByQuest[questId] ?? "").trim();
-    const rawNotes = quickNotesByQuest[questId] ?? "";
-    const trimmedNotes = rawNotes.trim();
-    if (!text || quickAddInFlight.current.has(questId)) return;
-    quickAddInFlight.current.add(questId);
-    setQuickTaskByQuest((prev) => ({ ...prev, [questId]: "" }));
-    setQuickNotesByQuest((prev) => ({ ...prev, [questId]: "" }));
-    hudAudio.playClick();
-    let created = false;
-    try {
-      created = await createTask({
-        title: text,
-        questId,
-        promoteToTop: false,
-        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
-      });
-    } finally {
-      quickAddInFlight.current.delete(questId);
-      if (!created) {
-        setQuickTaskByQuest((prev) =>
-          (prev[questId] ?? "") === "" ? { ...prev, [questId]: text } : prev
-        );
-        setQuickNotesByQuest((prev) =>
-          (prev[questId] ?? "") === "" ? { ...prev, [questId]: rawNotes } : prev
-        );
-      }
-    }
-  };
+  // Stable identities for the memoized quest cards (they always call the
+  // latest handler, which reads the current drawer state).
+  const onToggleEdit = useStableCallback(startEdit);
+  const onCompleteQuest = useStableCallback(handleCompleteQuest);
+  const onCompleteStep = useStableCallback(handleCompleteQuestStep);
+  const onStartFocus = useStableCallback((taskId: string) => {
+    hudAudio.playLockOn();
+    initializeFocus(taskId);
+  });
+  const createQuestTask = useStableCallback(createTask);
 
   const newTitleId = `${ids}-new-title`;
   const newDescId = `${ids}-new-desc`;
   const editTitleId = `${ids}-edit-title`;
   const editDescId = `${ids}-edit-desc`;
+
+  /** Inline Edit & Delete drawer of the quest being edited. */
+  const renderEditDrawer = (quest: Quest, questTasks: readonly Task[]) => (
+    <form
+      aria-label={`Edit quest ${quest.title}`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void saveEdit(e.currentTarget);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") cancelEdit();
+      }}
+      className="mt-5 rounded-xl border border-white/10 bg-[#0b0c0e] p-4 space-y-3.5"
+    >
+      <div>
+        <label
+          htmlFor={editTitleId}
+          className="mb-1 block text-xs text-neutral-400"
+        >
+          Quest Title
+        </label>
+        <input
+          id={editTitleId}
+          type="text"
+          required
+          autoFocus
+          pattern={NON_BLANK_PATTERN}
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none"
+        />
+      </div>
+      <div>
+        <label
+          htmlFor={editDescId}
+          className="mb-1 block text-xs text-neutral-400"
+        >
+          Description
+        </label>
+        <input
+          id={editDescId}
+          type="text"
+          value={editDesc}
+          onChange={(e) => setEditDesc(e.target.value)}
+          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 focus:border-[#00f0ff] focus:outline-none"
+        />
+      </div>
+
+      <AccentPills compact value={editAccent} onChange={setEditAccent} />
+
+      <div className="flex items-center gap-2 pt-1 text-xs text-neutral-400">
+        <span>Weekly Goal:</span>
+        <WeeklyTargetInput value={editTarget} onChange={setEditTarget} />
+        <span>h/wk</span>
+      </div>
+
+      {/* Delete sits apart on the left (mr-auto): arming widens it into free
+          space instead of pushing Save sideways under the cursor. */}
+      <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
+        <ConfirmDeleteButton
+          label="Delete quest"
+          confirmLabel={deleteQuestConfirmLabel(questTasks.length)}
+          onConfirm={() => handleDeleteQuest(quest.id)}
+          className="mr-auto flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1 rounded-lg border border-[#ff2a5f]/30 bg-[#ff2a5f]/10 px-3 py-1.5 text-left text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/20 data-[state=armed]:bg-[#ff2a5f]/20"
+        >
+          <Trash2 className="h-3.5 w-3.5 shrink-0" />
+          <span>Delete</span>
+        </ConfirmDeleteButton>
+        <button
+          type="button"
+          onClick={cancelEdit}
+          className="min-h-8 coarse:min-h-11 rounded-lg px-3 py-1.5 text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={savingEdit}
+          aria-busy={savingEdit}
+          className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-60"
+        >
+          <Check className="h-3.5 w-3.5" />
+          <span>Save</span>
+        </button>
+      </div>
+    </form>
+  );
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
@@ -565,7 +919,13 @@ export function QuestMatrixPanel() {
               if (creatingNew) closeCreateForm();
               else setCreatingNew(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#00f0ff] px-4 py-2.5 text-xs font-semibold text-black hover:bg-white transition-colors"
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98] ${
+              // While the form is open this acts as its close toggle: secondary
+              // style, so only "Create Quest" reads as the primary action.
+              creatingNew
+                ? "border border-white/15 bg-white/[0.04] text-neutral-300 hover:border-white/25 hover:text-white"
+                : "border border-transparent bg-[#00f0ff] text-black hover:bg-white"
+            }`}
           >
             <Plus className="h-4 w-4" />
             <span>New Quest</span>
@@ -589,7 +949,7 @@ export function QuestMatrixPanel() {
             <button
               type="button"
               onClick={cancelCreate}
-              className="text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+              className="-my-1.5 -mr-2.5 rounded-lg px-2.5 py-1.5 text-xs text-hud-muted hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
             >
               Cancel
             </button>
@@ -650,7 +1010,7 @@ export function QuestMatrixPanel() {
             <button
               type="submit"
               disabled={!newTitle.trim()}
-              className="rounded-xl bg-[#00f0ff] px-5 py-2 text-xs font-semibold text-black hover:bg-white disabled:opacity-40"
+              className="rounded-xl bg-[#00f0ff] px-5 py-2 text-xs font-semibold text-black hover:bg-white transition-[background-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               Create Quest
             </button>
@@ -689,320 +1049,29 @@ export function QuestMatrixPanel() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,21rem),1fr))] gap-6 sm:gap-8">
           {activeQuests.map((quest) => {
-            const style = accentStyle(quest.accentColor);
             const { weekSeconds: weeklySeconds, pct } =
               questWeek.forQuest(quest);
             const isEditing = editingQuest?.id === quest.id;
-
             const questTasks = openTasksByQuest.get(quest.id) ?? NO_TASKS;
 
             return (
-              <motion.div
-                layout="position"
-                layoutId={`quest-card-${quest.id}`}
-                transition={{
-                  layout: {
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                    mass: 0.9,
-                  },
-                }}
+              <QuestCard
                 key={quest.id}
-                data-testid="quest-card"
-                data-quest-id={quest.id}
-                className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
-              >
-                <div>
-                  {/* Top Row: Colored Dot + Quest Title + Complete & Edit Buttons */}
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <span
-                        className={`mt-2 h-3 w-3 shrink-0 rounded-full ${style.bg}`}
-                      />
-                      <h2 className="min-w-0 break-words [text-wrap:balance] text-xl font-medium leading-snug text-white">
-                        {quest.title}
-                      </h2>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                      <ConfirmDeleteButton
-                        label={`Complete quest ${quest.title}`}
-                        confirmLabel={completeQuestConfirmLabel(
-                          questTasks.length
-                        )}
-                        armedClassName="text-hud-emerald font-medium"
-                        onConfirm={() => handleCompleteQuest(quest.id)}
-                        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-neutral-300 hover:border-[#00ff9d]/40 hover:bg-[#00ff9d]/10 hover:text-[#00ff9d] data-[state=armed]:border-[#00ff9d]/45 data-[state=armed]:bg-[#00ff9d]/15"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff9d]" />
-                        <span>Complete</span>
-                      </ConfirmDeleteButton>
-
-                      <button
-                        type="button"
-                        onClick={(e) => startEdit(quest, e.currentTarget)}
-                        title="Edit or Delete Quest"
-                        aria-label={`Edit quest ${quest.title}`}
-                        aria-expanded={isEditing}
-                        className="shrink-0 rounded-lg p-2 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors"
-                      >
-                        <SlidersHorizontal className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {quest.description && (
-                    <p className="mt-2.5 max-w-[65ch] break-words text-sm leading-relaxed text-neutral-400">
-                      {quest.description}
-                    </p>
-                  )}
-
-                  {/* Inline Edit & Delete Drawer */}
-                  {isEditing && (
-                    <form
-                      aria-label={`Edit quest ${quest.title}`}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void saveEdit(e.currentTarget);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") cancelEdit();
-                      }}
-                      className="mt-5 rounded-xl border border-white/10 bg-[#0b0c0e] p-4 space-y-3.5"
-                    >
-                      <div>
-                        <label
-                          htmlFor={editTitleId}
-                          className="mb-1 block text-xs text-neutral-400"
-                        >
-                          Quest Title
-                        </label>
-                        <input
-                          id={editTitleId}
-                          type="text"
-                          required
-                          autoFocus
-                          pattern={NON_BLANK_PATTERN}
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor={editDescId}
-                          className="mb-1 block text-xs text-neutral-400"
-                        >
-                          Description
-                        </label>
-                        <input
-                          id={editDescId}
-                          type="text"
-                          value={editDesc}
-                          onChange={(e) => setEditDesc(e.target.value)}
-                          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 focus:border-[#00f0ff] focus:outline-none"
-                        />
-                      </div>
-
-                      <AccentPills
-                        compact
-                        value={editAccent}
-                        onChange={setEditAccent}
-                      />
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                        <div className="flex items-center gap-2 text-xs text-neutral-400">
-                          <span>Weekly Goal:</span>
-                          <WeeklyTargetInput
-                            value={editTarget}
-                            onChange={setEditTarget}
-                          />
-                          <span>h/wk</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ConfirmDeleteButton
-                            label="Delete quest"
-                            confirmLabel={deleteQuestConfirmLabel(
-                              questTasks.length
-                            )}
-                            onConfirm={() => handleDeleteQuest(quest.id)}
-                            className="flex items-center gap-1 rounded-lg border border-[#ff2a5f]/30 bg-[#ff2a5f]/10 px-2.5 py-1.5 text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/20 data-[state=armed]:bg-[#ff2a5f]/20"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Delete</span>
-                          </ConfirmDeleteButton>
-                          <button
-                            type="button"
-                            onClick={cancelEdit}
-                            className="rounded-lg px-2.5 py-1.5 text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="submit"
-                            disabled={savingEdit}
-                            aria-busy={savingEdit}
-                            className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-60"
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Save</span>
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* Weekly Quest Hours Progress */}
-                  <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
-                        Quest Hours (7d)
-                      </span>
-                      <span className="text-sm text-neutral-400 tabular-nums">
-                        <strong className="text-lg font-medium text-white">
-                          {weekLogs === undefined
-                            ? "–"
-                            : formatTelemetryDuration(weeklySeconds, {
-                                zeroAs: "0.0h",
-                              })}
-                        </strong>{" "}
-                        / {quest.targetWeeklyHours}h
-                      </span>
-                    </div>
-                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                      {/* Full-width fill slid in from the left (compositor-only);
-                          the track's overflow-hidden clips it, keeping the rounded end. */}
-                      <div
-                        data-testid="quest-progress-fill"
-                        className={`h-full w-full rounded-full ${style.bg} transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]`}
-                        style={{ transform: `translateX(${pct - 100}%)` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Linked Open Tasks */}
-                  <div
-                    ref={(el) => {
-                      questFlowRefs.current[quest.id] = el;
-                    }}
-                    className="relative mt-6 space-y-2.5"
-                  >
-                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
-                      Next Steps
-                      {allTasks === undefined ? "" : ` (${questTasks.length})`}
-                    </div>
-
-                    {questTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        data-task-id={t.id}
-                        className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              // The second click of a double-click would hit
-                              // the next row, which slides up under the cursor.
-                              if (e.detail > 1) return;
-                              handleCompleteQuestStep(
-                                t.id,
-                                quest.id,
-                                quest.accentColor
-                              );
-                            }}
-                            title="Mark complete"
-                            aria-label="Mark complete"
-                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
-                          >
-                            <Check className="h-2.5 w-2.5" />
-                          </button>
-                          <span
-                            data-task-title="true"
-                            className="truncate text-neutral-200"
-                            title={t.title}
-                          >
-                            {t.title}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            hudAudio.playLockOn();
-                            initializeFocus(t.id);
-                          }}
-                          aria-label={`Start focus: ${t.title}`}
-                          className="flex shrink-0 items-center gap-1.5 text-xs text-neutral-400 hover:text-white"
-                        >
-                          {t.accumulatedSeconds > 0 && (
-                            <span className="font-mono tabular-nums">
-                              {formatChronoMMSS(t.accumulatedSeconds).formatted}
-                            </span>
-                          )}
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Quick Add Task to this Quest */}
-                <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
-                  <div className="flex items-center gap-2 focus-within:border-white/40">
-                    <input
-                      type="text"
-                      value={quickTaskByQuest[quest.id] ?? ""}
-                      onChange={(e) =>
-                        setQuickTaskByQuest((prev) => ({
-                          ...prev,
-                          [quest.id]: e.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleQuickAdd(quest.id);
-                        }
-                      }}
-                      placeholder={`Add task to ${quest.title}...`}
-                      aria-label={`Add quest work to ${quest.title}`}
-                      className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleQuickAdd(quest.id)}
-                      aria-label={`Add task to ${quest.title}`}
-                      className="rounded-lg p-1 text-neutral-400 hover:text-white transition-colors"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
-                    <input
-                      type="text"
-                      value={quickNotesByQuest[quest.id] ?? ""}
-                      onChange={(e) =>
-                        setQuickNotesByQuest((prev) => ({
-                          ...prev,
-                          [quest.id]: e.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleQuickAdd(quest.id);
-                        }
-                      }}
-                      placeholder="Description (optional)..."
-                      aria-label={`Task description for ${quest.title} (optional)`}
-                      className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </motion.div>
+                quest={quest}
+                weeklySeconds={weeklySeconds}
+                pct={pct}
+                weekLogsLoaded={weekLogs !== undefined}
+                questTasks={questTasks}
+                tasksLoaded={allTasks !== undefined}
+                isEditing={isEditing}
+                editDrawer={isEditing ? renderEditDrawer(quest, questTasks) : null}
+                flowRefs={questFlowRefs}
+                onCompleteQuest={onCompleteQuest}
+                onToggleEdit={onToggleEdit}
+                onCompleteStep={onCompleteStep}
+                onStartFocus={onStartFocus}
+                createTask={createQuestTask}
+              />
             );
           })}
         </div>
@@ -1030,14 +1099,7 @@ export function QuestMatrixPanel() {
                 <motion.div
                   layout="position"
                   layoutId={`quest-card-${quest.id}`}
-                  transition={{
-                    layout: {
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 30,
-                      mass: 0.9,
-                    },
-                  }}
+                  transition={QUEST_CARD_LAYOUT_TRANSITION}
                   key={quest.id}
                   data-testid="completed-quest-card"
                   data-quest-id={quest.id}
@@ -1085,7 +1147,7 @@ export function QuestMatrixPanel() {
                         type="button"
                         onClick={() => void handleReopenQuest(quest.id)}
                         aria-label={`Reopen quest ${quest.title}`}
-                        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                        className="flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:bg-white/[0.08] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>Reopen</span>
@@ -1095,7 +1157,7 @@ export function QuestMatrixPanel() {
                         label={`Delete quest ${quest.title}`}
                         confirmLabel="Delete quest?"
                         onConfirm={() => handleDeleteQuest(quest.id)}
-                        className="flex items-center gap-1 rounded-lg border border-[#ff2a5f]/25 bg-[#ff2a5f]/[0.06] px-2.5 py-1.5 text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/15 data-[state=armed]:bg-[#ff2a5f]/20"
+                        className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg border border-[#ff2a5f]/25 bg-[#ff2a5f]/[0.06] px-3 py-1.5 text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/15 data-[state=armed]:bg-[#ff2a5f]/20"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>Delete</span>
