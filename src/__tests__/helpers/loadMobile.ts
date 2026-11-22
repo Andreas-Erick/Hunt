@@ -57,6 +57,7 @@ export interface AndroidBridgeStub {
   setKeepScreenOn?: (on: boolean) => void;
   vibrateClick?: () => void;
   getAppVersion?: () => string;
+  saveWidgetSnapshot?: (json: string) => void;
 }
 
 export interface FocusShape {
@@ -138,6 +139,7 @@ export interface MobilePageGlobals {
   __huntLifecycle(phase: string): void;
   __huntNetwork(info: { online: boolean }): void;
   __huntBack(): boolean;
+  setLook(look: string): void;
   __pwned?: unknown;
 }
 

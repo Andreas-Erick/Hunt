@@ -2887,8 +2887,10 @@ var HuntCore = (() => {
   __export(huntCore_exports, {
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
+    WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
+    buildWidgetSnapshot: () => buildWidgetSnapshot,
     canonicalString: () => canonicalString,
     compareRank: () => compareRank,
     completeTaskRow: () => completeTaskRow,
@@ -3192,6 +3194,16 @@ var HuntCore = (() => {
   }
 
   // src/lib/domainTypes.ts
+  var QUEST_ACCENT_KEYS = [
+    "cyan",
+    "emerald",
+    "amber",
+    "purple",
+    "rose",
+    "sky",
+    "orange",
+    "lime"
+  ];
   function toFocusSession(focus) {
     const updatedAt = typeof focus.updatedAt === "number" && Number.isFinite(focus.updatedAt) && focus.updatedAt >= 0 ? focus.updatedAt : 0;
     if (!focus.activeTaskId) {
@@ -3356,6 +3368,42 @@ var HuntCore = (() => {
       status: "completed",
       completedAt,
       updatedAt: nextStamp(task, completedAt)
+    };
+  }
+
+  // src/lib/widgetSnapshot.ts
+  var WIDGET_SNAPSHOT_VERSION = 1;
+  var ACCENTS = new Set(QUEST_ACCENT_KEYS);
+  function todayTasks(state, todayKey) {
+    var _a, _b, _c;
+    const tasks = (_a = state.tasks) != null ? _a : [];
+    const known = new Set(tasks.map((t) => t.id));
+    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
+    const synthesized = ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, todayKey))).map((h) => buildHabitTaskRow(h, todayKey));
+    return tasks.concat(synthesized).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+  }
+  function buildWidgetSnapshot(state, todayKey, look) {
+    var _a, _b, _c, _d, _e, _f;
+    const accentOf = /* @__PURE__ */ new Map();
+    for (const q of (_a = state.quests) != null ? _a : []) {
+      accentOf.set(q.id, ACCENTS.has(q.accentColor) ? q.accentColor : "slate");
+    }
+    const focusId = (_c = (_b = state.activeFocus) == null ? void 0 : _b.activeTaskId) != null ? _c : null;
+    const toRow = (t) => ({
+      id: t.id,
+      title: t.title,
+      accent: t.questId && accentOf.get(t.questId) || "slate",
+      tickable: t.id !== focusId,
+      focus: t.id === focusId,
+      habit: Boolean(t.habitId)
+    });
+    const noData = !((_d = state.quests) != null ? _d : []).length && !((_e = state.tasks) != null ? _e : []).length && !((_f = state.habits) != null ? _f : []).length;
+    return {
+      version: WIDGET_SNAPSHOT_VERSION,
+      look,
+      todayKey,
+      noData,
+      days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }]
     };
   }
   return __toCommonJS(huntCore_exports);
@@ -4076,7 +4124,24 @@ var HuntCore = (() => {
       try {
         localStorage.setItem(STORAGE_KEY, text);
       } catch (e) {}
+      publishWidgetSnapshot();
       return true;
+    }
+
+    // Day Widget (ADR-0006): after every save, the start of the day and a look change, hand the shell
+    // the ready-to-draw Widget Snapshot. Only the APK has widgets; an unchanged snapshot is not resent.
+    let lastWidgetSnapshotJson = "";
+    function publishWidgetSnapshot() {
+      if (!isApkShell()) return;
+      try {
+        const text = JSON.stringify(HuntCore.buildWidgetSnapshot(state, toLocalDateKey(), currentLook()));
+        if (text === lastWidgetSnapshotJson) return;
+        lastWidgetSnapshotJson = text;
+        bridgeCall("saveWidgetSnapshot", text);
+      } catch (e) {
+        // A snapshot bug must never break saving: the state is already stored, the widget just stays stale.
+        recordMobileBreadcrumb("WARN", "widget", "snapshot_failed", { message: e && e.message });
+      }
     }
 
     function syncKeepScreenOn() {
@@ -6896,6 +6961,7 @@ var HuntCore = (() => {
         btn.classList.toggle("selected", on);
         btn.setAttribute("aria-pressed", String(on));
       });
+      publishWidgetSnapshot(); // the widget follows the look
     }
 
     function openSyncSheet() {
@@ -9694,6 +9760,7 @@ var HuntCore = (() => {
       // habits, roll over "Completed today", the date, today's hours and the timeline.
       if (lastRenderedDateKey && toLocalDateKey() !== lastRenderedDateKey) {
         materializeDailyHabits(toLocalDateKey());
+        publishWidgetSnapshot(); // the new day, even when no habit row had to be saved
         renderAppSafely();
       }
       if (document.body && document.body.classList.contains("keyboard-open")) updateKeyboardClass(); // backstop
@@ -9796,6 +9863,7 @@ var HuntCore = (() => {
       persistState();
       syncMeta.localRev++;
     }
+    publishWidgetSnapshot(); // opening Hunt refreshes the widget even when nothing needed saving
     try {
       renderApp();
       recordMobileBreadcrumb("INFO", "boot", "render_ok", { view: activeView });

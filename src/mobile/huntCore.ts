@@ -38,3 +38,4 @@ export {
   pickNextFocusTask,
   sessionLogId,
 } from "../lib/taskQueue";
+export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
