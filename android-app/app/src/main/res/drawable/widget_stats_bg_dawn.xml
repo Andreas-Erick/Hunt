@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Stats Widget ground, Dawn look: the whole widget is one open-Hunt target, so the ground itself
+    carries the gold ripple as pressed feedback over the usual fill and 1dp cream hairline.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/widget_dawn_ripple">
+    <item android:drawable="@drawable/widget_bg_dawn" />
+</ripple>
