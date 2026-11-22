@@ -1,17 +1,16 @@
 // @vitest-environment node
 //
 // Day Widget Undo (#9): a tick first shows "✓ Done · Undo" for 4 seconds and is appended to the
-// Pending Tick queue only when that window ends; Undo leaves no trace. The window rule is plain
-// Java (UndoWindow.java, no Android imports), so it runs here on the JDK as the real code. The
-// static guards read the manifest, layouts and sources (the Java cannot run under vitest).
-import { spawnSync } from "child_process";
+// Pending Tick queue only when that window ends; Undo leaves no trace. The window rules are plain
+// Java (UndoWindow.java, TickKeys.java), so they run here on the JDK as the real code. The static
+// guards keep only what a probe cannot show: ADR-0006's boundaries, no new permission, the
+// non-exported intents and 48dp targets.
 import fs from "fs";
-import os from "os";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import { hasJdk, JAVA_DIR, runJavaProbe } from "./helpers/javaProbe";
 
-const MAIN = path.resolve(__dirname, "..", "..", "android-app", "app", "src", "main");
-const JAVA_DIR = path.join(MAIN, "java", "com", "hunt", "companion");
+const MAIN = path.resolve(JAVA_DIR, "..", "..", "..", "..");
 const RES = path.join(MAIN, "res");
 const read = (...parts: string[]): string => fs.readFileSync(path.join(...parts), "utf8");
 /** Java with block and line comments removed (good enough for these sources: no "//" in literals). */
@@ -25,38 +24,9 @@ const tagOf = (xml: string, id: string): string =>
   new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(xml)?.[0] ?? "";
 const dp = (tag: string, name: string): number => Number(/^(\d+)dp$/.exec(attr(tag, name) ?? "")?.[1] ?? 0);
 
-const javaExe = ((): string | null => {
-  const exe = process.platform === "win32" ? "java.exe" : "java";
-  const homes = [
-    process.env.JAVA_HOME,
-    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs", "Android Studio", "jbr"),
-    "C:/Program Files/Android/Android Studio/jbr",
-  ];
-  const found = homes.flatMap((home) => (home ? [path.join(home, "bin", exe)] : [])).filter((p) => fs.existsSync(p));
-  return [...found, "java"].find((java) => spawnSync(java, ["--version"]).status === 0) ?? null;
-})();
+const runUndo = (main: string) => runJavaProbe({ classes: ["UndoWindow.java", "TickKeys.java"], main });
 
-/** Runs `main` (Java statements printing lines) against UndoWindow; returns the lines. */
-function runUndo(main: string): string[] {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hunt-undo-"));
-  try {
-    const source = read(JAVA_DIR, "UndoWindow.java").replace(/^package [\w.]+;/m, "");
-    const imports = source.match(/^import [\w.]+;$/gm) ?? [];
-    const rule = source.replace(/^import [\w.]+;$/gm, "");
-    const file = path.join(dir, "UndoProbe.java");
-    const probe =
-      `${imports.join("\n")}\nimport java.util.*;\npublic class UndoProbe {\n` +
-      `  public static void main(String[] a) {\n${main}\n  }\n}\n${rule}`;
-    fs.writeFileSync(file, probe, "utf8");
-    const r = spawnSync(javaExe ?? "java", ["-Dfile.encoding=UTF-8", file], { cwd: dir, encoding: "utf8" });
-    expect(r.status, r.stderr).toBe(0);
-    return r.stdout.trim().split(/\r?\n/);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-describe.skipIf(!javaExe)("UndoWindow, run on the JDK", () => {
+describe.skipIf(!hasJdk)("UndoWindow, run on the JDK", () => {
   it("holds a tick for 4 seconds after the tap, then it is due (a clock set back never holds it forever)", () => {
     // [tickedAt, now] -> due?
     const cases: Array<[number, number, string]> = [
@@ -75,107 +45,119 @@ describe.skipIf(!javaExe)("UndoWindow, run on the JDK", () => {
     const lines = runUndo(
       [
         "Map<String, Long> held = new HashMap<>();",
-        'held.put(UndoWindow.key("t-b", "2026-11-22"), 12_000L);',
-        'held.put(UndoWindow.key("t-a", "2026-11-22"), 10_000L);',
-        'held.put(UndoWindow.key("t|odd", "2026-11-22"), 15_000L);',
-        'held.put(UndoWindow.key("t-c", "2026-11-23"), 11_000L);',
+        'held.put(TickKeys.taskDay("t-b", "2026-11-22"), 12_000L);',
+        'held.put(TickKeys.taskDay("t-a", "2026-11-22"), 10_000L);',
+        'held.put(TickKeys.taskDay("t|odd", "2026-11-22"), 15_000L);',
+        'held.put(TickKeys.taskDay("t-c", "2026-11-23"), 11_000L);',
         "List<String> due = UndoWindow.due(held, 16_500L);",
-        "for (String k : due) System.out.println(UndoWindow.taskIdOf(k) + \" \" + UndoWindow.dateKeyOf(k));",
+        'for (String k : due) System.out.println(TickKeys.taskIdOf(k) + " " + TickKeys.dateKeyOf(k));',
         'System.out.println(new TreeSet<>(UndoWindow.openTaskIds(held, "2026-11-22", 16_500L)));',
         'System.out.println(new TreeSet<>(UndoWindow.heldTaskIds(held, "2026-11-22")));',
         "System.out.println(UndoWindow.nextDeadline(held, 16_500L));",
         "System.out.println(UndoWindow.nextDeadline(new HashMap<String, Long>(), 16_500L));",
       ].join("\n"),
     );
+    expect(lines).toEqual(["t-a 2026-11-22", "t-c 2026-11-23", "t-b 2026-11-22", "[t|odd]", "[t-a, t-b, t|odd]", "19000", "-1"]);
+  }, 60_000);
+
+  it("queues ended windows in tap order with the tap time, and keeps any tick the queue refused for the next try", () => {
+    const lines = runUndo(
+      [
+        "Map<String, Long> held = new HashMap<>();",
+        'held.put(TickKeys.taskDay("t-a", "2026-11-22"), 10_000L);',
+        'held.put(TickKeys.taskDay("t-b", "2026-11-22"), 11_000L);',
+        'held.put(TickKeys.taskDay("t-c", "2026-11-22"), 15_000L); // still open at 16 500',
+        "List<String> offered = new ArrayList<>();",
+        "UndoWindow.Commit c = UndoWindow.commit(held, 16_500L, (taskId, dateKey, tickedAt) -> {",
+        '  offered.add(taskId + "@" + tickedAt);',
+        '  return !taskId.equals("t-b"); // the queue refuses t-b (full, unreadable or a failed write)',
+        "});",
+        "System.out.println(offered);",
+        'for (String k : c.closed) System.out.println("closed " + TickKeys.taskIdOf(k));',
+        'System.out.println("heldBack " + c.heldBack);',
+        "for (String k : c.closed) held.remove(k);",
+        "// The refused tick is still there and is offered again, with its original tap time.",
+        "offered.clear();",
+        "UndoWindow.Commit again = UndoWindow.commit(held, 17_000L, (taskId, dateKey, tickedAt) -> { offered.add(taskId + \"@\" + tickedAt); return true; });",
+        'System.out.println(offered + " heldBack " + again.heldBack);',
+      ].join("\n"),
+    );
     expect(lines).toEqual([
-      "t-a 2026-11-22",
-      "t-c 2026-11-23",
-      "t-b 2026-11-22",
-      "[t|odd]",
-      "[t-a, t-b, t|odd]",
-      "19000",
-      "-1",
+      "[t-a@10000, t-b@11000]",
+      "closed t-a",
+      "heldBack 1",
+      "[t-b@11000] heldBack 0",
     ]);
+  }, 60_000);
+
+  it("the list hides queued Tasks and ended windows not yet queued, but keeps open windows for Undo", () => {
+    const lines = runUndo(
+      [
+        "Map<String, Long> held = new HashMap<>();",
+        'held.put(TickKeys.taskDay("t-open", "2026-11-22"), 15_000L);',
+        'held.put(TickKeys.taskDay("t-ended", "2026-11-22"), 10_000L);',
+        'held.put(TickKeys.taskDay("t-other-day", "2026-11-23"), 10_000L);',
+        'Set<String> queued = new HashSet<>(Arrays.asList("t-queued"));',
+        'System.out.println(new TreeSet<>(UndoWindow.hiddenTaskIds(queued, held, "2026-11-22", 16_500L)));',
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["[t-ended, t-queued]"]);
   }, 60_000);
 });
 
-describe("Day Widget Undo window (#9)", () => {
+describe("Day Widget Undo window (#9): boundaries", () => {
   const provider = code("DayWidgetProvider.java");
   const undo = code("DayWidgetUndo.java");
-  const service = code("DayWidgetService.java");
-  const undoRow = read(RES, "layout", "widget_day_row_undo_neon.xml");
-  const taskRow = read(RES, "layout", "widget_day_row_neon.xml");
   const manifest = read(MAIN, "AndroidManifest.xml");
 
-  it("the window rule is plain Java: no Android types, no files", () => {
-    const rule = code("UndoWindow.java");
-    expect(rule).not.toMatch(/^import android\./m);
-    expect(rule).not.toMatch(/\bFile\b|SharedPreferences|PendingTicks/);
+  it("the window rules are plain Java: no Android types, no files", () => {
+    for (const file of ["UndoWindow.java", "TickKeys.java"]) {
+      const rule = code(file);
+      expect(rule, file).not.toMatch(/^import android\./m);
+      expect(rule, file).not.toMatch(/\bFile\b|SharedPreferences|PendingTicks/);
+    }
   });
 
-  it("a tick opens a window instead of queueing; only the window's end appends the Pending Tick", () => {
-    const tick = /static\s+void\s+tick\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(provider)?.[1] ?? "";
-    expect(tick).toMatch(/DayWidgetUndo\.open\(/);
-    expect(tick).not.toMatch(/PendingTicks\.append/);
-    expect(provider).not.toMatch(/PendingTicks\.append/);
-    const appends = undo.match(/PendingTicks\.append\(/g) ?? [];
-    expect(appends).toHaveLength(1);
-    // The append carries the original tap time, stored when the window opened.
-    expect(undo).toMatch(/PendingTicks\.append\([^;]*tickedAt\)/);
+  it("only the end of a window appends a Pending Tick (ADR-0006): a tap opens one, Undo leaves the queue alone", () => {
+    const widgetFiles = fs.readdirSync(JAVA_DIR).filter((f) => f.endsWith(".java") && f !== "DayWidgetUndo.java");
+    for (const file of widgetFiles) expect(code(file), file).not.toMatch(/PendingTicks\.append\(/);
+    expect(undo.match(/PendingTicks\.append\(/g) ?? []).toHaveLength(1);
+    expect(provider).toMatch(/DayWidgetUndo\.open\(/);
   });
 
-  it("the window survives the process: private preferences written synchronously, plus a timer and an inexact alarm", () => {
+  it("windows live in private preferences, and end on an inexact alarm: no exact-alarm or wake permission", () => {
     const prefs = [...undo.matchAll(/getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g)];
     expect(prefs.length).toBeGreaterThan(0);
-    for (const [, name, mode] of prefs) {
-      expect(name).toBe("UNDO_PREFS");
-      expect(mode).toBe("Context.MODE_PRIVATE");
-    }
-    expect(undo).toMatch(/\.commit\(\)/);
-    expect(undo).not.toMatch(/\.apply\(\)/);
-    // One main-thread timer, replaced on every reschedule (a token, not a pile of callbacks).
-    expect(undo).toMatch(/removeCallbacksAndMessages\(TIMER\)/);
-    expect(undo).toMatch(/postAtTime\([^;]*TIMER/);
-    expect(undo).toMatch(/alarms\.set\(AlarmManager\.RTC,/);
+    for (const [, , mode] of prefs) expect(mode).toBe("Context.MODE_PRIVATE");
     expect(undo).not.toMatch(/setExact|setAlarmClock|RTC_WAKEUP|setAndAllowWhileIdle/);
-    // The alarm is an explicit, immutable broadcast to the non-exported provider.
+    expect(manifest).not.toMatch(/SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|WAKE_LOCK/);
+    // The alarm is an explicit, immutable broadcast to the non-exported provider; nothing outside can send it.
     expect(undo).toMatch(/new Intent\(ctx, DayWidgetProvider\.class\)\s*\.setAction\(DayWidgetProvider\.ACTION_UNDO_DUE\)/);
     expect(undo).toMatch(/PendingIntent\.FLAG_IMMUTABLE/);
-    expect(provider).toMatch(/ACTION_UNDO_DUE\.equals\(action\)/);
     expect(manifest).not.toContain("DAY_WIDGET_UNDO_DUE");
   });
 
-  it("every redraw first appends what is due, so a late timer only delays the queue, never loses a tick", () => {
+  it("a window the timer missed is still ended by every redraw and by the page's queue read (ADR-0006)", () => {
     const refresh = /static\s+void\s+refreshAll\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(provider)?.[1] ?? "";
     expect(refresh).toMatch(/DayWidgetUndo\.commitDue\(/);
-    expect(provider).toMatch(/public\s+void\s+onUpdate\([^)]*\)\s*\{[^}]*DayWidgetUndo\.commitDue\(/);
-    // The page's drain also closes windows that ended while the process was gone.
     expect(code("MainActivity.java")).toMatch(/DayWidgetUndo\.commitDue\(/);
   });
 
-  it("Undo removes the window and nothing else", () => {
-    const body = /static\s+void\s+undo\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(undo)?.[1] ?? "";
-    expect(body).toMatch(/\.remove\(/);
-    expect(body).not.toMatch(/PendingTicks/);
-  });
-
-  it("a row in its window draws as '✓ Done · Undo' at the same height, Undo a 48dp target at the far end", () => {
-    // The look's Undo row (Neon or Dawn twin) comes through WidgetLook; the list counts it as a row kind.
-    expect(service).toMatch(/WidgetLook\.dayUndoRowLayout\(look\)/);
-    expect(code("WidgetLook.java")).toMatch(/R\.layout\.widget_day_row_undo_dawn\s*:\s*R\.layout\.widget_day_row_undo_neon/);
-    expect(service).toMatch(/return\s+WidgetLook\.COUNT\s*\*\s*ROW_KINDS\s*;/);
-    expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row_undo\s*,\s*rowTap\(DayWidgetProvider\.ROW_UNDO/);
-    const rowRoot = /<LinearLayout\b[^>]*>/.exec(undoRow)?.[0] ?? "";
-    expect(attr(rowRoot, "layout_height")).toBe(attr(/<LinearLayout\b[^>]*>/.exec(taskRow)?.[0] ?? "", "layout_height"));
-    const target = tagOf(undoRow, "widget_row_undo");
-    expect(dp(target, "minHeight")).toBeGreaterThanOrEqual(48);
-    expect(dp(target, "minWidth")).toBeGreaterThanOrEqual(48);
-    expect(attr(target, "contentDescription")).toBe("@string/day_widget_undo_label");
-    // Undo sits at the end of its row; the next row's tick target sits at the start of its row.
-    const ids = [...undoRow.matchAll(/android:id="@\+id\/(\w+)"/g)].map((m) => m[1]);
-    expect(ids[ids.length - 1]).toBe("widget_row_undo");
-    expect(ids.indexOf("widget_row_done")).toBeGreaterThan(0);
-    expect(read(RES, "values", "strings.xml")).toMatch(/name="day_widget_done">\u2713 Done</);
+  it("a row in its window keeps the row height, with Undo a 48dp target at the far end", () => {
+    for (const look of ["neon", "dawn"]) {
+      const undoRow = read(RES, "layout", `widget_day_row_undo_${look}.xml`);
+      const taskRow = read(RES, "layout", `widget_day_row_${look}.xml`);
+      const rowRoot = /<LinearLayout\b[^>]*>/.exec(undoRow)?.[0] ?? "";
+      expect(attr(rowRoot, "layout_height")).toBe(attr(/<LinearLayout\b[^>]*>/.exec(taskRow)?.[0] ?? "", "layout_height"));
+      const target = tagOf(undoRow, "widget_row_undo");
+      expect(dp(target, "minHeight"), look).toBeGreaterThanOrEqual(48);
+      expect(dp(target, "minWidth"), look).toBeGreaterThanOrEqual(48);
+      expect(attr(target, "contentDescription")).toBe("@string/day_widget_undo_label");
+      // Undo sits at the end of its row; the next row's tick target sits at the start of its row.
+      const ids = [...undoRow.matchAll(/android:id="@\+id\/(\w+)"/g)].map((m) => m[1]);
+      expect(ids[ids.length - 1]).toBe("widget_row_undo");
+    }
+    expect(read(RES, "values", "strings.xml")).toMatch(/name="day_widget_done">✓ Done</);
   });
 });
 
@@ -183,13 +165,13 @@ describe("Day Widget row taps go through a no-UI trampoline activity (background
   const provider = code("DayWidgetProvider.java");
   const tap = code("DayWidgetTapActivity.java");
   const manifest = read(MAIN, "AndroidManifest.xml");
+  const receivers = fs.readdirSync(JAVA_DIR).filter((f) => /Provider\.java$|Support\.java$|Undo\.java$/.test(f));
 
-  it("the list's template is an activity PendingIntent to the trampoline, never a broadcast that starts an activity", () => {
+  it("the list's template is an activity PendingIntent to the trampoline; no receiver starts an activity", () => {
     const template = /PendingIntent\s+rowTemplate\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(provider)?.[1] ?? "";
     expect(template).toMatch(/new Intent\(ctx, DayWidgetTapActivity\.class\)/);
     expect(template).toMatch(/PendingIntent\.getActivity\(/);
-    expect(provider).not.toMatch(/startActivity\(/);
-    expect(code("StatsWidgetProvider.java")).not.toMatch(/startActivity\(/);
+    for (const file of receivers) expect(code(file), file).not.toMatch(/startActivity\(/);
   });
 
   it("the trampoline is not exported, shows nothing, leaves no trace in Recents and finishes at once", () => {
@@ -205,6 +187,6 @@ describe("Day Widget row taps go through a no-UI trampoline activity (background
     expect(onCreate).toMatch(/finish\(\)/);
     expect(onCreate).toMatch(/DayWidgetProvider\.onRowTap\(/);
     // Opening Hunt happens here, from the foreground trampoline, never from a receiver.
-    expect(onCreate).toMatch(/startActivity\(DayWidgetProvider\.launchIntent\(this\)\)/);
+    expect(onCreate).toMatch(/startActivity\(WidgetSupport\.launchIntent\(this\)\)/);
   });
 });

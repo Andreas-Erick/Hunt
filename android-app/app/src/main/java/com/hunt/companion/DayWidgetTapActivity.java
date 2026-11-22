@@ -27,7 +27,7 @@ public class DayWidgetTapActivity extends Activity {
         if (state == null) {
             try {
                 if (DayWidgetProvider.onRowTap(this, getIntent())) {
-                    startActivity(DayWidgetProvider.launchIntent(this));
+                    startActivity(WidgetSupport.launchIntent(this));
                 }
             } catch (RuntimeException e) {
                 Log.w(TAG, "Day Widget row tap failed", e);

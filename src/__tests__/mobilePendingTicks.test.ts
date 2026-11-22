@@ -40,7 +40,10 @@ interface Shell {
   coreCalls: number;
 }
 
-function boot(options: { queue?: unknown; rawQueue?: string; corrupt?: boolean } = {}): Shell {
+/** What the shell's readPendingTicks answers: the queued ticks plus anything to report (ADR-0006). */
+type QueueRead = { ticks: unknown; heldBack?: number; unreadable?: "corrupt" | "read-error"; keptAs?: string };
+
+function boot(options: { queue?: unknown; read?: QueueRead; rawQueue?: string; corrupt?: boolean } = {}): Shell {
   const shell: Shell = { calls: [], saved: [], acks: [], coreCalls: 0 };
   w = loadMobile({
     bridge: {
@@ -52,7 +55,7 @@ function boot(options: { queue?: unknown; rawQueue?: string; corrupt?: boolean }
       saveCorruptState: () => false, // quarantine fails: saving stays blocked
       readPendingTicks: () => {
         shell.calls.push("readPendingTicks");
-        return options.rawQueue ?? JSON.stringify(options.queue ?? ticks);
+        return options.rawQueue ?? JSON.stringify(options.read ?? { ticks: options.queue ?? ticks });
       },
       ackPendingTicks: (json) => {
         shell.calls.push("ackPendingTicks");
@@ -134,6 +137,35 @@ describe("phone page: Pending Ticks on boot", () => {
     const shell = boot({ rawQueue: "[{oops" });
     expect(shell.acks).toEqual([]);
     expect(w!.__huntDiagnostics.getBreadcrumbs().some((b) => b.event === "ticks_unreadable")).toBe(true);
+  });
+
+  it("tells the user once when the shell had to set an unreadable queue aside, and logs which copy it kept", () => {
+    const keptAs = "hunt-pending-ticks-unreadable-1763800000000.json";
+    const shell = boot({ read: { ticks: [], unreadable: "corrupt", keptAs } });
+    expect(shell.acks).toEqual([]);
+    const toast = w!.document.querySelector("#toastHost .toast-msg")?.textContent ?? "";
+    expect(toast).toMatch(/widget/i);
+    expect(toast).toMatch(/couldn.t be read/);
+    expect(toast).toMatch(/copy was kept/);
+    expect(toast).toMatch(/tick those Tasks again/);
+    const logged = w!.__huntDiagnostics.getBreadcrumbs().filter((b) => b.event === "ticks_unreadable");
+    expect(logged.map((b) => b.context)).toEqual([{ reason: "corrupt", keptAs }]);
+    // A second report in the same run is logged but not shown again.
+    w!.eval("drainPendingTicks()");
+    expect(w!.document.querySelectorAll("#toastHost .toast-msg")).toHaveLength(1);
+  });
+
+  it("tells the user a queue it could not read stays saved, and applies nothing", () => {
+    const shell = boot({ read: { ticks: [], unreadable: "read-error" } });
+    expect(shell.coreCalls).toBe(0);
+    expect(w!.document.querySelector("#toastHost .toast-msg")?.textContent ?? "").toMatch(/stay saved/);
+  });
+
+  it("logs ticks the shell is still holding back, and applies the ones it read", () => {
+    boot({ read: { ticks: [ticks[0]], heldBack: 2 } });
+    expect(task("tsk-a")).toMatchObject({ status: "completed" });
+    const held = w!.__huntDiagnostics.getBreadcrumbs().filter((b) => b.event === "ticks_held_back");
+    expect(held.map((b) => b.context)).toEqual([{ count: 2 }]);
   });
 
   it("leaves the ticks queued while saving is blocked", () => {

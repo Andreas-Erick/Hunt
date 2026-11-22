@@ -40,6 +40,14 @@ export interface WidgetStatsEntry {
 
 const ACCENTS: ReadonlySet<string> = new Set(QUEST_ACCENT_KEYS);
 
+/**
+ * A Quest's accent as both Widgets draw it: its own key, or "slate" for a key
+ * the widget has no colour for. Java maps the key to the look's colour.
+ */
+export function widgetAccent(accentColor: string | undefined): QuestAccent | "slate" {
+  return accentColor && ACCENTS.has(accentColor) ? (accentColor as QuestAccent) : "slate";
+}
+
 function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
   const quests = state.quests ?? [];
   const progress = computeQuestWeekProgress({ quests, logs: state.timeLogs ?? [], todayKey: dateKey });
@@ -54,7 +62,7 @@ function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
         const p = progress.forQuest(q);
         return {
           code: q.code,
-          accent: ACCENTS.has(q.accentColor) ? q.accentColor : "slate",
+          accent: widgetAccent(q.accentColor),
           weekSeconds: p.weekSeconds,
           targetHours: p.targetHours,
           pct: p.pct,

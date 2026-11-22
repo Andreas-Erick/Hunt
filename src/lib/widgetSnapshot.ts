@@ -1,11 +1,10 @@
-import { dateKeyFromOffset, habitTaskId, isOpenTask, isTaskVisibleToday } from "./dateUtils";
-import { QUEST_ACCENT_KEYS } from "./domainTypes";
+import { dateKeyFromOffset, isOpenTask, isTaskVisibleToday } from "./dateUtils";
 import type { QuestAccent, Task } from "./domainTypes";
 import type { Look } from "./lookPreference";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
-import { buildHabitTaskRow } from "./taskQueue";
-import { buildWidgetStats } from "./widgetStats";
+import { missingHabitRows } from "./taskQueue";
+import { buildWidgetStats, widgetAccent } from "./widgetStats";
 import type { WidgetStatsEntry } from "./widgetStats";
 
 /**
@@ -61,14 +60,6 @@ export interface WidgetSnapshot {
   stats: WidgetStatsEntry[];
 }
 
-const ACCENTS: ReadonlySet<string> = new Set(QUEST_ACCENT_KEYS);
-
-/**
- * Today's list as the app's Today view shows it: open Tasks visible today
- * (overdue and unscheduled roll in, Habits only on their own day) in rank
- * order, with today's Habits filled in by their fixed ids when Hunt has not
- * created the rows yet. Pure: `state` is not modified.
- */
 /**
  * A later day's list as the Day Widget shows it before that day comes: open
  * Tasks scheduled on exactly that date, in rank order. Habits are left out,
@@ -80,28 +71,33 @@ function futureTasks(state: SyncPayload, dateKey: string): Task[] {
     .sort(compareRank);
 }
 
+/**
+ * Today's list as the app's Today view shows it: open Tasks visible today
+ * (overdue and unscheduled roll in, Habits only on their own day) in rank
+ * order, with today's Habits filled in by their fixed ids when Hunt has not
+ * created the rows yet. Pure: `state` is not modified.
+ */
 function todayTasks(state: SyncPayload, todayKey: string): Task[] {
-  const tasks = state.tasks ?? [];
-  const known = new Set(tasks.map((t) => t.id));
-  for (const id of state.deletedTaskIds ?? []) known.add(id);
-  const synthesized = (state.habits ?? [])
-    .filter((h) => !known.has(habitTaskId(h.id, todayKey)))
-    .map((h) => buildHabitTaskRow(h, todayKey));
-  return tasks
-    .concat(synthesized)
+  return (state.tasks ?? [])
+    .concat(missingHabitRows(state, todayKey))
     .filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey))
     .sort(compareRank);
 }
 
+/**
+ * Builds the Widget Snapshot for `state` on the local date `todayKey`, drawn
+ * in `look`. Each of the WIDGET_SNAPSHOT_DAYS days carries both lists (the
+ * widget picks `today` only when that day is the current date), the Focus Task
+ * is listed but never tickable, and `noData` marks a Hunt with nothing in it
+ * yet. Pure: `state` is not modified.
+ */
 export function buildWidgetSnapshot(
   state: SyncPayload,
   todayKey: string,
   look: Look
 ): WidgetSnapshot {
   const accentOf = new Map<string, QuestAccent | "slate">();
-  for (const q of state.quests ?? []) {
-    accentOf.set(q.id, ACCENTS.has(q.accentColor) ? q.accentColor : "slate");
-  }
+  for (const q of state.quests ?? []) accentOf.set(q.id, widgetAccent(q.accentColor));
   const focusId = state.activeFocus?.activeTaskId ?? null;
   const toRow = (t: Task): WidgetTaskRow => ({
     id: t.id,

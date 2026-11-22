@@ -33,6 +33,17 @@ final class StatsWidgetFit {
     }
 
     /**
+     * The height to fit rows into, from the launcher's size options: a widget is drawn tallest in
+     * portrait (OPTION_APPWIDGET_MAX_HEIGHT) and shortest in landscape (OPTION_APPWIDGET_MIN_HEIGHT).
+     * `fallbackDp` until the launcher reports a size.
+     */
+    static int heightDp(int minHeightDp, int maxHeightDp, boolean portrait, int fallbackDp) {
+        int h = portrait ? maxHeightDp : minHeightDp;
+        if (h <= 0) h = portrait ? minHeightDp : maxHeightDp; // a launcher that reports only one
+        return h > 0 ? h : fallbackDp;
+    }
+
+    /**
      * Rows that fit a widget `heightDp` tall: Quest rows first (at least one, with a "+N more"
      * line for the rest), then streak rows under their label, whose right end carries the
      * streaks' "+N more". With no Quests, the "Set up a Quest in Hunt" line takes one row.

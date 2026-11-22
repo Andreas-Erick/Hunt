@@ -184,15 +184,17 @@ describe("the widgets draw the snapshot's look", () => {
     );
     for (const r of neon) expect(refs, `Dawn twin of ${r}`).toContain(r.replace("neon", "dawn"));
     for (const r of refs) expect(r, "every look resource is Neon or Dawn").toMatch(/neon|dawn/);
-    expect(lookCode).toMatch(/"dawn"\.equals\(look\)/);
+    expect(lookCode).toMatch(/return\s+"dawn"\.equals\(name\)\s*\?\s*DAWN\s*:\s*NEON\s*;/);
   });
 
-  it("the Day Widget's list declares a view type per look and row kind, so a look change can swap row layouts", () => {
+  it("the Day Widget's list declares a view type for every row layout, so a look change can swap row layouts", () => {
     const service = javaCode("DayWidgetService.java");
-    const count = /int\s+getViewTypeCount\(\)\s*\{\s*return\s+([\w.* ]+?)\s*;/.exec(service)?.[1];
-    // Two row kinds: the task row and the Undo row (#9).
-    expect(count).toBe("WidgetLook.COUNT * ROW_KINDS");
-    expect(service).toMatch(/static\s+final\s+int\s+ROW_KINDS\s*=\s*2\s*;/);
-    expect(lookCode).toMatch(/static\s+final\s+int\s+COUNT\s*=\s*2\s*;/);
+    // Too few view types and the launcher draws rows as "loading" after a look change.
+    const looks = [...lookCode.matchAll(/^\s{4}([A-Z]+)\(/gm)].map((m) => m[1]);
+    expect(looks).toEqual(["NEON", "DAWN"]);
+    const rowLayouts = new Set([...lookCode.matchAll(/R\.layout\.(widget_day_row\w*)/g)].map((m) => m[1]));
+    const rowKinds = Number(/static\s+final\s+int\s+ROW_KINDS\s*=\s*(\d+)\s*;/.exec(service)?.[1]);
+    expect(/int\s+getViewTypeCount\(\)\s*\{\s*return\s+WidgetLook\.values\(\)\.length\s*\*\s*ROW_KINDS\s*;/.test(service)).toBe(true);
+    expect(looks.length * rowKinds).toBe(rowLayouts.size);
   });
 });

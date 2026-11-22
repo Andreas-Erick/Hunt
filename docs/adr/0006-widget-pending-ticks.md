@@ -39,13 +39,24 @@ on its next start, or at once if it is already running.
   Focus transition.
 - The queue is `hunt-pending-ticks.json`, a JSON array of
   `{taskId, dateKey, tickedAt}`. The page reads it with
-  `readPendingTicks`, applies it with HuntCore's
+  `readPendingTicks`, which answers
+  `{ticks, heldBack?, unreadable?, keptAs?}`, applies it
+  with HuntCore's
   `applyPendingTicks`, saves, then calls `ackPendingTicks`
   with the ticks it read. The shell removes exactly those,
   so a tick queued meanwhile survives. While the page
   cannot save, it acknowledges nothing.
 - A stale tick (Task gone, already done, archived, or in
   Focus) is skipped and logged, never forced through.
+- No tick is dropped silently. A queue the shell cannot
+  read is never written over. If it will not parse, the
+  page's read moves it aside and names the copy in
+  `keptAs`. If the read itself failed, it stays in place
+  for the next read. Either way the page logs it and tells
+  the user. A tick the queue refuses (unreadable, full, a
+  failed write) keeps its Undo window, stays hidden, and is
+  offered again on the next redraw or read. The read
+  reports these as `heldBack` for diagnostics.
 - A tick first opens a 4-second Undo window: the row shows
   "✓ Done · Undo" and the tick is appended to the queue
   only when the window ends, still with the tap time.

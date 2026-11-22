@@ -1,0 +1,131 @@
+// @vitest-environment node
+//
+// The Pending Tick queue file (ADR-0006), run on the JDK as the real PendingTicks.java against a
+// file-backed AtomicFile fake. A tick must never be lost silently: a queue that cannot be read is
+// never written over, a failed or refused append tells the caller so it can keep the tick and
+// retry, and the bridge's read tells the page when the queue was unreadable or set aside.
+import { describe, expect, it } from "vitest";
+import { hasJdk, runJavaProbe } from "./helpers/javaProbe";
+
+const QUEUE = "hunt-pending-ticks.json";
+
+/** Runs `body` with `dir` (a fresh temp folder) and `queue` (its queue file) in scope. */
+function probe(body: string): string[] {
+  return runJavaProbe({
+    classes: ["PendingTicks.java", "HuntFiles.java", "TickKeys.java"],
+    stubs: true,
+    imports: ["java.nio.file.Files", "java.nio.charset.StandardCharsets", "android.util.AtomicFile"],
+    main: [
+      'File dir = Files.createTempDirectory("hunt-queue").toFile();',
+      `File queue = new File(dir, "${QUEUE}");`,
+      body,
+    ].join("\n"),
+  });
+}
+
+const write = (text: string) => `Files.write(queue.toPath(), ${JSON.stringify(text)}.getBytes(StandardCharsets.UTF_8));`;
+const printFile = "System.out.println(new String(Files.readAllBytes(queue.toPath()), StandardCharsets.UTF_8));";
+const append = (taskId: string, at: number) =>
+  `{ PendingTicks.Queued r = PendingTicks.append(dir, "${taskId}", "2026-11-22", ${at}L); System.out.println(r + " " + r.closesWindow()); }`;
+
+describe.skipIf(!hasJdk)("PendingTicks, run on the JDK", () => {
+  it("appends a tick once per Task and day; a missing file is an empty queue", () => {
+    expect(probe([append("t-1", 1000), append("t-1", 2000), append("t-2", 3000), printFile].join("\n"))).toEqual([
+      "ADDED true",
+      "ALREADY_QUEUED true",
+      "ADDED true",
+      '[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":1000},{"taskId":"t-2","dateKey":"2026-11-22","tickedAt":3000}]',
+    ]);
+  }, 60_000);
+
+  it("never writes over a queue it could not parse, and says the tick is still pending", () => {
+    expect(probe([write("{not json"), append("t-1", 1000), printFile].join("\n"))).toEqual([
+      "UNREADABLE false",
+      "{not json",
+    ]);
+  }, 60_000);
+
+  it("never writes over a queue whose read failed (a read error is not an empty queue)", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-0","dateKey":"2026-11-22","tickedAt":5}]'),
+        `AtomicFile.FAIL_READS.add("${QUEUE}");`,
+        append("t-1", 1000),
+        `AtomicFile.FAIL_READS.clear();`,
+        printFile,
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["UNREADABLE false", '[{"taskId":"t-0","dateKey":"2026-11-22","tickedAt":5}]']);
+  }, 60_000);
+
+  it("refuses a tick when the queue is full or the write fails, without closing its window", () => {
+    const lines = probe(
+      [
+        "StringBuilder b = new StringBuilder(\"[\");",
+        "for (int i = 0; i < PendingTicks.MAX_TICKS; i++) b.append(i == 0 ? \"\" : \",\").append(\"{\\\"taskId\\\":\\\"f\" + i + \"\\\",\\\"dateKey\\\":\\\"2026-11-22\\\",\\\"tickedAt\\\":1}\");",
+        "Files.write(queue.toPath(), b.append(\"]\").toString().getBytes(StandardCharsets.UTF_8));",
+        append("t-1", 1000),
+        "queue.delete();",
+        `AtomicFile.FAIL_WRITES.add("${QUEUE}");`,
+        append("t-1", 1000),
+        "System.out.println(queue.exists());",
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["FULL false", "WRITE_FAILED false", "false"]);
+  }, 60_000);
+
+  it("the bridge's read hands the page the ticks and the Undo windows held back", () => {
+    const lines = probe(
+      [write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7}]'), "System.out.println(PendingTicks.read(dir, 2));", "System.out.println(PendingTicks.read(dir, 0));"].join("\n"),
+    );
+    expect(lines.map((l) => JSON.parse(l))).toEqual([
+      { ticks: [{ taskId: "t-1", dateKey: "2026-11-22", tickedAt: 7 }], heldBack: 2 },
+      { ticks: [{ taskId: "t-1", dateKey: "2026-11-22", tickedAt: 7 }] },
+    ]);
+  }, 60_000);
+
+  it("the bridge's read sets a corrupt queue aside, says where it was kept, and the widget can queue again", () => {
+    const lines = probe(
+      [
+        write("{not json"),
+        "System.out.println(PendingTicks.read(dir, 0));",
+        "System.out.println(queue.exists());",
+        "for (File f : dir.listFiles()) if (f.getName().startsWith(\"hunt-pending-ticks-unreadable-\")) System.out.println(\"kept \" + new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));",
+        append("t-1", 1000),
+      ].join("\n"),
+    );
+    const envelope = JSON.parse(lines[0]);
+    expect(envelope.ticks).toEqual([]);
+    expect(envelope.unreadable).toBe("corrupt");
+    expect(envelope.keptAs).toMatch(/^hunt-pending-ticks-unreadable-\d+\.json$/);
+    expect(lines.slice(1)).toEqual(["false", "kept {not json", "ADDED true"]);
+  }, 60_000);
+
+  it("the bridge's read leaves a queue it could not read where it is and reports the read error", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7}]'),
+        `AtomicFile.FAIL_READS.add("${QUEUE}");`,
+        "System.out.println(PendingTicks.read(dir, 0));",
+        `AtomicFile.FAIL_READS.clear();`,
+        printFile,
+      ].join("\n"),
+    );
+    expect(JSON.parse(lines[0])).toEqual({ ticks: [], unreadable: "read-error" });
+    expect(lines[1]).toBe('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7}]');
+  }, 60_000);
+
+  it("acknowledging removes exactly the given ticks and never rewrites an unreadable queue", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7},{"taskId":"t-2","dateKey":"2026-11-22","tickedAt":8}]'),
+        'System.out.println(PendingTicks.ack(dir, "[{\\"taskId\\":\\"t-1\\",\\"dateKey\\":\\"2026-11-22\\",\\"tickedAt\\":7},{\\"taskId\\":\\"t-2\\",\\"dateKey\\":\\"2026-11-22\\",\\"tickedAt\\":9}]"));',
+        printFile,
+        write("{not json"),
+        'System.out.println(PendingTicks.ack(dir, "[{\\"taskId\\":\\"t-2\\",\\"dateKey\\":\\"2026-11-22\\",\\"tickedAt\\":8}]"));',
+        printFile,
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["1", '[{"taskId":"t-2","dateKey":"2026-11-22","tickedAt":8}]', "0", "{not json"]);
+  }, 60_000);
+});

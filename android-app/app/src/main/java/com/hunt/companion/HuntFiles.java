@@ -44,6 +44,23 @@ final class HuntFiles {
         }
     }
 
+    /**
+     * Reads a whole text file like {@link #readText}, but tells a read error apart from a missing
+     * file: "" only when the file does not exist, an IOException when it exists but could not be
+     * read. For a file whose content must never be replaced unseen (the Pending Tick queue).
+     * Caller holds LOCK.
+     */
+    static String readExisting(File f) throws IOException {
+        try {
+            return new String(new AtomicFile(f).readFully(), StandardCharsets.UTF_8).trim();
+        } catch (FileNotFoundException e) {
+            if (f.exists()) throw e; // there, but not readable: not the same as missing
+            return "";
+        } catch (RuntimeException e) {
+            throw new IOException("Reading " + f.getName() + " failed", e);
+        }
+    }
+
     /** Replaces a file atomically. Caller holds LOCK. */
     static void writeText(File f, String text) throws IOException {
         AtomicFile af = new AtomicFile(f);

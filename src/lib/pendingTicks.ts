@@ -1,8 +1,7 @@
-import { habitTaskId } from "./dateUtils";
 import type { Task } from "./domainTypes";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
-import { buildHabitTaskRow, completeTaskRow } from "./taskQueue";
+import { completeTaskRow, missingHabitRows } from "./taskQueue";
 
 /**
  * A Pending Tick (ADR-0006): a Task ticked done on the Day Widget that Hunt has
@@ -59,9 +58,7 @@ function isWellFormed(tick: PendingTick): boolean {
  * day), or null. A row deleted elsewhere stays deleted.
  */
 function habitRowFor(state: SyncPayload, tick: PendingTick): Task | null {
-  if ((state.deletedTaskIds ?? []).includes(tick.taskId)) return null;
-  const habit = (state.habits ?? []).find((h) => habitTaskId(h.id, tick.dateKey) === tick.taskId);
-  return habit ? buildHabitTaskRow(habit, tick.dateKey) : null;
+  return missingHabitRows(state, tick.dateKey).find((t) => t.id === tick.taskId) ?? null;
 }
 
 function skipReason(state: SyncPayload, task: Task): PendingTickSkipReason | null {

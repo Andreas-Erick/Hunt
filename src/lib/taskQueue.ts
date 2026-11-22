@@ -1,6 +1,7 @@
 import { habitTaskId, isTaskVisibleToday, toLocalDateKey } from "./dateUtils";
 import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
 import { compareRank } from "./syncTypes";
+import type { SyncPayload } from "./syncTypes";
 
 /**
  * Deterministic TimeLog id for one focus session. The same session flushed on
@@ -199,6 +200,23 @@ export function buildHabitTaskRow(habit: Habit, dateKey: string): Task {
     createdAt: stamp,
     updatedAt: stamp,
   };
+}
+
+/**
+ * The daily Habit rows for `dateKey` that Hunt has not created yet, built by
+ * their fixed ids (buildHabitTaskRow), so the Widgets can list and tick a
+ * Habit before the app has run that day. A row that exists is left out, and so
+ * is one deleted elsewhere: a tombstoned row stays deleted. Pure.
+ */
+export function missingHabitRows(
+  state: Pick<SyncPayload, "tasks" | "habits" | "deletedTaskIds">,
+  dateKey: string
+): Task[] {
+  const known = new Set((state.tasks ?? []).map((t) => t.id));
+  for (const id of state.deletedTaskIds ?? []) known.add(id);
+  return (state.habits ?? [])
+    .filter((h) => !known.has(habitTaskId(h.id, dateKey)))
+    .map((h) => buildHabitTaskRow(h, dateKey));
 }
 
 /**

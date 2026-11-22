@@ -12,7 +12,6 @@ import android.util.Log;
 
 import java.io.File;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,7 +30,7 @@ import java.util.Set;
  */
 final class DayWidgetUndo {
     private static final String TAG = "HuntDayWidgetUndo";
-    /** Private preferences: "dateKey|taskId" -> tap time (epoch ms) for every window not yet queued. */
+    /** Private preferences: {@link TickKeys#taskDay} -> tap time (epoch ms) for every window not yet queued. */
     static final String UNDO_PREFS = "day_widget_undo";
     /** Run the timer this long after the window ends (clear of rounding at the boundary). */
     private static final long SLACK_MS = 100;
@@ -51,7 +50,7 @@ final class DayWidgetUndo {
     static boolean open(Context ctx, String taskId, String dateKey, long tickedAt) {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
-            String key = UndoWindow.key(taskId, dateKey);
+            String key = TickKeys.taskDay(taskId, dateKey);
             if (prefs.contains(key)) return false;
             if (!prefs.edit().putLong(key, tickedAt).commit()) {
                 Log.w(TAG, "Opening an Undo window failed; tick dropped");
@@ -65,42 +64,40 @@ final class DayWidgetUndo {
     /** Undo: closes the window without queueing anything, as if the tick never happened. */
     static void undo(Context ctx, String taskId, String dateKey) {
         synchronized (LOCK) {
-            prefs(ctx).edit().remove(UndoWindow.key(taskId, dateKey)).commit();
+            prefs(ctx).edit().remove(TickKeys.taskDay(taskId, dateKey)).commit();
         }
         schedule(ctx);
     }
 
     /**
      * Appends every tick whose window has ended to the Pending Tick queue (tap order, original tap
-     * time) and closes those windows. Returns true if any was appended. Any thread.
+     * time) and closes those windows. A tick the queue refuses (full, unreadable, a failed write)
+     * keeps its window and is retried on the next call, so it is never dropped; the result counts
+     * it as held back. Any thread.
      */
-    static boolean commitDue(Context ctx) {
-        if (ctx == null) return false;
-        File dir = ctx.getFilesDir();
-        long now = System.currentTimeMillis();
+    static UndoWindow.Commit commitDue(Context ctx) {
+        if (ctx == null) return new UndoWindow.Commit();
+        final File dir = ctx.getFilesDir();
+        UndoWindow.Commit result;
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
-            Map<String, ?> held = prefs.getAll();
-            List<String> due = UndoWindow.due(held, now);
-            if (due.isEmpty()) return false;
-            SharedPreferences.Editor edit = prefs.edit();
-            for (String key : due) {
-                Object value = held.get(key);
-                long tickedAt = value instanceof Long ? (Long) value : now;
-                // Appended before the window is removed: a crash in between appends it again,
-                // which the queue ignores (one entry per Task and day).
-                if (!PendingTicks.append(dir, UndoWindow.taskIdOf(key), UndoWindow.dateKeyOf(key), tickedAt)) {
-                    Log.w(TAG, "Queueing a tick after its Undo window failed; tick dropped");
-                }
-                edit.remove(key);
+            // Appended before the window is removed: a crash in between appends it again, which
+            // the queue ignores (one entry per Task and day).
+            result = UndoWindow.commit(prefs.getAll(), System.currentTimeMillis(),
+                    (taskId, dateKey, tickedAt) -> PendingTicks.append(dir, taskId, dateKey, tickedAt).closesWindow());
+            if (result.heldBack > 0) {
+                Log.w(TAG, result.heldBack + " ended Undo window(s) could not be queued yet; kept for the next try");
             }
-            edit.commit();
+            if (result.closed.isEmpty()) return result;
+            SharedPreferences.Editor edit = prefs.edit();
+            for (String key : result.closed) edit.remove(key);
+            if (!edit.commit()) Log.w(TAG, "Closing queued Undo windows failed; the queue ignores the repeat");
         }
         schedule(ctx);
-        return true;
+        return result;
     }
 
-    /** Every window not yet queued ("dateKey|taskId" -> tap time). Any thread. */
+    /** Every window not yet queued ({@link TickKeys#taskDay} -> tap time). Any thread. */
     static Map<String, ?> held(Context ctx) {
         synchronized (LOCK) {
             Map<String, ?> all = prefs(ctx).getAll();
