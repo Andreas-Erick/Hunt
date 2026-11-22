@@ -250,7 +250,7 @@ export function TelemetryDashboardView() {
     horizon === "day"
       ? "grid-cols-6 gap-3 sm:gap-5"
       : horizon === "week"
-      ? "grid-cols-7 gap-3 sm:gap-5"
+      ? "grid-cols-7 gap-1.5 sm:gap-5"
       : horizon === "quarter"
       ? "grid-cols-3 gap-5 sm:gap-8"
       : horizon === "year"
@@ -284,7 +284,7 @@ export function TelemetryDashboardView() {
               aria-haspopup="listbox"
               aria-expanded={showScopeMenu}
               aria-label={`Filter review scope: ${scopeTitle}`}
-              className={`flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`flex max-w-full coarse:min-h-11 items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               {scopeStyle ? (
                 <span className={`h-2 w-2 shrink-0 rounded-full ${scopeStyle.bg}`} />
@@ -311,7 +311,7 @@ export function TelemetryDashboardView() {
                   aria-selected={effectiveScope === "ALL"}
                   tabIndex={effectiveScope === "ALL" ? 0 : -1}
                   onClick={() => handleScopeOptionSelect("ALL")}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
+                  className={`flex w-full coarse:min-h-11 items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
                     effectiveScope === "ALL"
                       ? "bg-white/10 font-medium text-white"
                       : "text-neutral-300 hover:bg-white/[0.05]"
@@ -332,7 +332,7 @@ export function TelemetryDashboardView() {
                       aria-selected={active}
                       tabIndex={active ? 0 : -1}
                       onClick={() => handleScopeOptionSelect(q.id)}
-                      className={`mt-0.5 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs ${
+                      className={`mt-0.5 flex w-full coarse:min-h-11 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs ${
                         active
                           ? "bg-white/10 font-medium text-white"
                           : "text-neutral-300 hover:bg-white/[0.05]"
@@ -356,7 +356,7 @@ export function TelemetryDashboardView() {
                   aria-selected={effectiveScope === "OTHER"}
                   tabIndex={effectiveScope === "OTHER" ? 0 : -1}
                   onClick={() => handleScopeOptionSelect("OTHER")}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
+                  className={`flex w-full coarse:min-h-11 items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
                     effectiveScope === "OTHER"
                       ? "bg-white/10 font-medium text-white"
                       : "text-neutral-300 hover:bg-white/[0.05]"
@@ -377,7 +377,7 @@ export function TelemetryDashboardView() {
               type="button"
               onClick={() => handleScopeChange("ALL")}
               aria-label="Clear quest filter"
-              className={`flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-2 text-xs text-neutral-300 hover:border-white/30 hover:text-white ${PRESSABLE}`}
+              className={`flex coarse:min-h-11 items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-2 text-xs text-neutral-300 hover:border-white/30 hover:text-white ${PRESSABLE}`}
             >
               <X className="h-3.5 w-3.5" />
               <span>Reset</span>
@@ -411,13 +411,13 @@ export function TelemetryDashboardView() {
           </div>
 
           {/* Period Stepper */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setPeriodOffset((w) => w - 1)}
               aria-label={windowSpec.prevLabel}
               title={windowSpec.prevLabel}
-              className={`rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white ${PRESSABLE}`}
+              className={`inline-flex items-center justify-center coarse:min-h-11 coarse:min-w-11 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white ${PRESSABLE}`}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -430,7 +430,7 @@ export function TelemetryDashboardView() {
               disabled={periodOffset === 0}
               aria-label={windowSpec.nextLabel}
               title={windowSpec.nextLabel}
-              className={`rounded-lg p-2 text-neutral-400 enabled:hover:bg-white/[0.05] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${PRESSABLE}`}
+              className={`inline-flex items-center justify-center coarse:min-h-11 coarse:min-w-11 rounded-lg p-2 text-neutral-400 enabled:hover:bg-white/[0.05] enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-30 ${PRESSABLE}`}
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -438,7 +438,7 @@ export function TelemetryDashboardView() {
             <button
               type="button"
               onClick={() => setPeriodOffset(0)}
-              className={`sm:ml-1 flex items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 sm:px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`sm:ml-1 flex coarse:min-h-11 items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 sm:px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               <Calendar className="h-3.5 w-3.5 text-neutral-400" />
               <span>{windowSpec.currentLabel}</span>
@@ -859,7 +859,7 @@ export function TelemetryDashboardView() {
           type="button"
           onClick={() => setShowSessionHistory(!showSessionHistory)}
           aria-expanded={showSessionHistory}
-          className={`-mx-2 rounded-lg px-2 py-2 text-xs font-medium uppercase tracking-[0.16em] text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
+          className={`-mx-2 coarse:min-h-11 rounded-lg px-2 py-2 text-xs font-medium uppercase tracking-[0.16em] text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
         >
           {showSessionHistory
             ? "Hide Session Log ↑"
@@ -914,7 +914,7 @@ export function TelemetryDashboardView() {
                   onClick={() =>
                     setVisibleLogLimit((cur) => cur + SESSION_LOG_PAGE_SIZE)
                   }
-                  className={`rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                  className={`min-h-8 coarse:min-h-11 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   Show more sessions ({report.filteredLogs.length - visibleLogLimit}{" "}
                   remaining)

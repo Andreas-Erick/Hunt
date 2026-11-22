@@ -18,7 +18,7 @@ interface RegionErrorBoundaryState {
 }
 
 const BUTTON_CLASS =
-  "rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:opacity-80";
+  "min-h-8 coarse:min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.08] hover:text-white active:opacity-80";
 
 /**
  * Isolates one region of the app: a render error there (including a failed

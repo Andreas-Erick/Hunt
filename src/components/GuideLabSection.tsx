@@ -7,7 +7,6 @@ import { useShallow } from "zustand/react/shallow";
 import {
   AlertTriangle,
   ArrowRight,
-  Check,
   CheckCircle2,
   CircleAlert,
   Plus,
@@ -29,6 +28,7 @@ import {
   TASK_LAB_PRESETS,
 } from "@/lib/questScienceContent";
 import { useTodayDateKey } from "./useTodayDateKey";
+import { SavedNotice } from "./SavedNotice";
 
 type LabMode = "task" | "quest";
 
@@ -264,7 +264,7 @@ export function GuideLabSection() {
                 hudAudio.playClick();
                 setActiveView("quests");
               }}
-              className={`inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-neutral-300 hover:border-white/20 hover:text-white ${PRESSABLE}`}
+              className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-neutral-300 hover:border-white/20 hover:text-white ${PRESSABLE}`}
             >
               <span>Manage Quests</span>
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -381,7 +381,7 @@ export function GuideLabSection() {
                       hudAudio.playClick();
                       setActiveView("command");
                     }}
-                    className={`-my-1.5 -mr-2 rounded-lg px-2.5 py-1.5 text-xs text-hud-cyan hover:bg-white/[0.06] hover:text-white ${PRESSABLE}`}
+                    className={`-my-1.5 -mr-2 min-h-8 coarse:min-h-11 rounded-lg px-2.5 py-1.5 text-xs text-hud-cyan hover:bg-white/[0.06] hover:text-white ${PRESSABLE}`}
                   >
                     Edit on Home
                   </button>
@@ -406,7 +406,7 @@ export function GuideLabSection() {
                           setTaskTitle(item.title);
                           setTaskTouched(false);
                         }}
-                        className={`shrink-0 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-neutral-200 hover:border-hud-cyan/40 hover:text-white ${PRESSABLE}`}
+                        className={`shrink-0 min-h-8 coarse:min-h-11 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-neutral-200 hover:border-hud-cyan/40 hover:text-white ${PRESSABLE}`}
                       >
                         Load in tester
                       </button>
@@ -453,7 +453,7 @@ export function GuideLabSection() {
                     hudAudio.playClick();
                     setMode(m);
                   }}
-                  className={`rounded-lg px-3.5 py-1.5 text-xs font-medium ${PRESSABLE} ${
+                  className={`min-h-8 coarse:min-h-11 rounded-lg px-3.5 py-1.5 text-xs font-medium ${PRESSABLE} ${
                     active
                       ? "bg-white/10 text-white"
                       : "text-hud-muted hover:text-neutral-200"
@@ -605,16 +605,7 @@ export function GuideLabSection() {
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Add to Today&apos;s Queue</span>
                 </button>
-                {savedNotice && (
-                  <span
-                    role="status"
-                    aria-live="polite"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-hud-emerald"
-                  >
-                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>{savedNotice}</span>
-                  </span>
-                )}
+                <SavedNotice text={savedNotice} />
               </div>
             </form>
           ) : (
@@ -672,7 +663,7 @@ export function GuideLabSection() {
                     onChange={(e) => setQuestHours(e.target.value)}
                     onBlur={() => setQuestTouched(true)}
                     aria-invalid={Boolean(questHoursError)}
-                    className="w-16 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs text-white focus:border-hud-cyan focus:outline-none"
+                    className="w-16 min-h-8 coarse:min-h-11 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs text-white focus:border-hud-cyan focus:outline-none"
                   />
                   <span className="text-hud-muted">h/wk</span>
                 </div>
@@ -711,16 +702,7 @@ export function GuideLabSection() {
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Create Quest</span>
                 </button>
-                {savedNotice && (
-                  <span
-                    role="status"
-                    aria-live="polite"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-hud-emerald"
-                  >
-                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>{savedNotice}</span>
-                  </span>
-                )}
+                <SavedNotice text={savedNotice} />
               </div>
             </form>
           )}
