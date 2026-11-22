@@ -9,6 +9,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { afterAll, describe, expect, it } from "vitest";
+import { hasJdk, runJavaProbe } from "./helpers/javaProbe";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const APP = path.join(ROOT, "android-app");
@@ -155,7 +156,7 @@ describe("MainActivity.java: secret hygiene and token storage", () => {
     expect(persist).toMatch(/envelope\s*=\s*encryptToken\(token\)/);
     // An older token finishing its encryption late must never overwrite a newer one.
     expect(persist).toMatch(
-      /synchronized\s*\(FILE_LOCK\)\s*\{\s*if\s*\(\s*!token\.equals\(syncTokenCache\.get\(\)\)\s*\)\s*return;\s*writeConfigFile\(SYNC_TOKEN_FILE,\s*envelope\);/,
+      /synchronized\s*\(HuntFiles\.LOCK\)\s*\{\s*if\s*\(\s*!token\.equals\(syncTokenCache\.get\(\)\)\s*\)\s*return;\s*writeConfigFile\(SYNC_TOKEN_FILE,\s*envelope\);/,
     );
     expect(javaCode.match(/writeConfigFile\(SYNC_TOKEN_FILE,[^)]*\)/g)).toEqual([
       "writeConfigFile(SYNC_TOKEN_FILE, envelope)",
@@ -253,6 +254,9 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
       setKeepScreenOn: "void",
       vibrateClick: "void",
       getAppVersion: "String",
+      saveWidgetSnapshot: "void",
+      readPendingTicks: "String",
+      ackPendingTicks: "void",
     });
     // Nothing outside the bridge class is exposed to JS.
     expect(javaCode.match(/@JavascriptInterface/g)).toHaveLength(bridgeMethods().size);
@@ -417,6 +421,145 @@ describe("build hygiene", () => {
     expect(script).toMatch(/grep -aqF -f <\(key_patterns\)/);
     expect(script).not.toMatch(/(echo|printf|info|log|die)[^\n]*\$\(\s*(cat|key_patterns)\b/);
     expect(script).toContain("<versionCode above the installed one> <versionName>");
+  });
+});
+
+describe("Day Widget (ADR-0006)", () => {
+  const JAVA_DIR = path.dirname(JAVA_FILE);
+  const RES = path.join(MAIN, "res");
+  const widgetJava = fs
+    .readdirSync(JAVA_DIR)
+    .filter((f) => f.endsWith(".java") && f !== "MainActivity.java")
+    .map((f) => ({ name: f, code: stripJavaComments(read(path.join(JAVA_DIR, f))) }));
+  // Every widget class: the Widget* files plus the Day Widget's helpers named after what they hold.
+  const widgetSources = widgetJava.filter((f) => /Widget/.test(f.name));
+  const widgetHelpers = widgetJava.filter((f) => ["DayNav.java", "DaySelection.java", "SelectedDay.java", "UndoWindow.java", "TickKeys.java"].includes(f.name));
+  const widgetLayouts = fs
+    .readdirSync(path.join(RES, "layout"))
+    .filter((f) => f.startsWith("widget_"))
+    .map((f) => ({ name: f, xml: read(path.join(RES, "layout", f)) }));
+
+  it("declares the widget receiver and its list service, neither exported", () => {
+    const receiver = /<receiver\b[^>]*android:name="\.DayWidgetProvider"[^>]*>([\s\S]*?)<\/receiver>/.exec(manifest);
+    expect(receiver, "DayWidgetProvider receiver").not.toBeNull();
+    expect(receiver![0]).toMatch(/android:exported="false"/);
+    expect(receiver![1]).toContain('<action android:name="android.appwidget.action.APPWIDGET_UPDATE" />');
+    expect(receiver![1]).toMatch(
+      /<meta-data\s+android:name="android\.appwidget\.provider"\s+android:resource="@xml\/day_widget_info"/,
+    );
+    const service = /<service\b[^>]*android:name="\.DayWidgetService"[^>]*>/.exec(manifest)?.[0] ?? "";
+    expect(service).toMatch(/android:exported="false"/);
+    expect(service).toMatch(/android:permission="android\.permission\.BIND_REMOTEVIEWS"/);
+    expect(fs.existsSync(path.join(RES, "xml", "day_widget_info.xml"))).toBe(true);
+  });
+
+  it("the widget code never writes a file except appending a Pending Tick; only the bridge saves the snapshot", () => {
+    expect(widgetSources.map((f) => f.name).sort()).toEqual([
+      "DayWidgetProvider.java",
+      "DayWidgetService.java",
+      "DayWidgetTapActivity.java",
+      "DayWidgetTaps.java",
+      "DayWidgetUndo.java",
+      "StatsWidgetFit.java",
+      "StatsWidgetProvider.java",
+      "WidgetLook.java",
+      "WidgetRequestCodes.java",
+      "WidgetSupport.java",
+    ]);
+    expect(widgetHelpers).toHaveLength(5);
+    for (const { name, code } of [...widgetSources, ...widgetHelpers]) {
+      expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
+      expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
+      // The only queue operation a widget may use is appending; reading back is for hiding queued Tasks.
+      const queueCalls = firstCaptures(code, /PendingTicks\.(\w+)\s*\(/g);
+      for (const call of queueCalls) expect(["append", "queued"], `${name}: PendingTicks.${call}`).toContain(call);
+    }
+    expect(widgetSources.some(({ code }) => /PendingTicks\.append\s*\(/.test(code))).toBe(true);
+    const save = blockAfter(javaCode, /public\s+void\s+saveWidgetSnapshot\(String\s+json\)\s*\{/);
+    expect(save).toContain("saveWidgetSnapshotInternal(json)");
+  });
+
+  it("the Pending Tick queue only ever writes its own file, and only the bridge acknowledges", () => {
+    const queue = widgetJava.find((f) => f.name === "PendingTicks.java")?.code ?? "";
+    expect(queue, "PendingTicks.java").not.toBe("");
+    expect(queue).not.toMatch(/hunt-mobile-state\.json|STATE_FILE|WIDGET_SNAPSHOT_FILE/);
+    const writes = firstCaptures(queue, /HuntFiles\.writeText\(\s*([^,]+),/g);
+    expect(writes.length).toBeGreaterThan(0);
+    // Besides the queue, only its own set-aside copy of malformed entries (hunt-pending-ticks-*).
+    for (const target of writes) expect(["queueFile(dir)", "aside"]).toContain(target.trim());
+    expect(blockAfter(queue, /private\s+static\s+File\s+asideFile\([^)]*\)\s*\{/)).toContain('"hunt-pending-ticks-"');
+    expect(blockAfter(queue, /static\s+File\s+queueFile\(File\s+dir\)\s*\{/)).toContain("HuntFiles.PENDING_TICKS_FILE");
+    expect(read(path.join(JAVA_DIR, "HuntFiles.java"))).toMatch(/PENDING_TICKS_FILE\s*=\s*"hunt-pending-ticks\.json"/);
+    // Acknowledging (which removes entries) happens only through the bridge, on the write thread.
+    for (const { name, code } of widgetJava.filter((f) => f.name !== "PendingTicks.java")) {
+      expect(code, name).not.toMatch(/PendingTicks\.ack\s*\(/);
+    }
+    expect(javaCode).toMatch(/PendingTicks\.ack\s*\(/);
+    const ack = blockAfter(javaCode, /public\s+void\s+ackPendingTicks\(String\s+json\)\s*\{/);
+    expect(ack).toContain("ackPendingTicksInternal(json)");
+  });
+
+  it("a newly queued tick tells a live, loaded page to drain (#10)", () => {
+    const queue = widgetJava.find((f) => f.name === "PendingTicks.java")?.code ?? "";
+    // The queue itself announces each new tick, after the write and outside the lock, so whatever
+    // widget path appends (direct tap or after an undo window) reaches the page.
+    const append = blockAfter(queue, /static\s+Queued\s+append\([^)]*\)\s*\{/);
+    expect(append).toMatch(/notifyTickQueued\(\)/);
+    expect(append.indexOf("notifyTickQueued()")).toBeGreaterThan(append.lastIndexOf("synchronized (HuntFiles.LOCK)"));
+    const notify = blockAfter(queue, /private\s+static\s+void\s+notifyTickQueued\(\)\s*\{/);
+    expect(notify).not.toMatch(/synchronized/);
+    // MainActivity listens only while it exists; the signal is gated on a loaded page on the UI thread.
+    const onCreate = blockAfter(javaCode, /protected\s+void\s+onCreate\(Bundle\s+savedInstanceState\)\s*\{/);
+    expect(onCreate).toMatch(/PendingTicks\.setListener\(\s*tickQueuedListener\s*\)/);
+    const onDestroy = blockAfter(javaCode, /protected\s+void\s+onDestroy\(\)\s*\{/);
+    expect(onDestroy).toMatch(/PendingTicks\.clearListener\(\s*tickQueuedListener\s*\)/);
+    const listener = blockAfter(javaCode, /tickQueuedListener\s*=\s*\(\)\s*->\s*main\.post\(\(\)\s*->\s*\{/);
+    expect(listener).toMatch(/if\s*\(\s*pageLoaded\s*\)\s*callJs\(\s*"__huntPendingTicksArrived"\s*,\s*"null"\s*\)/);
+    // ...and the packaged page answers it and also drains on resume.
+    const page = read(ASSET_PAGE_FILE);
+    expect(page).toMatch(/window\.__huntPendingTicksArrived\s*=\s*drainPendingTicksAndRender\b/);
+    expect(blockAfter(page,/function\s+onAppVisible\(\)\s*\{/)).toMatch(/drainPendingTicks\(\)/);
+  });
+
+  it("a tickable row has its own tick target, separate from the open-Hunt row", () => {
+    const service = widgetSources.find((f) => f.name === "DayWidgetService.java")?.code ?? "";
+    expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row_tick\b/);
+    expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row\b/);
+  });
+
+  it("every widget control is a touch target of at least 48dp", () => {
+    const clickIds = new Set(
+      widgetSources.flatMap(({ code }) =>
+        firstCaptures(code, /setOn(?:Click(?:PendingIntent|FillInIntent))\(\s*R\.id\.(\w+)/g),
+      ),
+    );
+    expect(clickIds.size).toBeGreaterThan(0);
+    for (const id of clickIds) {
+      const tag = widgetLayouts
+        .map(({ xml }) => new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(xml)?.[0])
+        .find(Boolean);
+      expect(tag, `layout view for R.id.${id}`).toBeDefined();
+      const dp = (attr: string) => Number(new RegExp(`android:${attr}="(\\d+)dp"`).exec(tag!)?.[1] ?? 0);
+      expect(Math.max(dp("minHeight"), dp("layout_height")), `${id} height`).toBeGreaterThanOrEqual(48);
+      const fillsWidth = /android:layout_width="match_parent"/.test(tag!);
+      expect(fillsWidth || dp("minWidth") >= 48, `${id} width`).toBe(true);
+    }
+  });
+
+  it("long titles stay on one line with an ellipsis", () => {
+    const row = widgetLayouts.find((l) => l.name === "widget_day_row_neon.xml")?.xml ?? "";
+    const title = /<TextView\b[^>]*android:id="@\+id\/widget_row_title"[^>]*>/.exec(row)?.[0] ?? "";
+    expect(title).toMatch(/android:maxLines="1"/);
+    expect(title).toMatch(/android:ellipsize="end"/);
+    expect(title).toMatch(/android:layout_weight="1"/);
+  });
+
+  it("build-apk.sh refuses an APK without the widget resources", () => {
+    const script = read(BUILD_SCRIPT_FILE);
+    const list = /for e in ([^;]*); do\s*\n\s*grep -qx "\$e" <<<"\$ENTRIES"/.exec(script)?.[1] ?? "";
+    for (const entry of ["res/xml/day_widget_info.xml", "res/layout/widget_day_neon.xml", "res/layout/widget_day_row_neon.xml"]) {
+      expect(list.split(/\s+/), entry).toContain(entry);
+    }
   });
 });
 
@@ -726,6 +869,98 @@ describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toHaveLength(cases.length);
     cases.forEach(([, , , , want, label], i) => expect(r.stdout[i] === "1", label).toBe(want));
+  }, 60_000);
+});
+
+// Day Widget ‹ › navigation (#7): today to today + 6, back to today at local midnight.
+const JAVA_DIR_SHELL = path.dirname(JAVA_FILE);
+const dayProviderCode = stripJavaComments(read(path.join(JAVA_DIR_SHELL, "DayWidgetProvider.java")));
+const dayNavCode = stripJavaComments(read(path.join(JAVA_DIR_SHELL, "DayNav.java")));
+const dayLayoutXml = read(path.join(MAIN, "res", "layout", "widget_day_neon.xml"));
+
+describe("Day Widget ‹ › navigation", () => {
+  const tagOf = (id: string) => new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(dayLayoutXml)?.[0] ?? "";
+  const dp = (tag: string, attr: string) => Number(new RegExp(`android:${attr}="(\\d+)dp"`).exec(tag)?.[1] ?? 0);
+
+  it("‹ and › are 48dp square targets in the header, 8dp clear of the day label", () => {
+    for (const id of ["widget_prev", "widget_next"]) {
+      const tag = tagOf(id);
+      expect(tag, id).not.toBe("");
+      expect(dp(tag, "minWidth"), `${id} minWidth`).toBeGreaterThanOrEqual(48);
+      expect(dp(tag, "minHeight"), `${id} minHeight`).toBeGreaterThanOrEqual(48);
+      expect(tag, `${id} label`).toMatch(/android:contentDescription="@string\/day_widget_(prev|next)"/);
+      expect(dayProviderCode).toContain(`R.id.${id}`);
+    }
+    const label = tagOf("widget_header");
+    expect(dp(label, "layout_marginStart")).toBeGreaterThanOrEqual(8);
+    expect(dp(label, "layout_marginEnd")).toBeGreaterThanOrEqual(8);
+  });
+
+  it("the arrows are explicit, immutable broadcasts to the non-exported provider", () => {
+    const nav = blockAfter(dayProviderCode, /static\s+PendingIntent\s+navIntent\s*\([^)]*\)\s*\{/);
+    expect(nav).toContain("new Intent(ctx, DayWidgetProvider.class)");
+    expect(nav).toContain("setAction(ACTION_NAV)");
+    expect(nav).toContain("PendingIntent.getBroadcast(");
+    expect(nav).toContain("PendingIntent.FLAG_IMMUTABLE");
+    // Explicit only: no intent filter lets another app send the nav action.
+    expect(manifest).not.toContain("DAY_WIDGET_NAV");
+  });
+
+  it("the selected day lives only in the widget's own private preferences", () => {
+    const prefs = captures(dayNavCode, /getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g, 1, 2);
+    expect(prefs.length).toBeGreaterThan(0);
+    for (const [name, mode] of prefs) {
+      expect(name).toBe("NAV_PREFS");
+      expect(mode).toBe("Context.MODE_PRIVATE");
+    }
+  });
+});
+
+describe.skipIf(!hasJdk)("Day Widget day selection and labels, run on the JDK", () => {
+  const nothingLeft = /name="day_widget_nothing_left">([^<]*)</.exec(read(path.join(MAIN, "res", "values", "strings.xml")))?.[1] ?? "";
+
+  it("clamps the selected day to today .. today + 6 and expires it at local midnight", () => {
+    // [savedOn, savedOffset, todayKey] -> offset
+    const cases: Array<[string | null, number, string, string]> = [
+      ["2026-11-22", 3, "2026-11-22", "3"],
+      ["2026-11-22", 6, "2026-11-22", "6"],
+      ["2026-11-22", 7, "2026-11-22", "6"], // stops at today + 6
+      ["2026-11-22", -1, "2026-11-22", "0"], // stops at today
+      ["2026-11-22", 3, "2026-11-23", "0"], // local midnight passed: back to today
+      [null, 3, "2026-11-22", "0"], // never navigated
+    ];
+    const main = cases
+      .map(([on, off, today]) => `System.out.println(DaySelection.selectedOffset(${on ? `"${on}"` : "null"}, ${off}, "${today}"));`)
+      .join("\n");
+    expect(runJavaProbe({ classes: ["DaySelection.java"], main })).toEqual(cases.map((c) => c[3]));
+  }, 60_000);
+
+  it("draws today's view only on the current date, and labels the header Today, Tomorrow, then Tue 24", () => {
+    const lines = runJavaProbe({
+      classes: ["DaySelection.java"],
+      imports: ["java.time.LocalDate"],
+      main: [
+        'System.out.println(DaySelection.viewFor("2026-11-22", "2026-11-22").key);',
+        'System.out.println(DaySelection.viewFor("2026-11-23", "2026-11-22").key);',
+        'System.out.println(DaySelection.headerLabel(0, LocalDate.parse("2026-11-22")));',
+        'System.out.println(DaySelection.headerLabel(1, LocalDate.parse("2026-11-23")));',
+        'System.out.println(DaySelection.headerLabel(2, LocalDate.parse("2026-11-24")));',
+        'System.out.println(DaySelection.headerLabel(6, LocalDate.parse("2026-12-01")));',
+      ].join("\n"),
+    });
+    expect(lines).toEqual(["today", "future", "Today", "Tomorrow", "Tue 24", "Tue 1"]);
+  }, 60_000);
+
+  it("an empty day reads 'Nothing left for today', '… for tomorrow', then '… for Tue 24'", () => {
+    expect(nothingLeft).toBe("Nothing left for %1$s");
+    const lines = runJavaProbe({
+      classes: ["DaySelection.java"],
+      imports: ["java.time.LocalDate"],
+      main: [0, 1, 2]
+        .map((i) => `System.out.println(String.format("${nothingLeft}", DaySelection.inSentence(${i}, LocalDate.parse("2026-11-2${2 + i}"))));`)
+        .join("\n"),
+    });
+    expect(lines).toEqual(["Nothing left for today", "Nothing left for tomorrow", "Nothing left for Tue 24"]);
   }, 60_000);
 });
 

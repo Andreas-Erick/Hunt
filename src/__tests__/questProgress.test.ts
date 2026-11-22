@@ -39,13 +39,13 @@ describe("computeQuestWeekProgress", () => {
 
   it("sums per quest for today and the week, ignoring Other work and stale days", () => {
     const p = computeQuestWeekProgress({ quests, logs, todayKey: today });
-    expect(p.forQuest(quests[0])).toEqual({ todaySeconds: 1800, weekSeconds: 3600, targetHours: 2, pct: 50 });
+    expect(p.forQuest(quests[0])).toEqual({ todaySeconds: 1800, weekSeconds: 3600, targetHours: 2, pct: 50, met: false });
     expect(p.forQuest(quests[1])).toMatchObject({ todaySeconds: 0, weekSeconds: 3600, pct: 25 });
   });
 
   it("totals all quest work against the targets of active quests only", () => {
     const { total } = computeQuestWeekProgress({ quests, logs, todayKey: today });
-    expect(total).toEqual({ todaySeconds: 1800, weekSeconds: 7800, targetHours: 6, pct: 36 });
+    expect(total).toEqual({ todaySeconds: 1800, weekSeconds: 7800, targetHours: 6, pct: 36, met: false });
   });
 
   it("adds the running burst to its quest and to the total, so every view agrees mid-session", () => {
@@ -78,5 +78,21 @@ describe("computeQuestWeekProgress", () => {
     expect(p.forQuest(odd[0]).pct).toBe(0);
     expect(p.forQuest(odd[1]).pct).toBe(0);
     expect(p.forQuest(odd[2]).pct).toBe(100);
+  });
+
+  it("calls a target met once the week reaches a positive target, not just rounds up to 100 %", () => {
+    const q = [
+      { id: "a", archived: false, targetWeeklyHours: 1 },
+      { id: "b", archived: false, targetWeeklyHours: 1 },
+      { id: "none", archived: false, targetWeeklyHours: 0 },
+    ];
+    const p = computeQuestWeekProgress({
+      quests: q,
+      logs: [log("a", today, 3600), log("b", today, 3599), log("none", today, 3600)],
+      todayKey: today,
+    });
+    expect(p.forQuest(q[0])).toMatchObject({ pct: 100, met: true });
+    expect(p.forQuest(q[1])).toMatchObject({ pct: 100, met: false });
+    expect(p.forQuest(q[2]).met).toBe(false);
   });
 });

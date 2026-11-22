@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Day Widget, Dawn look, populated or empty day: the twin of widget_day_neon.xml with the same
+    view ids and geometry (androidWidgetLook.test.ts), so Java only picks the layout. Blue-hour
+    ground with a cream hairline, no glow; gold is the only accent.
+    Header (48dp): previous-day arrow, the day label (open-Hunt target, serif, sentence case, gold),
+    next-day arrow; arrows are 48dp squares 8dp clear of the label and stay in place, dimmed,
+    at today and today + 6.
+    Body: the selected day's list; widget_empty is its empty view ("Nothing left for Tue 24").
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_dawn"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_prev"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:background="@drawable/widget_header_dawn"
+            android:contentDescription="@string/day_widget_prev"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:text="@string/day_widget_prev_glyph"
+            android:textColor="@color/widget_dawn_dim"
+            android:textSize="24sp" />
+
+        <TextView
+            android:id="@+id/widget_header"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:background="@drawable/widget_header_dawn"
+            android:contentDescription="@string/day_widget_open_hunt"
+            android:fontFamily="serif"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/day_widget_today"
+            android:textColor="@color/widget_dawn_accent"
+            android:textSize="17sp" />
+
+        <TextView
+            android:id="@+id/widget_next"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:background="@drawable/widget_header_dawn"
+            android:contentDescription="@string/day_widget_next"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:text="@string/day_widget_next_glyph"
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="24sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/widget_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="8dp"
+            android:listSelector="@android:color/transparent"
+            android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/widget_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:textColor="@color/widget_dawn_muted"
+            android:textSize="14sp" />
+    </FrameLayout>
+</LinearLayout>

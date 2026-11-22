@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Open-Task ring; white so Java tints it with the Quest accent (setColorFilter). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <stroke android:width="2dp" android:color="#FFFFFFFF" />
+    <size android:width="22dp" android:height="22dp" />
+</shape>

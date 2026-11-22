@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Widget colours per look, mirroring the CSS tokens of hunt-mobile.html and globals.css
+    (ADR-0005). Names: widget_<look>_<role>; both looks define exactly the same roles.
+    Java picks the set through WidgetLook by the Widget Snapshot's look; it never holds a hex
+    literal. androidWidgetLook.test.ts keeps every value equal to its CSS token.
+-->
+<resources>
+    <!-- Neon surfaces: deep 0 -> ground 1 -> row 2 -> pressed 3 (each step about +3-4% lightness) -->
+    <color name="widget_neon_deep">#FF08090C</color>
+    <color name="widget_neon_ground">#FF111319</color>
+    <color name="widget_neon_row">#FF161922</color>
+    <color name="widget_neon_pressed">#FF1C202B</color>
+    <!-- 1dp widget edge: accent@25%, the HUD glow RemoteViews cannot draw as a shadow -->
+    <color name="widget_neon_outline">#4000F0FF</color>
+    <color name="widget_neon_ripple">#3300F0FF</color>
+
+    <!-- Neon ink -->
+    <color name="widget_neon_text">#FFF8FAFC</color>
+    <color name="widget_neon_text_2">#FFCBD5E1</color>
+    <color name="widget_neon_muted">#FF94A3B8</color>
+    <color name="widget_neon_dim">#FF7C8AA0</color>
+    <color name="widget_neon_accent">#FF00F0FF</color>
+    <color name="widget_neon_success">#FF00FF9D</color>
+
+    <!-- Neon Quest accents (bars, rings and dots only: slate is below 4.5:1 as text) -->
+    <color name="widget_neon_q_cyan">#FF00F0FF</color>
+    <color name="widget_neon_q_emerald">#FF00FF9D</color>
+    <color name="widget_neon_q_amber">#FFFFB800</color>
+    <color name="widget_neon_q_purple">#FFB388FF</color>
+    <color name="widget_neon_q_rose">#FFFF6B9D</color>
+    <color name="widget_neon_q_sky">#FF38BDF8</color>
+    <color name="widget_neon_q_orange">#FFFF8547</color>
+    <color name="widget_neon_q_lime">#FFA3E635</color>
+    <color name="widget_neon_q_slate">#FF64748B</color>
+
+    <!-- Dawn surfaces: blue-hour grounds, the same four steps -->
+    <color name="widget_dawn_deep">#FF101826</color>
+    <color name="widget_dawn_ground">#FF172133</color>
+    <color name="widget_dawn_row">#FF1F2B40</color>
+    <color name="widget_dawn_pressed">#FF26334A</color>
+    <!-- 1dp widget edge: Dawn has no glow, only a cream (ink) hairline at 7% -->
+    <color name="widget_dawn_outline">#12EDE6D8</color>
+    <color name="widget_dawn_ripple">#33E5AA50</color>
+
+    <!-- Dawn ink: cream text; the logo's gold sun is the only accent -->
+    <color name="widget_dawn_text">#FFEDE6D8</color>
+    <color name="widget_dawn_text_2">#FFC9CBD1</color>
+    <color name="widget_dawn_muted">#FF9AA3B5</color>
+    <color name="widget_dawn_dim">#FF949DB0</color>
+    <color name="widget_dawn_accent">#FFE5AA50</color>
+    <color name="widget_dawn_success">#FF8FCB9B</color>
+
+    <!-- Dawn Quest accents (bars, rings and dots only, like Neon's) -->
+    <color name="widget_dawn_q_cyan">#FF84B8E6</color>
+    <color name="widget_dawn_q_emerald">#FF8FCB9B</color>
+    <color name="widget_dawn_q_amber">#FFE5AA50</color>
+    <color name="widget_dawn_q_purple">#FFB7A3E6</color>
+    <color name="widget_dawn_q_rose">#FFE69AB6</color>
+    <color name="widget_dawn_q_sky">#FF72C6C0</color>
+    <color name="widget_dawn_q_orange">#FFEC9168</color>
+    <color name="widget_dawn_q_lime">#FFBDCF70</color>
+    <color name="widget_dawn_q_slate">#FF6C7891</color>
+</resources>

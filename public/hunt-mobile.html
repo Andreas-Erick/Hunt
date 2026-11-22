@@ -2887,10 +2887,14 @@ var HuntCore = (() => {
   __export(huntCore_exports, {
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
+    WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
+    applyPendingTicks: () => applyPendingTicks,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
+    buildWidgetSnapshot: () => buildWidgetSnapshot,
     canonicalString: () => canonicalString,
     compareRank: () => compareRank,
+    completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
     fromFocusSession: () => fromFocusSession,
@@ -2964,6 +2968,47 @@ var HuntCore = (() => {
     if (scheduled) return scheduled;
     if (isStampValue(task.updatedAt)) return toLocalDateKey(task.updatedAt);
     return null;
+  }
+  var EMPTY_DATES = /* @__PURE__ */ new Set();
+  function summarizeHabitDays(habitTasks, todayKey) {
+    const todayByHabit = /* @__PURE__ */ new Map();
+    const datesByHabit = /* @__PURE__ */ new Map();
+    for (const task of habitTasks) {
+      const habitId = task.habitId;
+      if (!habitId) continue;
+      const canonical = task.id === habitTaskId(habitId, todayKey);
+      if (canonical || task.scheduledDate === todayKey && !todayByHabit.has(habitId)) {
+        todayByHabit.set(habitId, task);
+      }
+      const day = completionDateKey(task);
+      if (day) {
+        let dates = datesByHabit.get(habitId);
+        if (!dates) {
+          dates = /* @__PURE__ */ new Set();
+          datesByHabit.set(habitId, dates);
+        }
+        dates.add(day);
+      }
+    }
+    const cache = /* @__PURE__ */ new Map();
+    return {
+      summaryFor(habitId) {
+        var _a;
+        let summary = cache.get(habitId);
+        if (!summary) {
+          const todayTask = todayByHabit.get(habitId);
+          const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
+          summary = {
+            todayTask,
+            completedDates,
+            streak: computeHabitStreak(completedDates, todayKey),
+            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed"
+          };
+          cache.set(habitId, summary);
+        }
+        return summary;
+      }
+    };
   }
 
   // src/lib/syncTypes.ts
@@ -3191,6 +3236,16 @@ var HuntCore = (() => {
   }
 
   // src/lib/domainTypes.ts
+  var QUEST_ACCENT_KEYS = [
+    "cyan",
+    "emerald",
+    "amber",
+    "purple",
+    "rose",
+    "sky",
+    "orange",
+    "lime"
+  ];
   function toFocusSession(focus) {
     const updatedAt = typeof focus.updatedAt === "number" && Number.isFinite(focus.updatedAt) && focus.updatedAt >= 0 ? focus.updatedAt : 0;
     if (!focus.activeTaskId) {
@@ -3346,8 +3401,201 @@ var HuntCore = (() => {
       updatedAt: stamp
     };
   }
+  function missingHabitRows(state, dateKey) {
+    var _a, _b, _c;
+    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
+    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
+    return ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
+  }
   function nextStamp(row, now = Date.now()) {
     return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
+  }
+  function completeTaskRow(task, completedAt) {
+    return {
+      ...task,
+      status: "completed",
+      completedAt,
+      updatedAt: nextStamp(task, completedAt)
+    };
+  }
+
+  // src/lib/questProgress.ts
+  var QUEST_WEEK_DAYS = 7;
+  function rollingWeekKeys(todayKey) {
+    return Array.from(
+      { length: QUEST_WEEK_DAYS },
+      (_, i) => dateKeyFromOffset(todayKey, -i)
+    );
+  }
+  function safeSeconds(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  function safeTarget(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  function isTargetMet(seconds, targetHours) {
+    return targetHours > 0 && seconds >= targetHours * 3600;
+  }
+  function percentOf(seconds, targetHours) {
+    if (targetHours <= 0) return 0;
+    return Math.min(100, Math.round(seconds / 3600 / targetHours * 100));
+  }
+  function computeQuestWeekProgress(params) {
+    const { quests, logs, todayKey, live } = params;
+    const week = new Set(rollingWeekKeys(todayKey));
+    const today = /* @__PURE__ */ new Map();
+    const weekly = /* @__PURE__ */ new Map();
+    let totalToday = 0;
+    let totalWeek = 0;
+    const add = (questId, dateKey, seconds) => {
+      var _a, _b;
+      weekly.set(questId, ((_a = weekly.get(questId)) != null ? _a : 0) + seconds);
+      totalWeek += seconds;
+      if (dateKey === todayKey) {
+        today.set(questId, ((_b = today.get(questId)) != null ? _b : 0) + seconds);
+        totalToday += seconds;
+      }
+    };
+    for (const log of logs) {
+      if (!log.questId || !week.has(log.dateKey)) continue;
+      add(log.questId, log.dateKey, safeSeconds(log.durationSeconds));
+    }
+    if (live && live.questId) add(live.questId, todayKey, safeSeconds(live.seconds));
+    const totalTarget = quests.filter((q) => !q.archived).reduce((acc, q) => acc + safeTarget(q.targetWeeklyHours), 0);
+    return {
+      forQuest(quest) {
+        var _a, _b;
+        const weekSeconds = (_a = weekly.get(quest.id)) != null ? _a : 0;
+        const targetHours = safeTarget(quest.targetWeeklyHours);
+        return {
+          todaySeconds: (_b = today.get(quest.id)) != null ? _b : 0,
+          weekSeconds,
+          targetHours,
+          pct: percentOf(weekSeconds, targetHours),
+          met: isTargetMet(weekSeconds, targetHours)
+        };
+      },
+      total: {
+        todaySeconds: totalToday,
+        weekSeconds: totalWeek,
+        targetHours: totalTarget,
+        pct: percentOf(totalWeek, totalTarget),
+        met: isTargetMet(totalWeek, totalTarget)
+      }
+    };
+  }
+
+  // src/lib/widgetStats.ts
+  var ACCENTS = new Set(QUEST_ACCENT_KEYS);
+  function widgetAccent(accentColor) {
+    return accentColor && ACCENTS.has(accentColor) ? accentColor : "slate";
+  }
+  function statsFor(state, dateKey) {
+    var _a, _b, _c, _d;
+    const quests = (_a = state.quests) != null ? _a : [];
+    const progress = computeQuestWeekProgress({ quests, logs: (_b = state.timeLogs) != null ? _b : [], todayKey: dateKey });
+    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey);
+    return {
+      dateKey,
+      focusSeconds: progress.total.todaySeconds,
+      quests: quests.filter((q) => !q.archived).sort((a, b) => a.slotIndex - b.slotIndex).map((q) => {
+        const p = progress.forQuest(q);
+        return {
+          code: q.code,
+          accent: widgetAccent(q.accentColor),
+          weekSeconds: p.weekSeconds,
+          targetHours: p.targetHours,
+          pct: p.pct,
+          met: p.met
+        };
+      }),
+      streaks: ((_d = state.habits) != null ? _d : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
+    };
+  }
+  function buildWidgetStats(state, todayKey) {
+    return [statsFor(state, todayKey), statsFor(state, dateKeyFromOffset(todayKey, 1))];
+  }
+
+  // src/lib/widgetSnapshot.ts
+  var WIDGET_SNAPSHOT_VERSION = 1;
+  var WIDGET_SNAPSHOT_DAYS = 8;
+  function futureTasks(state, dateKey) {
+    var _a;
+    return ((_a = state.tasks) != null ? _a : []).filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey)).sort(compareRank);
+  }
+  function todayTasks(state, todayKey) {
+    var _a;
+    return ((_a = state.tasks) != null ? _a : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+  }
+  function buildWidgetSnapshot(state, todayKey, look) {
+    var _a, _b, _c, _d, _e, _f;
+    const accentOf = /* @__PURE__ */ new Map();
+    for (const q of (_a = state.quests) != null ? _a : []) accentOf.set(q.id, widgetAccent(q.accentColor));
+    const focusId = (_c = (_b = state.activeFocus) == null ? void 0 : _b.activeTaskId) != null ? _c : null;
+    const toRow = (t) => ({
+      id: t.id,
+      title: t.title,
+      accent: t.questId && accentOf.get(t.questId) || "slate",
+      tickable: t.id !== focusId,
+      focus: t.id === focusId,
+      habit: Boolean(t.habitId)
+    });
+    const noData = !((_d = state.quests) != null ? _d : []).length && !((_e = state.tasks) != null ? _e : []).length && !((_f = state.habits) != null ? _f : []).length;
+    return {
+      version: WIDGET_SNAPSHOT_VERSION,
+      look,
+      todayKey,
+      noData,
+      days: Array.from({ length: WIDGET_SNAPSHOT_DAYS }, (_, i) => {
+        const dateKey = dateKeyFromOffset(todayKey, i);
+        return {
+          dateKey,
+          today: todayTasks(state, dateKey).map(toRow),
+          future: futureTasks(state, dateKey).map(toRow)
+        };
+      }),
+      stats: buildWidgetStats(state, todayKey)
+    };
+  }
+
+  // src/lib/pendingTicks.ts
+  var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
+  function isWellFormed(tick) {
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+  }
+  function habitRowFor(state, tick) {
+    var _a;
+    return (_a = missingHabitRows(state, tick.dateKey).find((t) => t.id === tick.taskId)) != null ? _a : null;
+  }
+  function skipReason(state, task) {
+    var _a;
+    if (task.status === "completed") return "already-done";
+    if (task.status === "archived") return "archived";
+    if (((_a = state.activeFocus) == null ? void 0 : _a.activeTaskId) === task.id) return "in-focus";
+    return null;
+  }
+  function applyPendingTicks(state, ticks) {
+    let tasks = state.tasks;
+    const skipped = [];
+    for (const tick of ticks) {
+      if (!isWellFormed(tick)) {
+        skipped.push({ tick, reason: "missing" });
+        continue;
+      }
+      const existing = tasks.find((t) => t.id === tick.taskId);
+      if (existing) {
+        const reason = skipReason(state, existing);
+        if (reason) skipped.push({ tick, reason });
+        else tasks = tasks.map((t) => t === existing ? completeTaskRow(t, tick.tickedAt) : t);
+        continue;
+      }
+      const created = habitRowFor(state, tick);
+      if (!created) skipped.push({ tick, reason: "missing" });
+      else tasks = [...tasks, completeTaskRow(created, tick.tickedAt)].sort(compareRank);
+    }
+    return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
   }
   return __toCommonJS(huntCore_exports);
 })();
@@ -4067,8 +4315,100 @@ var HuntCore = (() => {
       try {
         localStorage.setItem(STORAGE_KEY, text);
       } catch (e) {}
+      publishWidgetSnapshot();
       return true;
     }
+
+    // Day Widget (ADR-0006): after every save, the start of the day and a look change, hand the shell
+    // the ready-to-draw Widget Snapshot. Only the APK has widgets; an unchanged snapshot is not resent.
+    let lastWidgetSnapshotJson = "";
+    function publishWidgetSnapshot() {
+      if (!isApkShell()) return;
+      try {
+        const text = JSON.stringify(HuntCore.buildWidgetSnapshot(state, toLocalDateKey(), currentLook()));
+        if (text === lastWidgetSnapshotJson) return;
+        lastWidgetSnapshotJson = text;
+        bridgeCall("saveWidgetSnapshot", text);
+      } catch (e) {
+        // A snapshot bug must never break saving: the state is already stored, the widget just stays stale.
+        recordMobileBreadcrumb("WARN", "widget", "snapshot_failed", { message: e && e.message });
+      }
+    }
+
+    // Pending Ticks (ADR-0006): Tasks ticked done on the Day Widget wait in a queue the shell owns.
+    // Apply them through HuntCore (completion time = the tap), save, log stale ticks, and only then
+    // acknowledge exactly these ticks so the shell keeps any that arrived meanwhile, and ask for a sync
+    // as any other change does. While saving is blocked nothing is applied or acknowledged: the ticks
+    // stay queued, untouched, until the user lets Hunt save again (allowSavingAfterLoadFailure drains).
+    // The shell removes acknowledged ticks later, on its write thread, so a drain that runs before that
+    // (the next tick's signal, a resume) would read them again: they are left out until they are gone.
+    // Returns true when the state changed.
+    // This bookkeeping stays in the page: it is wiring between the page and its shell (which acks have
+    // not landed yet), not a Hunt rule. The key matches the shell's TickKeys.ack.
+    const ticksAwaitingAck = new Set();
+    function pendingTickKey(t) {
+      return t && typeof t === "object" ? `${t.taskId}|${t.dateKey}|${Number(t.tickedAt)}` : JSON.stringify(t);
+    }
+    // What the shell reports with the queue: Undo windows it could not queue yet (kept and retried, so
+    // only logged) and a queue it could not read. Unreadable data is a visible event, told once per run.
+    let tickQueueProblemShown = false;
+    function reportTickQueueProblems(read) {
+      if (read.heldBack > 0) recordMobileBreadcrumb("WARN", "widget", "ticks_held_back", { count: read.heldBack });
+      if (!read.unreadable) return;
+      recordMobileBreadcrumb("ERROR", "widget", "ticks_unreadable", { reason: String(read.unreadable), keptAs: String(read.keptAs || "") });
+      if (tickQueueProblemShown) return;
+      tickQueueProblemShown = true;
+      // "corrupt" / "malformed": the shell kept a copy of what it could not read and moved it out of the
+      // queue; "read-error": the queue is untouched and read again next time.
+      showToast(read.unreadable === "read-error"
+        ? "Hunt couldn't read the home-screen widget's ticks just now. They stay saved, and Hunt tries again next time it opens."
+        : "Some ticks from the home-screen widget couldn't be read. A copy was kept on this phone; tick those Tasks again in Hunt.",
+        { ms: 8000 });
+    }
+    function drainPendingTicks() {
+      if (!isApkShell()) return false;
+      const raw = bridgeCall("readPendingTicks");
+      if (!raw) return false;
+      let read;
+      try {
+        read = JSON.parse(raw);
+      } catch (e) {
+        read = null;
+      }
+      const queued = read && Array.isArray(read.ticks) ? read.ticks : null;
+      if (!queued) {
+        recordMobileBreadcrumb("WARN", "widget", "ticks_unreadable", { length: String(raw).length });
+        return false;
+      }
+      reportTickQueueProblems(read);
+      if (persistBlocked) return false;
+      const inQueue = new Set(queued.map(pendingTickKey));
+      for (const k of ticksAwaitingAck) if (!inQueue.has(k)) ticksAwaitingAck.delete(k);
+      const ticks = queued.filter((t) => !ticksAwaitingAck.has(pendingTickKey(t)));
+      if (!ticks.length) return false;
+      const result = HuntCore.applyPendingTicks(state, ticks);
+      const changed = result.state !== state;
+      if (changed) {
+        state = result.state;
+        syncMeta.localRev++;
+        persistState();
+        requestSyncSoon();
+        recordMobileBreadcrumb("INFO", "widget", "ticks_applied", { count: ticks.length - result.skipped.length });
+      }
+      for (const s of result.skipped) {
+        recordMobileBreadcrumb("WARN", "widget", "tick_skipped", { taskId: s.tick && s.tick.taskId, reason: s.reason });
+      }
+      bridgeCall("ackPendingTicks", JSON.stringify(ticks));
+      for (const t of ticks) ticksAwaitingAck.add(pendingTickKey(t));
+      return changed;
+    }
+
+    // While Hunt is open the shell signals each newly queued tick; resume drains too, for a tick whose
+    // signal found no page to call. Either way the drain is the boot one, then a repaint.
+    function drainPendingTicksAndRender() {
+      if (drainPendingTicks()) renderAppSafely();
+    }
+    window.__huntPendingTicksArrived = drainPendingTicksAndRender;
 
     function syncKeepScreenOn() {
       const on = !!(state.activeFocus && state.activeFocus.activeTaskId && state.activeFocus.isRunning);
@@ -4992,7 +5332,8 @@ var HuntCore = (() => {
       appInBackground = false;
       syncRun.failures = Math.min(syncRun.failures, 1);
       syncRun.retryAt = 0;
-      if (wasHidden) renderAppSafely(); // time-dependent views (timers, date rollover)
+      const ticked = drainPendingTicks(); // widget ticks whose signal reached no page (see __huntPendingTicksArrived)
+      if (wasHidden || ticked) renderAppSafely(); // time-dependent views (timers, date rollover)
       kickSync();
     }
 
@@ -5520,9 +5861,7 @@ var HuntCore = (() => {
         flushActiveBurst(now, { ...af, isRunning: true, sessionStartedAt: now - 1000 });
       }
 
-      currentTask.status = "completed";
-      currentTask.completedAt = now;
-      currentTask.updatedAt = nextStamp(currentTask, now);
+      Object.assign(currentTask, HuntCore.completeTaskRow(currentTask, now));
       justCompletedTaskId = currentTask.id;
 
       const nextTask = HuntCore.pickNextFocusTask(state.tasks, toLocalDateKey(now));
@@ -5793,9 +6132,7 @@ var HuntCore = (() => {
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
       const prev = { status: t.status, completedAt: t.completedAt };
-      t.status = "completed";
-      t.completedAt = now;
-      t.updatedAt = nextStamp(t, now);
+      Object.assign(t, HuntCore.completeTaskRow(t, now));
       justCompletedTaskId = taskId;
       commitLocalChange();
       if (twoBeatScene) playTwoBeatTaskCompletion(twoBeatScene, taskId);
@@ -6168,6 +6505,7 @@ var HuntCore = (() => {
       recordMobileBreadcrumb("WARN", "storage", "persist_unblocked", {});
       closeSheet();
       persistState();
+      drainPendingTicksAndRender(); // widget ticks waited, untouched, while saving was blocked
       showToast("Changes on this phone are saved again");
     }
 
@@ -6891,6 +7229,7 @@ var HuntCore = (() => {
         btn.classList.toggle("selected", on);
         btn.setAttribute("aria-pressed", String(on));
       });
+      publishWidgetSnapshot(); // the widget follows the look
     }
 
     function openSyncSheet() {
@@ -9689,6 +10028,7 @@ var HuntCore = (() => {
       // habits, roll over "Completed today", the date, today's hours and the timeline.
       if (lastRenderedDateKey && toLocalDateKey() !== lastRenderedDateKey) {
         materializeDailyHabits(toLocalDateKey());
+        publishWidgetSnapshot(); // the new day, even when no habit row had to be saved
         renderAppSafely();
       }
       if (document.body && document.body.classList.contains("keyboard-open")) updateKeyboardClass(); // backstop
@@ -9791,6 +10131,8 @@ var HuntCore = (() => {
       persistState();
       syncMeta.localRev++;
     }
+    drainPendingTicks(); // widget ticks made while Hunt was closed, applied before the first paint
+    publishWidgetSnapshot(); // opening Hunt refreshes the widget even when nothing needed saving
     try {
       renderApp();
       recordMobileBreadcrumb("INFO", "boot", "render_ok", { view: activeView });
