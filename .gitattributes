@@ -1,0 +1,24 @@
+# Store text as LF in the repository; check out LF unless overridden below.
+* text=auto eol=lf
+
+# Windows scripts are parsed by cmd.exe / wscript / Inno Setup: keep CRLF on checkout.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.iss text eol=crlf
+
+# Runs on Linux CI and Git Bash: must stay LF.
+*.sh text eol=lf
+
+# Binary assets
+*.png binary
+*.ico binary
+*.jpg binary
+*.apk binary
+*.jks binary
+*.keystore binary
+
+# Collapse generated files in diffs and keep them out of language stats.
+package-lock.json linguist-generated=true
+# Byte-for-byte mirror of public/hunt-mobile.html (enforced by mobileMirror.test.ts).
+android-app/app/src/main/assets/hunt-mobile.html linguist-generated=true
