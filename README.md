@@ -210,6 +210,9 @@ publishes:
 - `Hunt-Mobile-<version>.apk`: signed Android app
 - `SHA256SUMS.txt`
 
+`npm run screenshots` regenerates `docs/screenshots/` from
+the current build, using made-up demo data.
+
 </details>
 
 ## License

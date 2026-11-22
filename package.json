@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:geometry": "playwright test",
+    "screenshots": "playwright test -c playwright.screenshots.config.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "prepare": "node scripts/install-hooks.mjs",
     "hunt": "Start-Hunt.bat"
