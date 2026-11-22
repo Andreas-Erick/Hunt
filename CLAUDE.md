@@ -6,3 +6,17 @@
 - **Review**: judge diffs against `CODING_STANDARDS.md`. Mechanical UI rules live in `src/__tests__/sourceScan_uiGuardrails.test.ts`.
 - **Decisions**: `docs/adr/` records the merge, sync-hub, phone-app and APK-build choices; update the ADR when a change alters one.
 - **Spec**: `Instructions_for_AI.md` holds the project's trigger-based quality spec; read the section whose trigger matches the task.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on Andreas-Erick/Hunt (gh CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
