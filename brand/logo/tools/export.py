@@ -8,7 +8,8 @@ usage: python export.py <concept-prefix> <out-root>
 Writes (relative to out-root):
   public/hunt-logo.png                         512px PWA / apple-touch icon (full tile)
   src/app/icon.svg                             favicon (small-size tile, scalable)
-  HUNT.ico, HUNT-Orbital.ico                   Windows shortcut icons: 16/24/32/48 from the
+  HUNT-Falcon.ico (+ legacy HUNT.ico,          Windows shortcut icons: 16/24/32/48 from the
+    HUNT-Orbital.ico, untracked)
                                                small tile, 64/128/256 from the full tile
   android-app/app/src/main/res/
     mipmap-<dpi>/ic_launcher.png               legacy launcher icon (full tile)
@@ -127,7 +128,8 @@ def main(prefix, out_root):
     fav = re.sub(r'(<svg[^>]*?)\sheight="\d+"', r'\1 height="64"', fav, count=1)
     (out / "src" / "app" / "icon.svg").write_text(fav, encoding="utf-8")
 
-    # 3. Windows .ico (both names; HUNT.lnk points at HUNT-Orbital.ico)
+    # 3. Windows .ico. Only HUNT-Falcon.ico is tracked; HUNT.ico / HUNT-Orbital.ico are
+    #    gitignored legacy names that existing local shortcuts (HUNT.lnk) still point at.
     # The perched falcon turns the h into a "k" at 48px and below, so those frames use the
     # falcon-less small tile; 64px and up show the full mark.
     frames = [tile_s.resize((s, s), Image.LANCZOS) for s in (16, 24, 32, 48)] + \

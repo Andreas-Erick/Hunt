@@ -210,7 +210,7 @@ jobs:
           Copy-Item -Force $nodeExe "$stage\node.exe"
 
           # Copy desktop launchers and icons.
-          Copy-Item -Force "Start-Hunt.bat","Start-Server.bat","Launch-Hunt.vbs","HUNT.ico","HUNT-Falcon.ico" $stage
+          Copy-Item -Force "Start-Hunt.bat","Start-Server.bat","Launch-Hunt.vbs","HUNT-Falcon.ico" $stage
 
       - name: Build portable Windows ZIP
         shell: pwsh
