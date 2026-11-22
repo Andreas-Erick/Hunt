@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
 import os from "os";
-import { toLocalDateKey } from "@/lib/dateUtils";
 import {
   newCorrelationId,
   recordBreadcrumb,
@@ -17,24 +15,19 @@ import {
   type SyncAuthResult,
 } from "@/lib/serverSyncAuth";
 import {
-  createEmptySyncPayload,
-  mergeSyncPayloads,
-  syncContentKey,
-  validateSyncPayload,
-  type SyncPayload,
-} from "@/lib/syncTypes";
+  DATA_DIR,
+  describeSkipped,
+  mainFileExists,
+  preserveCorruptMainFile,
+  readServerSyncFile,
+  writeServerSyncFileAtomic,
+  type UnreadableFile,
+} from "@/lib/serverSyncStore";
+import { mergeSyncPayloads, syncContentKey, validateSyncPayload } from "@/lib/syncTypes";
 
 export const dynamic = "force-dynamic";
 
-// HUNT_DATA_DIR lets tests point the route at a throwaway directory.
-const DATA_DIR = process.env.HUNT_DATA_DIR || path.join(process.cwd(), "data");
-const SYNC_FILE = path.join(DATA_DIR, "hunt-sync.json");
-const BACKUP_FILE = path.join(DATA_DIR, "hunt-sync.backup.json");
-const TMP_FILE = path.join(DATA_DIR, "hunt-sync.tmp.json");
 const KEY_FILE = path.join(DATA_DIR, "hunt-sync.key");
-const SNAPSHOT_DIR = path.join(DATA_DIR, "backups");
-const SNAPSHOT_RE = /^hunt-sync-\d{4}-\d{2}-\d{2}\.json$/;
-const SNAPSHOTS_TO_KEEP = 14;
 
 // Byte cap for a request body and for the merged state the server stores and
 // returns (clients post their full state). It is the binding limit: the count
@@ -56,6 +49,7 @@ interface LogMeta {
 type SyncLogEvent =
   | "key_unavailable"
   | "unreadable"
+  | "recovered_from_backup"
   | "write_failed"
   | "backup_failed"
   | "snapshot_failed"
@@ -313,137 +307,16 @@ function getLanUrls(port = 3000): string[] {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Storage
-// ---------------------------------------------------------------------------
 
-type ServerRead =
-  | { payload: SyncPayload; source: "main" | "backup" | "snapshot" | "empty" }
-  | { payload: null; source: "unreadable" };
-
-function readPayloadFile(filePath: string): SyncPayload | null {
-  try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    const check = validateSyncPayload(JSON.parse(raw) as unknown);
-    return check.valid ? check.payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function listSnapshotsNewestFirst(): string[] {
-  try {
-    if (!fs.existsSync(SNAPSHOT_DIR)) return [];
-    return fs
-      .readdirSync(SNAPSHOT_DIR)
-      .filter((name) => SNAPSHOT_RE.test(name))
-      .sort()
-      .reverse();
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Reads the server's merged state: the main file, else the backup, else (only
- * when those exist but are unreadable) the newest daily snapshot. When no file
- * exists at all the server is fresh (empty). When files exist but none can be
- * read, returns `unreadable` so callers never overwrite them with a merge
- * against an empty base (that would drop everything but the posting client's data).
- */
-function readServerSyncFile(): ServerRead {
-  let sawFile = false;
-  for (const [source, filePath] of [
-    ["main", SYNC_FILE],
-    ["backup", BACKUP_FILE],
-  ] as const) {
-    if (!fs.existsSync(filePath)) continue;
-    sawFile = true;
-    const payload = readPayloadFile(filePath);
-    if (payload) return { payload, source };
-  }
-  if (!sawFile) return { payload: createEmptySyncPayload(), source: "empty" };
-
-  for (const name of listSnapshotsNewestFirst()) {
-    const payload = readPayloadFile(path.join(SNAPSHOT_DIR, name));
-    if (payload) return { payload, source: "snapshot" };
-  }
-  return { payload: null, source: "unreadable" };
-}
-
-/**
- * Before the main file is replaced: keep it as `hunt-sync.backup.json` (the
- * previous DISTINCT version, since we only write on change) and, on the first
- * change of each day, as `backups/hunt-sync-YYYY-MM-DD.json` (newest 14 kept).
- */
-function rotateBackups(client: string, meta: LogMeta): void {
-  if (!fs.existsSync(SYNC_FILE)) return;
-  try {
-    fs.copyFileSync(SYNC_FILE, BACKUP_FILE);
-  } catch (err) {
-    logEvent("backup_failed", client, err, meta);
-  }
-  try {
-    const snapshot = path.join(SNAPSHOT_DIR, `hunt-sync-${toLocalDateKey()}.json`);
-    if (!fs.existsSync(snapshot)) {
-      fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
-      fs.copyFileSync(SYNC_FILE, snapshot);
-      for (const old of listSnapshotsNewestFirst().slice(SNAPSHOTS_TO_KEEP)) {
-        try {
-          fs.unlinkSync(path.join(SNAPSHOT_DIR, old));
-        } catch {
-          // ignore
-        }
-      }
-    }
-  } catch (err) {
-    logEvent("snapshot_failed", client, err, meta);
-  }
-}
-
-/**
- * Writes the main file via a temp file that is flushed to disk (fsync) before
- * the rename, so a power cut cannot leave a truncated hunt-sync.json behind;
- * false when it was not stored.
- */
-function writeServerSyncFileAtomic(
-  payload: SyncPayload,
-  options: { rotate: boolean; client: string; correlationId: string }
-): boolean {
-  const meta: LogMeta = { correlationId: options.correlationId };
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    // Only a VALID main file is rotated into the backups; a corrupt main file
-    // must not overwrite the good backup we just recovered from.
-    if (options.rotate) rotateBackups(options.client, meta);
-    const serialized = JSON.stringify(payload, null, 2);
-    const fd = fs.openSync(TMP_FILE, "w");
-    try {
-      fs.writeFileSync(fd, serialized, "utf8");
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.renameSync(TMP_FILE, SYNC_FILE);
-    return true;
-  } catch (err) {
-    logEvent("write_failed", options.client, err, meta);
-    try {
-      fs.rmSync(TMP_FILE, { force: true });
-    } catch {
-      // Best effort: the next successful write replaces it.
-    }
-    return false;
-  }
-}
-
-function unreadableResponse(client: string, meta: LogMeta & { correlationId: string }) {
+function unreadableResponse(
+  client: string,
+  skipped: UnreadableFile[],
+  meta: LogMeta & { correlationId: string }
+) {
   logEvent(
     "unreadable",
     client,
-    "Sync file(s) exist but none could be read; refusing to merge or overwrite. Check data/hunt-sync.json.",
+    `Sync file(s) exist but none could be read; refusing to merge or overwrite. ${describeSkipped(skipped)}`,
     meta
   );
   return errorResponse(
@@ -466,7 +339,7 @@ export async function GET(request: Request) {
 
   const current = readServerSyncFile();
   if (!current.payload) {
-    return unreadableResponse(clientLabel(request), {
+    return unreadableResponse(clientLabel(request), current.skipped, {
       correlationId,
       durationMs: Date.now() - startedAt,
     });
@@ -524,7 +397,7 @@ export async function POST(request: Request) {
     // concurrent requests are serialized.
     const current = readServerSyncFile();
     if (!current.payload) {
-      return unreadableResponse(client, {
+      return unreadableResponse(client, current.skipped, {
         correlationId,
         durationMs: Date.now() - startedAt,
       });
@@ -564,11 +437,24 @@ export async function POST(request: Request) {
     // Idle syncs (nothing new) must not touch the disk: compare content,
     // ignoring the lastSyncedAt stamp and key order.
     const recovered = current.source === "backup" || current.source === "snapshot";
+    if (recovered) {
+      // The write below replaces the unreadable main file: keep its bytes and say why.
+      const kept = mainFileExists() ? preserveCorruptMainFile() : null;
+      logEvent(
+        "recovered_from_backup",
+        client,
+        {
+          source: current.source,
+          skipped: describeSkipped(current.skipped),
+          keptCorruptCopy: kept,
+        },
+        { correlationId, durationMs: Date.now() - startedAt }
+      );
+    }
     if (recovered || syncContentKey(toStore) !== syncContentKey(current.payload)) {
       const stored = writeServerSyncFileAtomic(toStore, {
         rotate: current.source === "main",
-        client,
-        correlationId,
+        report: (event, err) => logEvent(event, client, err, { correlationId }),
       });
       if (!stored) {
         return errorResponse(

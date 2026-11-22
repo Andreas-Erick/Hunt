@@ -49,6 +49,7 @@ export type FetchStub = (url: string, init?: FetchInit) => Promise<FakeResponse>
 export interface AndroidBridgeStub {
   loadState?: () => string;
   saveState?: (json: string) => void;
+  saveCorruptState?: (raw: string) => boolean;
   getLaptopUrl?: () => string;
   saveLaptopUrl?: (url: string) => void;
   saveSyncToken?: (token: string) => boolean | undefined;
@@ -107,6 +108,7 @@ export interface MobilePageGlobals {
   switchView(view: string): void;
   tick(): void;
   persistState(json?: string): boolean;
+  allowSavingAfterLoadFailure(): void;
   toLocalDateKey(ts?: number): string;
   dayKeyOffset(n: number, from?: number): string;
   getSyncStatus(): SyncStatus;

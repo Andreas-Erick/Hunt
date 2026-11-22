@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { db, type Quest, type Task, type TimeLog } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   createEmptySyncPayload,
   validateSyncPayload,
@@ -161,7 +162,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     setUrl("/");
   });
 
-  describe("pairing key (DDL-01)", () => {
+  describe("pairing key", () => {
     it("is '' with nothing stored, and the request then carries no X-Hunt-Token header", async () => {
       expect(getClientSyncToken()).toBe("");
       const fetchMock = stubFetch(async () => jsonResponse(okBody()));
@@ -308,13 +309,13 @@ describe("desktop sync client (syncEngine.ts)", () => {
       expect(window.localStorage.length).toBe(0);
     });
 
-    it("the module source holds no 64-hex key literal", () => {
-      const source = fs.readFileSync(path.resolve(__dirname, "..", "lib", "syncEngine.ts"), "utf8");
+    it.each(["syncEngine.ts", "syncToken.ts"])("the %s source holds no 64-hex key literal", (file) => {
+      const source = fs.readFileSync(path.resolve(__dirname, "..", "lib", file), "utf8");
       expect(source).not.toMatch(/[0-9a-f]{64}/i);
     });
   });
 
-  describe("server response validation (DDL-02)", () => {
+  describe("server response validation", () => {
     it.each([
       ["payload {}", { payload: {} }],
       ["payload {quests:{}}", { payload: { quests: {} } }],
@@ -420,7 +421,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     });
   });
 
-  describe("snapshot import (DDL-02)", () => {
+  describe("snapshot import", () => {
     it.each(["{", "null", "[]", "{}", '{"quests":{}}', "", "   ", "x".repeat(10_000), '{"quests":[],"tasks":[]}'])(
       "rejects %j with SnapshotFormatError and leaves IndexedDB unchanged",
       async (text) => {
@@ -550,7 +551,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     });
   });
 
-  describe("failure diagnostics (DDL-08)", () => {
+  describe("failure diagnostics", () => {
     it("a rejected apply transaction yields local_db and three identical failures log once", async () => {
       window.localStorage.setItem(TOKEN_KEY, KEY64);
       const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);

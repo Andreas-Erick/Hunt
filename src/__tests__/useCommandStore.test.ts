@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { db, toLocalDateKey, type Task } from "@/lib/db";
+import { db } from "@/lib/db";
+import { toLocalDateKey } from "@/lib/dateUtils";
+import type { Task } from "@/lib/domainTypes";
 import { compareRank } from "@/lib/syncTypes";
 import {
   orderAfterDrop,

@@ -215,7 +215,7 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// RegionErrorBoundary (DUI-01)
+// RegionErrorBoundary
 // ---------------------------------------------------------------------------
 describe("RegionErrorBoundary", () => {
   function Bomb({ fuse }: { fuse: { armed: boolean } }) {
@@ -512,7 +512,7 @@ describe("HomePage shell", () => {
   });
 });
 
-describe("layout viewport (DUI-06)", () => {
+describe("layout viewport", () => {
   it("does not cap zoom", () => {
     expect(viewport.maximumScale).toBeUndefined();
     expect(viewport).not.toHaveProperty("maximumScale");
@@ -521,7 +521,7 @@ describe("layout viewport (DUI-06)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// TopTelemetryBar (DUI-11, DIX-09, DIX-10, DUI-01)
+// TopTelemetryBar
 // ---------------------------------------------------------------------------
 describe("TopTelemetryBar", () => {
   it("names the logo button 'Hunt, go to Home' and marks the active nav button", () => {
@@ -583,7 +583,7 @@ describe("TopTelemetryBar", () => {
   });
 });
 
-describe("globals.css (DUI-11, ARC-14)", () => {
+describe("globals.css", () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "app", "globals.css"), "utf8");
 
   it("defines .no-scrollbar and compiles every class the shell uses (no xs: screen)", async () => {
@@ -673,7 +673,7 @@ describe("buildPairingUrl", () => {
   });
 });
 
-describe("MobileSyncModal: pairing link (SRV-02 / DDL-01)", () => {
+describe("MobileSyncModal: pairing link", () => {
   it("QR code and Copy carry the pairing link; the key is never shown", async () => {
     window.localStorage.setItem(TOKEN_KEY, KEY);
     const qr = vi.spyOn(QRCode, "toString");
@@ -756,7 +756,7 @@ describe("MobileSyncModal: pairing link (SRV-02 / DDL-01)", () => {
   });
 });
 
-describe("MobileSyncModal: phone layout (DUI-05)", () => {
+describe("MobileSyncModal: phone layout", () => {
   it("scrolls on short screens and wraps the footer", async () => {
     await renderModal();
     const dialog = screen.getByRole("dialog");
@@ -786,7 +786,7 @@ describe("MobileSyncModal: phone layout (DUI-05)", () => {
   });
 });
 
-describe("MobileSyncModal: focus (DIX-06)", () => {
+describe("MobileSyncModal: focus", () => {
   it("moves focus in, wraps Tab both ways, and Escape returns focus to the Phone button", () => {
     render(<TopTelemetryBar />);
     const phone = screen.getByRole("button", { name: /Phone sync:/ });
@@ -847,7 +847,7 @@ describe("MobileSyncModal: focus (DIX-06)", () => {
   });
 });
 
-describe("MobileSyncModal: actions (DIX-12 / DDL-10)", () => {
+describe("MobileSyncModal: actions", () => {
   let createUrl: ReturnType<typeof vi.fn<(blob: Blob) => string>>;
   let revokeUrl: ReturnType<typeof vi.fn<(url: string) => void>>;
   let anchorClick: MockInstance<() => void>;
@@ -1148,7 +1148,7 @@ describe("MobileSyncModal: actions (DIX-12 / DDL-10)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// restoreMirroredNoteDrafts (DDL-12)
+// restoreMirroredNoteDrafts
 // ---------------------------------------------------------------------------
 describe("restoreMirroredNoteDrafts: keeps a draft the restore could not write", () => {
   const key = (taskId: string) => `${NOTES_DRAFT_KEY_PREFIX}${taskId}`;

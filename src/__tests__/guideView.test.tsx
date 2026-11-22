@@ -1,7 +1,6 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -9,7 +8,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { db, type Quest, type Task } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Quest, Task } from "@/lib/domainTypes";
 import {
   auditWorkspace,
   evaluateQuestDraft,

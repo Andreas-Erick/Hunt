@@ -38,6 +38,10 @@ public/Hunt-Mobile.apk
 _archive/
 Engineering Prompts/
 HUNT.lnk
+# Legacy icon names kept only for existing local shortcuts; HUNT-Falcon.ico is the tracked icon
+# (brand/logo/tools/export.py regenerates all three).
+HUNT.ico
+HUNT-Orbital.ico
 Instructions_for_AI.md
 
 # OS & IDE files

@@ -162,7 +162,7 @@ function makeHabit(id: string, overrides: Partial<Habit> = {}): Habit {
   };
 }
 
-describe("Macro Architecture & State Topology Invariants (Prompts 00 & 01)", () => {
+describe("Macro Architecture & State Topology Invariants", () => {
   describe("Module DAG & Strict Dependency Direction", () => {
     const graph = buildModuleGraph();
 
@@ -210,6 +210,13 @@ describe("Macro Architecture & State Topology Invariants (Prompts 00 & 01)", () 
 
       const desktopWindowDeps = graph.get("lib/desktopWindow.ts")?.internal ?? [];
       expect(desktopWindowDeps.some((d) => d.startsWith("store/"))).toBe(false);
+    });
+
+    it("keeps views off the database module: reads go through lib/reads.ts, writes through the store", () => {
+      for (const [mod, edges] of Array.from(graph.entries())) {
+        if (!mod.startsWith("components/")) continue;
+        expect(edges.internal, mod).not.toContain("lib/db.ts");
+      }
     });
   });
 

@@ -18,14 +18,9 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import {
-  db,
-  dateFromKey,
-  type Quest,
-  type QuestAccent,
-  type Task,
-  type TimeLog,
-} from "@/lib/db";
+import { db } from "@/lib/db";
+import { dateFromKey } from "@/lib/dateUtils";
+import type { Quest, QuestAccent, Task, TimeLog } from "@/lib/domainTypes";
 import { MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import { PlanWeekView } from "@/components/PlanWeekView";
@@ -668,7 +663,7 @@ describe("guarded deletes", () => {
       "group-hover:opacity-100",
       "focus-visible:opacity-100",
       "data-[state=armed]:opacity-100",
-      // UI-03: never hover-only; touch (no hover) always sees it, muted.
+      // never hover-only; touch (no hover) always sees it, muted.
       "hoverless:opacity-60"
     );
 

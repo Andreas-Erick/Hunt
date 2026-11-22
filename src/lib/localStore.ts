@@ -9,7 +9,7 @@ import {
   recordDeletedLogTombstone,
   recordDeletedQuestTombstone,
   recordDeletedTaskTombstone,
-} from "./syncEngine";
+} from "./syncTombstones";
 import {
   compareRank,
   MAX_HABIT_TITLE_LENGTH,
@@ -17,6 +17,7 @@ import {
   MAX_TASK_TITLE_LENGTH,
 } from "./syncTypes";
 import {
+  buildBurstLog,
   buildHabitTaskRow,
   nextStamp,
   planRankMoves,
@@ -265,27 +266,15 @@ async function flushBurst(
     if (alreadyLogged > 0) return 0;
 
     const end = typeof endAt === "number" && Number.isFinite(endAt) ? endAt : Date.now();
-    const elapsedSeconds = Math.max(1, Math.round((end - sessionStartedAt) / 1000));
     const quest = task.questId ? await db.quests.get(task.questId) : undefined;
-    const accentColorSnapshot: QuestAccent | "slate" = quest ? quest.accentColor : "slate";
+    const log = buildBurstLog(task, quest, sessionStartedAt, end);
 
     await db.tasks.update(taskId, {
-      accumulatedSeconds: (task.accumulatedSeconds || 0) + elapsedSeconds,
+      accumulatedSeconds: (task.accumulatedSeconds || 0) + log.durationSeconds,
       updatedAt: nextStamp(task),
     });
-    await db.timeLogs.add({
-      id: logId,
-      taskId: task.id,
-      taskTitleSnapshot: task.title,
-      questId: task.questId,
-      questCodeSnapshot: quest ? quest.title : "Other",
-      accentColorSnapshot,
-      startTime: sessionStartedAt,
-      endTime: end,
-      durationSeconds: elapsedSeconds,
-      dateKey: toLocalDateKey(end),
-    });
-    return elapsedSeconds;
+    await db.timeLogs.add(log);
+    return log.durationSeconds;
   });
   return changed(seconds, options);
 }

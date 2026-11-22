@@ -4,16 +4,15 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 import tailwindConfig from "../../tailwind.config";
+import { QUEST_ACCENT_KEYS } from "@/lib/domainTypes";
+import { QUEST_ACCENT_STYLES, accentStyle } from "@/lib/questAccents";
 import {
-  QUEST_ACCENT_KEYS,
-  QUEST_ACCENT_STYLES,
-  accentStyle,
   dateFromKey,
   dateKeyFromOffset,
   formatChronoMMSS,
   formatTacticalDuration,
   toLocalDateKey,
-} from "@/lib/db";
+} from "@/lib/dateUtils";
 import {
   CONFIRM_DELETE_DISARM_MS,
   ConfirmDeleteButton,
@@ -42,7 +41,7 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// accentStyle (DUI-02)
+// accentStyle
 // ---------------------------------------------------------------------------
 describe("accentStyle()", () => {
   it.each([...QUEST_ACCENT_KEYS, "slate"] as const)("maps %s to its own style", (key) => {
@@ -189,7 +188,7 @@ describe("dateFromKey() / dateKeyFromOffset() in Europe/Berlin", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Formatter guards (ARC-10)
+// Formatter guards
 // ---------------------------------------------------------------------------
 describe("formatChronoMMSS() / formatTacticalDuration() boundary matrix", () => {
   const BAD_TEXT = /NaN|Infinity|undefined/;
@@ -246,7 +245,7 @@ describe("formatChronoMMSS() / formatTacticalDuration() boundary matrix", () => 
 });
 
 // ---------------------------------------------------------------------------
-// ConfirmDeleteButton (DIX-01)
+// ConfirmDeleteButton
 // ---------------------------------------------------------------------------
 describe("ConfirmDeleteButton", () => {
   function renderButton(props: Partial<ConfirmDeleteButtonProps> = {}) {
@@ -543,7 +542,7 @@ describe("ConfirmDeleteButton", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tailwind config: content globs (DUI-V01) and the muted token (DIX-08)
+// Tailwind config: content globs (DUI-V01) and the muted token
 // ---------------------------------------------------------------------------
 describe("tailwind.config.ts", () => {
   function hexChannelToLinear(hex: string, offset: number): number {

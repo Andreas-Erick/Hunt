@@ -634,8 +634,59 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   return { valid: true, payload, dropped };
 }
 
+/** The synced row collections. Each has its own tombstone list. */
+export type SyncedEntityKey = "quests" | "tasks" | "timeLogs" | "habits";
+type SyncedRow<K extends SyncedEntityKey> = NonNullable<SyncPayload[K]>[number];
+
+/** Payload key of each collection's tombstone list. */
+export const TOMBSTONE_KEY = {
+  quests: "deletedQuestIds",
+  tasks: "deletedTaskIds",
+  timeLogs: "deletedLogIds",
+  habits: "deletedHabitIds",
+} as const satisfies Record<SyncedEntityKey, keyof SyncPayload>;
+
+export const SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY) as SyncedEntityKey[];
+
+/** How one collection merges. Rows whose id is tombstoned on either side are dropped first. */
+interface EntityMergeSpec<Row extends { id: string }> {
+  /** Applied to every surviving row from both sides (e.g. unlink a deleted quest). */
+  normalize?: (row: Row) => Row;
+  /** Picks the stored version when both sides hold the same id. */
+  resolve: (existing: Row, incoming: Row) => Row;
+  /** Output order. */
+  order: (a: Row, b: Row) => number;
+}
+
+type EntityMergeSpecs = { [K in SyncedEntityKey]: EntityMergeSpec<SyncedRow<K>> };
+
+/** Base rows first, then incoming rows resolved against them; tombstoned ids never enter. */
+function mergeRowsById<Row extends { id: string }>(
+  baseRows: readonly Row[] | undefined,
+  incomingRows: readonly Row[] | undefined,
+  deleted: ReadonlySet<string>,
+  spec: EntityMergeSpec<Row>
+): Map<string, Row> {
+  const normalize = spec.normalize ?? ((row: Row) => row);
+  const rows = new Map<string, Row>();
+  for (const row of baseRows ?? []) {
+    if (!deleted.has(row.id)) rows.set(row.id, normalize(row));
+  }
+  for (const raw of incomingRows ?? []) {
+    if (deleted.has(raw.id)) continue;
+    const incoming = normalize(raw);
+    const existing = rows.get(raw.id);
+    rows.set(raw.id, existing ? spec.resolve(existing, incoming) : incoming);
+  }
+  return rows;
+}
+
 /**
- * Deterministic 2-way CRDT-style merge between two SyncPayloads (e.g. Server & Client).
+ * Deterministic 2-way merge of two SyncPayloads (server file + posting client).
+ * Commutative, associative and idempotent (syncProperties.test.ts); rules R1–R6
+ * are documented on the helpers above. Adding a synced collection means adding
+ * it to SyncPayload, TOMBSTONE_KEY and the `specs` table below: tsc rejects a
+ * table that misses one.
  */
 export function mergeSyncPayloads(
   base: SyncPayload,
@@ -643,134 +694,55 @@ export function mergeSyncPayloads(
 ): SyncPayload {
   const now = Date.now();
 
-  // 1. Union of tombstones
-  const deletedQuestSet = new Set<string>([
-    ...(base.deletedQuestIds ?? []),
-    ...(incoming.deletedQuestIds ?? []),
-  ]);
-  const deletedTaskSet = new Set<string>([
-    ...(base.deletedTaskIds ?? []),
-    ...(incoming.deletedTaskIds ?? []),
-  ]);
-  const deletedLogSet = new Set<string>([
-    ...(base.deletedLogIds ?? []),
-    ...(incoming.deletedLogIds ?? []),
-  ]);
-  const deletedHabitSet = new Set<string>([
-    ...(base.deletedHabitIds ?? []),
-    ...(incoming.deletedHabitIds ?? []),
-  ]);
-
-  // 2. Merge Quests by ID (excluding deletedQuestSet)
-  const questMap = new Map<string, Quest>();
-  for (const q of base.quests ?? []) {
-    if (!deletedQuestSet.has(q.id)) {
-      questMap.set(q.id, q);
-    }
-  }
-  for (const incQ of incoming.quests ?? []) {
-    if (deletedQuestSet.has(incQ.id)) continue;
-    const existing = questMap.get(incQ.id);
-    if (!existing) {
-      questMap.set(incQ.id, incQ);
-    } else {
-      const existingTs = questOrHabitRowStamp(existing);
-      const incomingTs = questOrHabitRowStamp(incQ);
-      // R1: newer wins; equal stamps → deterministic content tie-break.
-      questMap.set(
-        incQ.id,
-        pickRowWinner(existing, existingTs, incQ, incomingTs)
-      );
-    }
-  }
-  const mergedQuests = Array.from(questMap.values()).sort(
-    (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
-  );
-
-  // 2b. Merge Daily Habits by ID (excluding deletedHabitSet, unlinking deleted quests)
-  const habitMap = new Map<string, Habit>();
-  for (const h of base.habits ?? []) {
-    if (!deletedHabitSet.has(h.id)) {
-      habitMap.set(h.id, {
-        ...h,
-        questId: h.questId && deletedQuestSet.has(h.questId) ? null : h.questId,
-      });
-    }
-  }
-  for (const incH of incoming.habits ?? []) {
-    if (deletedHabitSet.has(incH.id)) continue;
-    const existing = habitMap.get(incH.id);
-    const sanitizedInc: Habit = {
-      ...incH,
-      questId:
-        incH.questId && deletedQuestSet.has(incH.questId) ? null : incH.questId,
-    };
-    if (!existing) {
-      habitMap.set(incH.id, sanitizedInc);
-    } else {
-      const existingTs = questOrHabitRowStamp(existing);
-      const incomingTs = questOrHabitRowStamp(sanitizedInc);
-      habitMap.set(
-        incH.id,
-        pickRowWinner(existing, existingTs, sanitizedInc, incomingTs)
-      );
-    }
-  }
-  const mergedHabits = Array.from(habitMap.values()).sort(compareRank);
-
-  // 3. Merge Tasks by ID (excluding deletedTaskSet)
-  const taskMap = new Map<string, Task>();
-  for (const t of base.tasks ?? []) {
-    if (!deletedTaskSet.has(t.id)) {
-      taskMap.set(t.id, {
-        ...t,
-        questId: t.questId && deletedQuestSet.has(t.questId) ? null : t.questId,
-      });
-    }
-  }
-  for (const incT of incoming.tasks ?? []) {
-    if (deletedTaskSet.has(incT.id)) continue;
-    const existing = taskMap.get(incT.id);
-    const sanitizedInc: Task = {
-      ...incT,
-      questId:
-        incT.questId && deletedQuestSet.has(incT.questId) ? null : incT.questId,
-    };
-
-    if (!existing) {
-      taskMap.set(incT.id, sanitizedInc);
-    } else {
-      const existingTs = taskRowStamp(existing);
-      const incomingTs = taskRowStamp(sanitizedInc);
-
-      // R1 (both rows are questId-sanitised at this point).
-      const winner = pickRowWinner(existing, existingTs, sanitizedInc, incomingTs);
-      taskMap.set(incT.id, {
-        ...winner,
-        accumulatedSeconds: Math.max(
-          existing.accumulatedSeconds || 0,
-          sanitizedInc.accumulatedSeconds || 0
-        ),
-      });
-    }
+  // 1. Union of tombstones, per collection.
+  const deleted = {} as Record<SyncedEntityKey, Set<string>>;
+  for (const key of SYNCED_ENTITY_KEYS) {
+    const tombstoneKey = TOMBSTONE_KEY[key];
+    deleted[key] = new Set<string>([...(base[tombstoneKey] ?? []), ...(incoming[tombstoneKey] ?? [])]);
   }
 
-  // 4. Merge TimeLogs by ID (excluding deletedLogSet)
-  const logMap = new Map<string, TimeLog>();
-  for (const l of base.timeLogs ?? []) {
-    if (!deletedLogSet.has(l.id)) {
-      logMap.set(l.id, l);
-    }
-  }
-  for (const incL of incoming.timeLogs ?? []) {
-    if (deletedLogSet.has(incL.id)) continue;
-    const existing = logMap.get(incL.id);
+  // Rows pointing at a deleted quest move to "no quest" (a copy, never the input row).
+  const unlinkDeletedQuest = <Row extends { questId?: string | null }>(row: Row): Row => ({
+    ...row,
+    questId: row.questId && deleted.quests.has(row.questId) ? null : row.questId,
+  });
+
+  // 2. Per-collection rules.
+  const specs: EntityMergeSpecs = {
+    // R1: newer wins; equal stamps → deterministic content tie-break.
+    quests: {
+      resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+      order: (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0),
+    },
+    habits: {
+      normalize: unlinkDeletedQuest,
+      resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+      order: compareRank,
+    },
+    // R1 on the questId-sanitised rows; the focus counter only grows (max).
+    tasks: {
+      normalize: unlinkDeletedQuest,
+      resolve: (a, b) => ({
+        ...pickRowWinner(a, taskRowStamp(a), b, taskRowStamp(b)),
+        accumulatedSeconds: Math.max(a.accumulatedSeconds || 0, b.accumulatedSeconds || 0),
+      }),
+      order: compareRank,
+    },
     // R2: two versions of one log id → the earlier end wins (deterministic).
-    logMap.set(incL.id, existing ? pickLogWinner(existing, incL) : incL);
-  }
-  const mergedLogs = Array.from(logMap.values()).sort(
-    (a, b) => b.startTime - a.startTime
-  );
+    timeLogs: {
+      resolve: pickLogWinner,
+      order: (a, b) => b.startTime - a.startTime,
+    },
+  };
+
+  const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
+  const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+  const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
+  const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
+
+  const mergedQuests = Array.from(questMap.values()).sort(specs.quests.order);
+  const mergedHabits = Array.from(habitMap.values()).sort(specs.habits.order);
+  const mergedLogs = Array.from(logMap.values()).sort(specs.timeLogs.order);
 
   // 4b. A task's counter must never be lower than the time actually logged for
   // it. Concurrent offline bursts on two devices collapse under max() above,
@@ -789,7 +761,7 @@ export function mergeSyncPayloads(
       taskMap.set(taskId, { ...t, accumulatedSeconds: logged });
     }
   });
-  const mergedTasks = Array.from(taskMap.values()).sort(compareRank);
+  const mergedTasks = Array.from(taskMap.values()).sort(specs.tasks.order);
 
   // 5. Merge Active Focus State
   const baseFocus = base.activeFocus ?? {
@@ -837,10 +809,10 @@ export function mergeSyncPayloads(
     tasks: mergedTasks,
     timeLogs: mergedLogs,
     habits: mergedHabits,
-    deletedQuestIds: Array.from(deletedQuestSet),
-    deletedTaskIds: Array.from(deletedTaskSet),
-    deletedLogIds: Array.from(deletedLogSet),
-    deletedHabitIds: Array.from(deletedHabitSet),
+    deletedQuestIds: Array.from(deleted.quests),
+    deletedTaskIds: Array.from(deleted.tasks),
+    deletedLogIds: Array.from(deleted.timeLogs),
+    deletedHabitIds: Array.from(deleted.habits),
     activeFocus: mergedFocus,
     lastSyncedAt: now,
   };

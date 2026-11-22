@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
-import type { Task, TimeLog } from "@/lib/db";
+import type { Task, TimeLog } from "@/lib/domainTypes";
 
 // Partial mock: everything is the real module, but the merge can be forced to
 // throw so the route's 500 path is observable.

@@ -3,12 +3,7 @@
 import React, { useEffect, useState, type ComponentType } from "react";
 import { MotionConfig } from "framer-motion";
 import { db } from "@/lib/db";
-import {
-  installGlobalFaultTraps,
-  logDiagnostic,
-  recordBreadcrumb,
-  summarizeError,
-} from "@/lib/diagnostics";
+import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
 import {
   disposeCommandStoreScheduler,
