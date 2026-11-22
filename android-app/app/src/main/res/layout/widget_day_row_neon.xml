@@ -1,19 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    One Day Widget row, Neon look: 48dp marker box (open ring tinted with the Quest accent, or
-    ▶ for the Focus Task), accent bar, one-line title (ellipsized), optional Focus/Habit tag.
+    One Day Widget row, Neon look, drawn as a card like the app's queue cards: the Quest accent
+    bar on the left edge, a 48dp marker box (the open ring, or the play mark for the Focus Task),
+    the one-line title (ellipsized) and an optional Focus/Habit pill. The Focus Task's card and
+    pill take the accent edge (WidgetLook.focusRow / focusTag).
     The marker box is the tick target (48x48dp, not for the Focus Task); the rest of the row
-    opens Hunt. The title starts 8dp after the bar, so the two targets never touch.
+    opens Hunt. The title starts after the marker box, so the two targets never overlap.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_row"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
+    android:layout_height="52dp"
     android:minHeight="48dp"
     android:background="@drawable/widget_row_neon"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingEnd="12dp">
+
+    <ImageView
+        android:id="@+id/widget_row_bar"
+        android:layout_width="3dp"
+        android:layout_height="24dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_bar" />
 
     <FrameLayout
         android:id="@+id/widget_row_tick"
@@ -29,26 +38,21 @@
             android:layout_height="22dp"
             android:layout_gravity="center"
             android:importantForAccessibility="no"
-            android:src="@drawable/widget_ring" />
+            android:src="@drawable/widget_ring"
+            android:tint="@color/widget_neon_ring"
+            android:tintMode="src_in" />
 
-        <TextView
+        <ImageView
             android:id="@+id/widget_row_focus_mark"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
             android:layout_gravity="center"
             android:importantForAccessibility="no"
-            android:text="▶"
-            android:textColor="@color/widget_neon_accent"
-            android:textSize="14sp"
+            android:src="@drawable/widget_play"
+            android:tint="@color/widget_neon_accent"
+            android:tintMode="src_in"
             android:visibility="gone" />
     </FrameLayout>
-
-    <ImageView
-        android:id="@+id/widget_row_bar"
-        android:layout_width="3dp"
-        android:layout_height="20dp"
-        android:importantForAccessibility="no"
-        android:src="@drawable/widget_bar" />
 
     <TextView
         android:id="@+id/widget_row_title"
@@ -56,22 +60,28 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:ellipsize="end"
-        android:fontFamily="sans-serif"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
         android:maxLines="1"
-        android:paddingStart="8dp"
+        android:paddingStart="2dp"
         android:paddingEnd="8dp"
         android:textColor="@color/widget_neon_text"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:id="@+id/widget_row_tag"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="22dp"
+        android:background="@drawable/widget_tag_neon"
         android:fontFamily="sans-serif-medium"
-        android:letterSpacing="0.14"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:letterSpacing="0.08"
         android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
         android:textAllCaps="true"
-        android:textColor="@color/widget_neon_dim"
-        android:textSize="11sp"
+        android:textColor="@color/widget_neon_muted"
+        android:textSize="10sp"
         android:visibility="gone" />
 </LinearLayout>

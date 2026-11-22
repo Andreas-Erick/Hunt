@@ -30,6 +30,11 @@ ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks).
 - **Java 11, framework APIs only** (no androidx). RemoteViews at
   minSdk 26: no plain `<View>`, no CheckBox; API 31+ attributes go in
   `-v31` resource folders.
+- **No `@font` in widget layouts.** The launcher's restricted
+  context makes a widget `TextView` ignore it; draw display type
+  with `WidgetDisplayText` (fonts per look in `WidgetLook`).
+- **Tint white vector icons with `android:tintMode="src_in"`**: the
+  default `src_atop` ignores a translucent tint's alpha.
 
 ## Build
 

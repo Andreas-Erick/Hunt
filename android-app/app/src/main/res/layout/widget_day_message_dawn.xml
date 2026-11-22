@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Day Widget, Dawn look, no data yet ("Open Hunt to get started") or a snapshot from an
+    Both widgets, Dawn look, no data yet ("Open Hunt to get started") or a snapshot from an
     earlier day ("Open Hunt to refresh"). The whole body is one open-Hunt target.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -8,15 +8,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:minHeight="48dp"
-    android:background="@drawable/widget_bg_dawn"
+    android:background="@drawable/widget_stats_bg_dawn"
     android:contentDescription="@string/day_widget_open_hunt"
     android:gravity="center"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="16dp">
 
     <ImageView
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:importantForAccessibility="no"
         android:src="@mipmap/ic_launcher" />
 
@@ -24,12 +24,12 @@
         android:id="@+id/widget_message"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:fontFamily="sans-serif"
+        android:layout_marginTop="12dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
         android:gravity="center"
         android:maxLines="2"
-        android:ellipsize="end"
         android:text="@string/day_widget_get_started"
-        android:textColor="@color/widget_dawn_muted"
+        android:textColor="@color/widget_dawn_text_2"
         android:textSize="14sp" />
 </LinearLayout>

@@ -14,6 +14,14 @@
     <!-- 1dp widget edge: accent@25%, the HUD glow RemoteViews cannot draw as a shadow -->
     <color name="widget_neon_outline">#4000F0FF</color>
     <color name="widget_neon_ripple">#3300F0FF</color>
+    <!-- Card hairlines like the app's border (ink@7%) and border-strong (ink@14%) tokens -->
+    <color name="widget_neon_edge">#12FFFFFF</color>
+    <color name="widget_neon_edge_strong">#24FFFFFF</color>
+    <!-- The Focus card's edge: accent@28%, the app's .spotlight-card border -->
+    <color name="widget_neon_accent_edge">#4700F0FF</color>
+    <!-- Open-Task ring (ink@42%, the app's .task-check-ring) and progress track (ink@8%) -->
+    <color name="widget_neon_ring">#6BFFFFFF</color>
+    <color name="widget_neon_track">#14FFFFFF</color>
 
     <!-- Neon ink -->
     <color name="widget_neon_text">#FFF8FAFC</color>
@@ -42,6 +50,11 @@
     <!-- 1dp widget edge: Dawn has no glow, only a cream (ink) hairline at 7% -->
     <color name="widget_dawn_outline">#12EDE6D8</color>
     <color name="widget_dawn_ripple">#33E5AA50</color>
+    <color name="widget_dawn_edge">#12EDE6D8</color>
+    <color name="widget_dawn_edge_strong">#24EDE6D8</color>
+    <color name="widget_dawn_accent_edge">#47E5AA50</color>
+    <color name="widget_dawn_ring">#6BEDE6D8</color>
+    <color name="widget_dawn_track">#14EDE6D8</color>
 
     <!-- Dawn ink: cream text; the logo's gold sun is the only accent -->
     <color name="widget_dawn_text">#FFEDE6D8</color>

@@ -462,6 +462,7 @@ describe("Day Widget (ADR-0006)", () => {
       "DayWidgetUndo.java",
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
+      "WidgetDisplayText.java",
       "WidgetLook.java",
       "WidgetRequestCodes.java",
       "WidgetSupport.java",

@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Stats Widget, Dawn look: the twin of widget_stats_neon.xml with the same view ids and geometry
-    (androidWidgetLook.test.ts), so Java only picks the layout. Sentence-case labels, tabular sans
-    figures (tnum) in place of Neon's mono, gold as the only accent. The whole widget is one
-    open-Hunt target; the rows inside are not targets and may be smaller than 48dp.
-    Header: section label + today's Quest focus time (big tabular figures).
-    Quests: up to 3 fixed rows (dot in the Quest accent, code, progress bar, "5.5 / 8h"), then
-    "+N more", or the no-Quests line. Streaks: a label with "+N more" on the right, then up to 8
-    fixed rows. StatsWidgetProvider shows as many rows as the widget's height allows; keep the
-    row heights here in step with its *_DP constants and its id arrays.
+    Stats Widget, Dawn look. View ids are look-neutral (widget_stats_neon.xml is its twin with the
+    same ids and geometry: keep both in step), so Java only picks the layout. The whole widget is
+    one open-Hunt target; the rows inside are not targets and may be smaller than 48dp.
+    Hero (40dp): today's Quest focus time in big tabular display figures with "today" (one image
+    in the app's display type, drawn by WidgetDisplayText; the root's description reads it), and
+    the "This week" label over the hours column, like the app's hero stats pill.
+    Quests: up to 3 fixed two-line rows (dot in the Quest accent, code, "5.5 / 8h"; the progress
+    bar under them), then "+N more", or the no-Quests line. Streaks: a label with "+N more" on
+    the right, then up to 8 fixed rows. StatsWidgetProvider shows as many rows as the widget's
+    height allows; keep the row heights here in step with StatsWidgetFit's *_DP constants and
+    StatsWidgetProvider's id arrays.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_stats_root"
@@ -18,56 +20,48 @@
     android:background="@drawable/widget_stats_bg_dawn"
     android:contentDescription="@string/day_widget_open_hunt"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="40dp"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp">
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/widget_stats_focus"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:importantForAccessibility="no"
+            android:scaleType="fitStart" />
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="8dp"
+            android:paddingBottom="8dp"
             android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0"
             android:maxLines="1"
             android:text="@string/stats_widget_week"
+            android:textAllCaps="false"
             android:textColor="@color/widget_dawn_muted"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/widget_stats_focus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-light"
-            android:fontFeatureSettings="tnum"
-            android:maxLines="1"
-            android:text="0m"
-            android:textColor="@color/widget_dawn_accent"
-            android:textSize="24sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:fontFamily="sans-serif"
-            android:maxLines="1"
-            android:text="@string/stats_widget_today"
-            android:textColor="@color/widget_dawn_dim"
             android:textSize="11sp" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/widget_stats_no_quests"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
+        android:layout_height="32dp"
         android:ellipsize="end"
-        android:fontFamily="sans-serif"
-        android:gravity="center"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical"
         android:maxLines="1"
         android:text="@string/stats_widget_no_quests"
         android:textColor="@color/widget_dawn_muted"
@@ -77,161 +71,186 @@
     <LinearLayout
         android:id="@+id/widget_stats_q0"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
+        android:layout_height="32dp"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/widget_stats_q0_dot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/widget_dot" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/widget_stats_q0_code"
-            android:layout_width="48dp"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:maxLines="1"
-            android:paddingStart="6dp"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            <ImageView
+                android:id="@+id/widget_stats_q0_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_dot" />
+
+            <TextView
+                android:id="@+id/widget_stats_q0_code"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textColor="@color/widget_dawn_text_2"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/widget_stats_q0_hours"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/widget_dawn_text"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/widget_stats_q0_bar"
             style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="0dp"
-            android:layout_height="6dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="4dp"
             android:max="100"
             android:progressDrawable="@drawable/widget_progress_dawn" />
-
-        <TextView
-            android:id="@+id/widget_stats_q0_hours"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:fontFeatureSettings="tnum"
-            android:maxLines="1"
-            android:textColor="@color/widget_dawn_text"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_q1"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
+        android:layout_height="32dp"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/widget_stats_q1_dot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/widget_dot" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/widget_stats_q1_code"
-            android:layout_width="48dp"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:maxLines="1"
-            android:paddingStart="6dp"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            <ImageView
+                android:id="@+id/widget_stats_q1_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_dot" />
+
+            <TextView
+                android:id="@+id/widget_stats_q1_code"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textColor="@color/widget_dawn_text_2"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/widget_stats_q1_hours"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/widget_dawn_text"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/widget_stats_q1_bar"
             style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="0dp"
-            android:layout_height="6dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="4dp"
             android:max="100"
             android:progressDrawable="@drawable/widget_progress_dawn" />
-
-        <TextView
-            android:id="@+id/widget_stats_q1_hours"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:fontFeatureSettings="tnum"
-            android:maxLines="1"
-            android:textColor="@color/widget_dawn_text"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_q2"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
+        android:layout_height="32dp"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/widget_stats_q2_dot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/widget_dot" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="18dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/widget_stats_q2_code"
-            android:layout_width="48dp"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:maxLines="1"
-            android:paddingStart="6dp"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            <ImageView
+                android:id="@+id/widget_stats_q2_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_dot" />
+
+            <TextView
+                android:id="@+id/widget_stats_q2_code"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textColor="@color/widget_dawn_text_2"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/widget_stats_q2_hours"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="@color/widget_dawn_text"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/widget_stats_q2_bar"
             style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="0dp"
-            android:layout_height="6dp"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="4dp"
             android:max="100"
             android:progressDrawable="@drawable/widget_progress_dawn" />
-
-        <TextView
-            android:id="@+id/widget_stats_q2_hours"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:fontFeatureSettings="tnum"
-            android:maxLines="1"
-            android:textColor="@color/widget_dawn_text"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/widget_stats_quests_more"
         android:layout_width="match_parent"
         android:layout_height="18dp"
-        android:fontFamily="sans-serif"
-        android:gravity="center_vertical|end"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical|start"
+        android:includeFontPadding="false"
         android:maxLines="1"
-        android:paddingEnd="4dp"
+        android:paddingStart="16dp"
         android:textColor="@color/widget_dawn_dim"
         android:textSize="11sp"
         android:visibility="gone" />
@@ -239,12 +258,10 @@
     <LinearLayout
         android:id="@+id/widget_stats_streaks_header"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
-        android:layout_marginTop="4dp"
-        android:gravity="center_vertical"
+        android:layout_height="22dp"
+        android:layout_marginTop="8dp"
+        android:gravity="bottom"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -253,16 +270,20 @@
             android:layout_weight="1"
             android:ellipsize="end"
             android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:letterSpacing="0"
             android:maxLines="1"
             android:text="@string/stats_widget_streaks"
+            android:textAllCaps="false"
             android:textColor="@color/widget_dawn_muted"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
 
         <TextView
             android:id="@+id/widget_stats_streaks_more"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="@color/widget_dawn_dim"
             android:textSize="11sp"
@@ -272,11 +293,9 @@
     <LinearLayout
         android:id="@+id/widget_stats_s0"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -285,10 +304,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -297,19 +317,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s1"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -318,10 +337,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -330,19 +350,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s2"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -351,10 +370,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -363,19 +383,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s3"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -384,10 +403,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -396,19 +416,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s4"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -417,10 +436,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -429,19 +449,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s5"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -450,10 +469,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -462,19 +482,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s6"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -483,10 +502,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -495,19 +515,18 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_stats_s7"
         android:layout_width="match_parent"
-        android:layout_height="20dp"
+        android:layout_height="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
         android:visibility="gone">
 
         <TextView
@@ -516,10 +535,11 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="sans-serif"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
             android:maxLines="1"
             android:paddingEnd="8dp"
-            android:textColor="@color/widget_dawn_text"
+            android:textColor="@color/widget_dawn_text_2"
             android:textSize="13sp" />
 
         <TextView
@@ -528,8 +548,9 @@
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
             android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
             android:maxLines="1"
-            android:textColor="@color/widget_dawn_text_2"
-            android:textSize="12sp" />
+            android:textColor="@color/widget_dawn_text"
+            android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>
