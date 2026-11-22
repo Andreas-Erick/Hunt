@@ -33,12 +33,43 @@ final class PendingTicks {
         return new File(dir, HuntFiles.PENDING_TICKS_FILE);
     }
 
+    /** Told when a tick has just been queued, so a running Hunt can apply it at once (#10). */
+    interface Listener {
+        /** Called on the appending thread, outside the lock; must only hand off (e.g. post). */
+        void onTickQueued();
+    }
+
+    private static volatile Listener listener;
+
+    /** MainActivity.onCreate: the live Activity listens; a newer Activity replaces an older one. */
+    static synchronized void setListener(Listener l) {
+        listener = l;
+    }
+
+    /** MainActivity.onDestroy: stops listening, unless a newer Activity already took over. */
+    static synchronized void clearListener(Listener l) {
+        if (listener == l) listener = null;
+    }
+
+    /** With no Activity listening this does nothing: the page drains the queue when it next starts. */
+    private static void notifyTickQueued() {
+        Listener l = listener;
+        if (l == null) return;
+        try {
+            l.onTickQueued();
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Telling Hunt about a queued tick failed; it applies the tick when it next starts", e);
+        }
+    }
+
     /**
      * Widget: queues a tick. A second tap on the same Task and day is not queued twice. Returns
-     * false if the tick could not be queued (full or the write failed). Any thread.
+     * false if the tick could not be queued (full or the write failed). Any thread. A newly queued
+     * tick is announced to the listener (a running Hunt) once the file is written.
      */
     static boolean append(File dir, String taskId, String dateKey, long tickedAt) {
         if (taskId == null || taskId.isEmpty() || dateKey == null || dateKey.isEmpty()) return false;
+        boolean queued;
         synchronized (HuntFiles.LOCK) {
             JSONArray queue = readQueue(dir);
             if (queue == null) return false; // kept as it is until the bridge sets it aside
@@ -55,12 +86,14 @@ final class PendingTicks {
             try {
                 queue.put(new JSONObject().put("taskId", taskId).put("dateKey", dateKey).put("tickedAt", tickedAt));
                 HuntFiles.writeText(queueFile(dir), queue.toString());
-                return true;
+                queued = true;
             } catch (JSONException | IOException | RuntimeException e) {
                 Log.w(TAG, "Queueing a tick failed", e);
-                return false;
+                queued = false;
             }
         }
+        if (queued) notifyTickQueued();
+        return queued;
     }
 
     /**

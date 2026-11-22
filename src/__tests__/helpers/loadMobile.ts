@@ -146,6 +146,7 @@ export interface MobilePageGlobals {
   promoteTaskToTop(taskId: string): void;
   __huntSyncDone(result: unknown): void;
   __huntLifecycle(phase: string): void;
+  __huntPendingTicksArrived(): void;
   __huntNetwork(info: { online: boolean }): void;
   __huntBack(): boolean;
   setLook(look: string): void;
