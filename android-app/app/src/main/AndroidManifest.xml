@@ -88,6 +88,18 @@
             android:name=".DayWidgetService"
             android:exported="false"
             android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <!--
+            Day Widget row taps (tick, Undo, open Hunt) land here, a no-UI trampoline, instead of
+            a broadcast: a receiver opening Hunt would be a blocked background activity launch.
+            Not exported, no intent filter: only the widget's own PendingIntent reaches it.
+        -->
+        <activity
+            android:name=".DayWidgetTapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <!--
             Stats Widget (optional; the user adds it if they want it). Not exported, like the Day

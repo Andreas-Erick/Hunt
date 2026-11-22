@@ -10,11 +10,16 @@ import android.widget.RemoteViewsService;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * Rows of the Day Widget's list for its selected day, drawn from the Widget Snapshot
  * (ADR-0006). It reads the snapshot (and the Pending Tick queue, to hide queued Tasks) and never
- * writes anything; a tick is handled by DayWidgetProvider. The class name is part of the manifest
- * contract.
+ * writes anything; a tick is handled by DayWidgetProvider. A Task in its Undo window (#9) draws
+ * as "✓ Done · Undo" in a row of the same height; one whose window ended but is not queued yet
+ * is hidden, like a queued one. The class name is part of the manifest contract.
  */
 public class DayWidgetService extends RemoteViewsService {
     @Override
@@ -28,6 +33,8 @@ public class DayWidgetService extends RemoteViewsService {
         private final int widgetId;
         private JSONArray rows = new JSONArray();
         private String dateKey = "";
+        /** Tasks of the day in their Undo window, drawn as "✓ Done · Undo". */
+        private Set<String> undoable = Collections.emptySet();
 
         Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
@@ -43,8 +50,17 @@ public class DayWidgetService extends RemoteViewsService {
         public void onDataSetChanged() {
             DayWidgetProvider.Today today =
                     DayWidgetProvider.readDay(ctx, DayWidgetProvider.savedOffset(ctx, widgetId));
-            rows = today.noData || today.stale ? new JSONArray() : today.rows;
             dateKey = today.date.toString();
+            Map<String, ?> held = DayWidgetUndo.held(ctx);
+            undoable = UndoWindow.openTaskIds(held, dateKey, System.currentTimeMillis());
+            Set<String> hidden = UndoWindow.heldTaskIds(held, dateKey);
+            hidden.removeAll(undoable);
+            rows = new JSONArray();
+            if (today.noData || today.stale) return;
+            for (int i = 0; i < today.rows.length(); i++) {
+                JSONObject row = today.rows.optJSONObject(i);
+                if (row != null && !hidden.contains(row.optString("id"))) rows.put(row);
+            }
         }
 
         @Override
@@ -60,6 +76,7 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
+            if (row != null && undoable.contains(row.optString("id", ""))) return undoRow(row);
             RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_row_neon);
             if (row == null) return views;
             String title = row.optString("title", "");
@@ -90,6 +107,19 @@ public class DayWidgetService extends RemoteViewsService {
             return views;
         }
 
+        /**
+         * A row in its Undo window: "✓ Done · <title>" and a 48dp Undo target at the far end. Only
+         * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
+         */
+        private RemoteViews undoRow(JSONObject row) {
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_row_undo_neon);
+            String title = row.optString("title", "");
+            views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
+            views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));
+            views.setOnClickFillInIntent(R.id.widget_row_undo, rowTap(DayWidgetProvider.ROW_UNDO, row));
+            return views;
+        }
+
         private Intent rowTap(String action, JSONObject row) {
             return new Intent()
                     .putExtra(DayWidgetProvider.EXTRA_ROW_ACTION, action)
@@ -104,7 +134,7 @@ public class DayWidgetService extends RemoteViewsService {
 
         @Override
         public int getViewTypeCount() {
-            return 1;
+            return 2; // the task row and the Undo row
         }
 
         @Override

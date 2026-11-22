@@ -46,3 +46,19 @@ on its next start, or at once if it is already running.
   cannot save, it acknowledges nothing.
 - A stale tick (Task gone, already done, archived, or in
   Focus) is skipped and logged, never forced through.
+- A tick first opens a 4-second Undo window: the row shows
+  "✓ Done · Undo" and the tick is appended to the queue
+  only when the window ends, still with the tap time.
+  Undo closes the window, so nothing is ever queued. Open
+  windows live in the widget's private preferences, written
+  before the tap returns; a main-thread timer ends them on
+  time, and an inexact alarm, every widget redraw and the
+  page's queue read end any the timer missed because the
+  process was gone. No new permission.
+- Row taps go to a no-UI, non-exported trampoline activity,
+  not a broadcast. A receiver that starts Hunt is a
+  background activity launch, which Android 10+ blocks
+  without an exemption, and from Android 14 a launcher no
+  longer lends its exemption to a PendingIntent it sends
+  unless it opts in. An activity PendingIntent from a widget
+  tap is a launch the user started, on every API level.
