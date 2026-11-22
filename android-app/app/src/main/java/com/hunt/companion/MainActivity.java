@@ -1042,7 +1042,7 @@ public class MainActivity extends Activity {
 
     /**
      * ioExec: writes the newest pending snapshot (last write wins, identical content skipped),
-     * then asks the placed Day Widgets to redraw from it.
+     * then asks the placed Day and Stats Widgets to redraw from it.
      */
     private void flushWidgetSnapshot() {
         synchronized (FILE_LOCK) {
@@ -1057,6 +1057,7 @@ public class MainActivity extends Activity {
             }
         }
         DayWidgetProvider.refreshAll(appContext);
+        StatsWidgetProvider.refreshAll(appContext);
     }
 
     /** JavaBridge thread: the Pending Tick queue as JSON array text ("[]" when empty). A small file. */
