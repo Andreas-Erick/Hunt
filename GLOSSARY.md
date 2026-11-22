@@ -23,3 +23,8 @@ _Avoid_: review widget
 A task marked done from a Widget that Hunt has not applied
 yet.
 _Avoid_: offline completion, queued done
+
+**Widget Snapshot**:
+The ready-to-draw data Hunt hands to the Widgets after every
+save. Widgets only draw it.
+_Avoid_: widget state, widget cache

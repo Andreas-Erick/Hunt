@@ -184,6 +184,7 @@ describe("Macro Architecture & State Topology Invariants", () => {
         "lib/questScience.ts",
         "lib/questScienceContent.ts",
         "lib/syncTypes.ts",
+        "lib/widgetSnapshot.ts",
       ];
 
       for (const mod of pureDomainFiles) {
