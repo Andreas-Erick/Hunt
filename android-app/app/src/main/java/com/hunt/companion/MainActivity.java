@@ -69,6 +69,7 @@ import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.KeyStore;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -137,6 +138,9 @@ public class MainActivity extends Activity {
 
     // Legacy file names in filesDir: never change them (user data compatibility).
     private static final String STATE_FILE = "hunt-mobile-state.json";
+    /** Unusable state copies kept for recovery: hunt-mobile-corrupt-<ms>.json, newest first. */
+    private static final String CORRUPT_PREFIX = "hunt-mobile-corrupt-";
+    private static final int CORRUPT_COPIES_TO_KEEP = 5;
     private static final String LAPTOP_URL_FILE = "hunt-laptop-url.txt";
     private static final String SYNC_TOKEN_FILE = "hunt-sync-token.txt";
 
@@ -962,6 +966,33 @@ public class MainActivity extends Activity {
         // Always enqueue: extra flushes are cheap no-ops, and nothing can get stuck un-scheduled.
         // If ioExec is already shut down, the JSON stays pending for the next flush.
         executeQuietly(ioExec, this::flushPendingState);
+    }
+
+    /** JavaBridge thread: writes one quarantine copy (deduplicated) and prunes old ones. */
+    private boolean saveCorruptStateInternal(String raw) {
+        if (raw == null || raw.isEmpty()) return false;
+        synchronized (FILE_LOCK) {
+            File[] existing = filesDir.listFiles((dir, name) -> name.startsWith(CORRUPT_PREFIX) && name.endsWith(".json"));
+            if (existing != null) {
+                for (File f : existing) {
+                    if (raw.trim().equals(readTextFile(f))) return true;
+                }
+            }
+            try {
+                writeTextFile(file(CORRUPT_PREFIX + System.currentTimeMillis() + ".json"), raw);
+            } catch (IOException | RuntimeException e) {
+                Log.w(TAG, "Keeping an unusable state copy failed", e);
+                return false;
+            }
+            File[] all = filesDir.listFiles((dir, name) -> name.startsWith(CORRUPT_PREFIX) && name.endsWith(".json"));
+            if (all != null && all.length > CORRUPT_COPIES_TO_KEEP) {
+                Arrays.sort(all, (x, y) -> y.getName().compareTo(x.getName()));
+                for (int i = CORRUPT_COPIES_TO_KEEP; i < all.length; i++) {
+                    if (!all[i].delete()) Log.w(TAG, "Could not prune " + all[i].getName());
+                }
+            }
+            return true;
+        }
     }
 
     /** Non-blank, and the first and last non-whitespace characters are '{' and '}'. O(whitespace). */
@@ -1907,6 +1938,21 @@ public class MainActivity extends Activity {
             } catch (RuntimeException e) {
                 Log.w(TAG, "loadState failed", e);
                 return "";
+            }
+        }
+
+        /**
+         * Keeps a state copy the page could not use, synchronously, next to the state file. True once
+         * it is on disk (or an identical copy already is); the page will not overwrite the original
+         * state until this returns true.
+         */
+        @JavascriptInterface
+        public boolean saveCorruptState(String raw) {
+            try {
+                return saveCorruptStateInternal(raw);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "saveCorruptState failed", e);
+                return false;
             }
         }
 

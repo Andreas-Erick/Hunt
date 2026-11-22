@@ -3375,17 +3375,25 @@ var HuntCore = (() => {
       return !!(window.AndroidBridge && window.AndroidBridge.saveState);
     }
 
-    // An unparseable copy is kept under its own key so it can be recovered (stored once, not per launch).
+    // A copy that couldn't be used is kept so it can be recovered (stored once, not per launch): in a file
+    // next to the state file when the Android shell offers one (localStorage usually already holds the same
+    // large state and can be full), else under its own localStorage key. False only when no copy could be
+    // kept; the caller then must not write over the original (persistBlocked).
     function quarantineCorruptState(raw) {
+      if (bridgeCall("saveCorruptState", raw) === true) return true;
       try {
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith("hunt-mobile-corrupt-") && localStorage.getItem(k) === raw) return;
+          if (k && k.startsWith("hunt-mobile-corrupt-") && localStorage.getItem(k) === raw) return true;
         }
         let key = "hunt-mobile-corrupt-" + Date.now();
         while (localStorage.getItem(key) !== null) key += "x";
         localStorage.setItem(key, raw);
-      } catch (e) {}
+        return true;
+      } catch (e) {
+        console.error("[hunt] state.quarantine_failed", JSON.stringify({ bytes: raw.length, error: String((e && e.name) || e) }));
+        return false;
+      }
     }
 
     function readNativeStateRaw() {
@@ -3407,6 +3415,7 @@ var HuntCore = (() => {
     function loadInitialState() {
       const sources = [["native", readNativeStateRaw], ["local", readLocalStateRaw]];
       let unusable = 0;
+      let quarantineFailed = false;
       for (const [name, read] of sources) {
         const raw = read();
         if (!raw) continue;
@@ -3419,17 +3428,17 @@ var HuntCore = (() => {
         if (isPlainRecord(parsed)) {
           const loaded = normalizeLoadedState(parsed);
           if (loaded.dropped) {
-            quarantineCorruptState(raw);
+            if (!quarantineCorruptState(raw)) quarantineFailed = true;
             console.warn("[hunt] state.load.quarantine", JSON.stringify({ source: name, bytes: raw.length, dropped: loaded.dropped }));
           }
-          return { state: loaded.state, raw, source: name };
+          return { state: loaded.state, raw, source: name, unusable, quarantineFailed };
         }
-        quarantineCorruptState(raw);
+        if (!quarantineCorruptState(raw)) quarantineFailed = true;
         console.warn("[hunt] state.load.quarantine", JSON.stringify({ source: name, bytes: raw.length }));
         unusable++;
       }
       if (unusable) console.warn("[hunt] state.load.empty_fallback", JSON.stringify({ unusable }));
-      return { state: getEmptyState(), raw: null, source: "empty" };
+      return { state: getEmptyState(), raw: null, source: "empty", unusable, quarantineFailed };
     }
 
     const initialLoad = loadInitialState();
@@ -3437,6 +3446,9 @@ var HuntCore = (() => {
     // JSON last handed to the stores: persistState() skips all I/O while it is unchanged. Trusted only
     // when it came from this environment's primary store, so a fallback load re-writes both copies.
     let lastPersistedJson = initialLoad.source === (hasNativeStore() ? "native" : "local") ? initialLoad.raw : null;
+    // A copy that couldn't be used could not be set aside either: nothing is written over it until the user
+    // chooses in the recovery sheet (openLoadRecoverySheet), so the original stays recoverable.
+    let persistBlocked = initialLoad.quarantineFailed;
     let lastKeepScreenOn = null;
 
     let activeView = "command";
@@ -3814,6 +3826,7 @@ var HuntCore = (() => {
     function persistState(json) {
       const text = typeof json === "string" ? json : JSON.stringify(state);
       syncKeepScreenOn();
+      if (persistBlocked) return false;
       if (text === lastPersistedJson) return false;
       lastPersistedJson = text;
       bridgeCall("saveState", text);
@@ -5928,6 +5941,31 @@ var HuntCore = (() => {
       const closeBtn = sc.querySelector(".sheet-close");
       if (closeBtn && !sc.contains(document.activeElement)) focusQuietly(closeBtn);
       return sc;
+    }
+
+    // Shown at boot when the saved state couldn't be used. Never silent: the app would otherwise look empty.
+    function openLoadRecoverySheet() {
+      const blocked = persistBlocked;
+      const text = blocked
+        ? "Hunt couldn't read the data saved on this phone, and there wasn't room to keep a backup copy. Nothing will be written over it until you choose. Changes you make now are not saved yet."
+        : "Hunt couldn't read the data saved on this phone, so it started empty. A copy of the unreadable data was kept on the phone.";
+      showSheet("loadRecovery", `
+          ${sheetHeaderHtml("Saved data couldn't be loaded")}
+          <p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--text-2);">${text}</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:var(--text-2);">Syncing with your laptop brings back everything it has.</p>
+          <div class="sheet-footer-row">
+            ${blocked ? `<button class="danger-outline-btn" onclick="allowSavingAfterLoadFailure()">Save over it</button>` : "<span></span>"}
+            <button class="pressable" onclick="closeSheet();openSyncSheet();" style="min-height:var(--touch-min);padding:0 18px;border-radius:13px;border:none;background:var(--cyan);color:#05070a;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">Sync from laptop</button>
+          </div>
+      `);
+    }
+
+    function allowSavingAfterLoadFailure() {
+      persistBlocked = false;
+      recordMobileBreadcrumb("WARN", "storage", "persist_unblocked", {});
+      closeSheet();
+      persistState();
+      showToast("Changes on this phone are saved again");
     }
 
     // discardDraftOnClose: × of the New Task sheet drops the unsent text (closeSheet(true)).
@@ -9476,6 +9514,10 @@ var HuntCore = (() => {
     syncKeepScreenOn();
     installLifecycleHooks();
     installUiHooks();
+    if ((initialLoad.source === "empty" && initialLoad.unusable > 0) || persistBlocked) {
+      recordMobileBreadcrumb("ERROR", "storage", "load_failed", { unusable: initialLoad.unusable, persistBlocked });
+      try { openLoadRecoverySheet(); } catch (e) { console.error("[hunt] boot.recovery_sheet_failed", e); }
+    }
     installKeyboardHooks();
     afterFirstPaint(() => scheduleSync(0));
   </script>

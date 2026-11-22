@@ -131,6 +131,54 @@ describe("phone boot over corrupt saved state", () => {
     expect(saved.tasks.map((t) => t.id)).toEqual(["tsk-1"]);
   });
 
+  it("an unusable copy goes to a native file when the shell offers one, and the user is told", () => {
+    const kept: string[] = [];
+    w = loadMobile({
+      rawState: "{",
+      bridge: { loadState: () => "", saveState: () => undefined, saveCorruptState: (raw) => (kept.push(raw), true) },
+    });
+    expect(kept).toEqual(["{"]);
+    expect(quarantineKeys(w)).toEqual([]); // localStorage is not used when the file write succeeded
+    const sheet = w.document.getElementById("sheetContainer");
+    expect(sheet?.dataset.sheet).toBe("loadRecovery");
+    expect(sheet?.textContent).toContain("Saved data couldn't be loaded");
+    expect(sheet?.textContent).not.toContain("Save over it"); // a copy exists, so saving is not blocked
+    expect(w.persistState(JSON.stringify({ tasks: [] }))).toBe(true);
+  });
+
+  it("when no copy of an unusable state can be kept, nothing overwrites it until the user chooses", () => {
+    w = loadMobile({
+      rawState: "{",
+      beforeBoot(win) {
+        const proto = Object.getPrototypeOf(win.localStorage) as Storage;
+        const realSet = proto.setItem;
+        proto.setItem = function (this: Storage, key: string, value: string) {
+          if (key.startsWith("hunt-mobile-corrupt-")) throw new win.DOMException("full", "QuotaExceededError");
+          return realSet.call(this, key, value);
+        };
+      },
+    });
+    expect(pageErrors(w)).toEqual([]);
+    expect(pageConsole(w).some((e) => e.level === "error" && String(e.args[0]) === "[hunt] state.quarantine_failed")).toBe(true);
+    // boot (habit materialization) and later saves leave the original bytes alone
+    expect(w.localStorage.getItem(STATE_KEY)).toBe("{");
+    expect(w.persistState(JSON.stringify({ tasks: [] }))).toBe(false);
+    expect(w.localStorage.getItem(STATE_KEY)).toBe("{");
+
+    const sheet = w.document.getElementById("sheetContainer");
+    expect(sheet?.dataset.sheet).toBe("loadRecovery");
+    expect(sheet?.textContent).toContain("Nothing will be written over it");
+    expect(sheet?.textContent).toContain("Save over it");
+
+    w.allowSavingAfterLoadFailure();
+    expect(JSON.parse(w.localStorage.getItem(STATE_KEY) ?? "null")).toEqual(expect.objectContaining({ tasks: [] }));
+  });
+
+  it("a readable state never shows the recovery sheet", () => {
+    w = loadMobile({ seedState: { tasks: [{ id: "tsk-1", title: "ok", status: "queued", rank: 0 }] } });
+    expect(w.document.getElementById("sheetContainer")?.dataset.sheet).not.toBe("loadRecovery");
+  });
+
   it("a screen that throws while drawing still lets boot finish: message, hooks and sync", async () => {
     const net = countingFetch();
     w = loadMobile({
