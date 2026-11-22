@@ -919,7 +919,8 @@ describe("QuestMatrixPanel", () => {
       // Accepting discards the edits and opens the other quest.
       confirm.mockReturnValue(true);
       fireEvent.click(editToggle("Write"));
-      expect(screen.getByLabelText("Quest Title")).toHaveValue("Write");
+      // Launch's drawer collapses while Write's opens; wait for the single drawer.
+      await waitFor(() => expect(screen.getByLabelText("Quest Title")).toHaveValue("Write"));
       expect(editToggle("Write")).toHaveAttribute("aria-expanded", "true");
 
       const row = await inAct(() => db.quests.get("quest-0"));
@@ -934,20 +935,22 @@ describe("QuestMatrixPanel", () => {
       expect(editForm("Launch")).toBeInTheDocument();
 
       fireEvent.click(editToggle("Launch"));
-      expect(screen.queryByRole("form")).toBeNull();
+      await waitFor(() => expect(screen.queryByRole("form")).toBeNull());
 
       fireEvent.click(editToggle("Launch"));
       fireEvent.click(editToggle("Write"));
       expect(editForm("Write")).toBeInTheDocument();
+      // Launch's drawer collapses before it unmounts.
+      await waitFor(() => expect(screen.getAllByRole("form")).toHaveLength(1));
 
       // Escape and Cancel close it and hand focus back to its toggle.
       fireEvent.keyDown(screen.getByLabelText("Quest Title"), { key: "Escape" });
-      expect(screen.queryByRole("form")).toBeNull();
+      await waitFor(() => expect(screen.queryByRole("form")).toBeNull());
       expect(editToggle("Write")).toHaveFocus();
 
       fireEvent.click(editToggle("Launch"));
       fireEvent.click(within(editForm("Launch")).getByRole("button", { name: "Cancel" }));
-      expect(screen.queryByRole("form")).toBeNull();
+      await waitFor(() => expect(screen.queryByRole("form")).toBeNull());
       expect(editToggle("Launch")).toHaveFocus();
 
       expect(confirm).not.toHaveBeenCalled();
@@ -1311,7 +1314,7 @@ describe("QuestMatrixPanel", () => {
 
       confirm.mockReturnValue(true);
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(screen.queryByLabelText("Quest Title")).toBeNull();
+      await waitFor(() => expect(screen.queryByLabelText("Quest Title")).toBeNull());
       expect(toggle).toHaveFocus();
       fireEvent.click(toggle);
       expect(screen.getByLabelText("Quest Title")).toHaveValue("");
@@ -1376,7 +1379,8 @@ describe("QuestMatrixPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       fireEvent.click(editToggle("Launch"));
-      expect(screen.getByLabelText("Quest Title")).toHaveValue("Launch");
+      // The cancelled create form collapses before it unmounts.
+      await waitFor(() => expect(screen.getByLabelText("Quest Title")).toHaveValue("Launch"));
       expect(screen.getByLabelText("Description")).toHaveValue("Ship it");
 
       // Both open at once: two distinct ids.
@@ -1428,7 +1432,8 @@ describe("QuestMatrixPanel", () => {
         expect(input).toHaveClass("focus:border-hud-cyan");
       }
       const quickAdd = screen.getByRole("textbox", { name: "Add quest work to Launch" });
-      expect(quickAdd.parentElement).toHaveClass("focus-within:border-white/40");
+      // The bordered quick-add box (not the inner row) shows focus.
+      expect(quickAdd.parentElement?.parentElement).toHaveClass("focus-within:border-white/40");
       expect(quickAdd).toHaveClass("placeholder:text-hud-muted");
       expect(
         within(editForm("Launch")).getByRole("button", { name: "Save" })

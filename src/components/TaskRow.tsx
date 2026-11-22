@@ -16,6 +16,7 @@ import { useCommandStore } from "@/store/useCommandStore";
 import { TaskNotesField } from "./TaskNotesField";
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import type { QueueRowReorderHandlers } from "./useQueueReorder";
+import { HeightReveal } from "./HeightReveal";
 
 interface QueueTaskRowProps {
   variant: "queue";
@@ -343,7 +344,7 @@ function QueueTaskRow({
               onClick={onToggleExpanded}
               title="Task notes & options"
               aria-expanded={isExpanded}
-              className={`rounded-lg p-1.5 transition-colors duration-150 ease-out active:opacity-80 ${
+              className={`-m-0.5 rounded-lg p-2 coarse:p-3 transition-colors duration-150 ease-out active:opacity-80 ${
                 task.notes || isExpanded
                   ? "text-neutral-300 hover:text-white"
                   : "text-hud-muted opacity-0 hoverless:opacity-60 group-hover:opacity-100 focus-visible:opacity-100 hover:text-neutral-300"
@@ -356,7 +357,7 @@ function QueueTaskRow({
       </div>
 
       {/* Inline Notes & Options Drawer */}
-      {isExpanded && (
+      <HeightReveal show={isExpanded}>
         <div
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -423,7 +424,7 @@ function QueueTaskRow({
             </ConfirmDeleteButton>
           </div>
         </div>
-      )}
+      </HeightReveal>
     </div>
   );
 }

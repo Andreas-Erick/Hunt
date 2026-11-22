@@ -117,7 +117,7 @@ export function DesktopWindowControls({
         onClick={handleClose}
         title="Exit Hunt"
         aria-label="Exit Hunt"
-        className="ml-1 inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+        className="ml-1 inline-flex items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-danger/40 hover:bg-danger/15 hover:text-danger transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
       >
         <X className="h-4 w-4" />
       </button>

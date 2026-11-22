@@ -148,16 +148,18 @@ export function GuideView() {
           </p>
         </div>
 
-        {activeTab !== "workshop" && (
-          <button
-            type="button"
-            onClick={() => selectTab("workshop")}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-xl bg-hud-cyan px-4 py-2.5 text-xs font-semibold text-black hover:bg-white ${PRESSABLE}`}
-          >
-            <FlaskConical className="h-4 w-4" aria-hidden="true" />
-            <span>Open Workshop &amp; Audit</span>
-          </button>
-        )}
+        {/* Hidden in place (not unmounted) on the Workshop tab, so the tablist
+            below never jumps under the finger that just tapped it. */}
+        <button
+          type="button"
+          onClick={() => selectTab("workshop")}
+          aria-hidden={activeTab === "workshop" || undefined}
+          tabIndex={activeTab === "workshop" ? -1 : undefined}
+          className={`inline-flex shrink-0 items-center gap-2 rounded-xl bg-hud-cyan px-4 py-2.5 text-xs font-semibold text-black hover:bg-white ${PRESSABLE} ${activeTab === "workshop" ? "invisible" : ""}`}
+        >
+          <FlaskConical className="h-4 w-4" aria-hidden="true" />
+          <span>Open Workshop &amp; Audit</span>
+        </button>
       </div>
 
       {/* Accessible Chapter Tabs */}
@@ -227,7 +229,7 @@ export function GuideView() {
                 <button
                   type="button"
                   onClick={() => selectTab("tasks")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-xs font-medium text-black hover:bg-neutral-200 ${PRESSABLE}`}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   <span>Next: Crafting Tasks</span>
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -268,7 +270,7 @@ export function GuideView() {
                 <button
                   type="button"
                   onClick={() => selectTab("workshop")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl bg-hud-cyan px-4 py-2 text-xs font-semibold text-black hover:bg-white ${PRESSABLE}`}
+                  className={`inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   <span>Try the Workshop</span>
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

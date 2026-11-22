@@ -101,7 +101,7 @@ export function TaskComposer({
             type="button"
             disabled={!newTitle.trim()}
             onClick={() => handleAdd(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
+            className="flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
           >
             <ArrowUpToLine className="h-3.5 w-3.5" />
             <span>Top</span>
@@ -110,7 +110,7 @@ export function TaskComposer({
             type="button"
             disabled={!newTitle.trim()}
             onClick={() => handleAdd(false)}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/10 hover:text-white active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
+            className="flex min-h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/10 hover:text-white active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
           >
             <ArrowDownToLine className="h-3.5 w-3.5" />
             <span>Bottom</span>
@@ -131,7 +131,7 @@ export function TaskComposer({
           }}
           placeholder="Add description (optional)..."
           aria-label="Task description (optional)"
-          className="w-full bg-transparent px-1 py-1 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+          className="w-full bg-transparent px-1 py-1 coarse:py-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
         />
       </div>
 

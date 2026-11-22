@@ -488,7 +488,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             title="Close"
             aria-label="Close"
-            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+            className="shrink-0 rounded-lg p-2 coarse:p-3 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -625,7 +625,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                   onClick={handleManualSync}
                   disabled={syncing}
                   aria-busy={syncing}
-                  className="flex min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+                  className="flex min-h-8 coarse:min-h-11 min-w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-80 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
                 >
                   {syncing ? (
                     <>
@@ -719,7 +719,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             <a
               href="/Hunt-Mobile.apk"
               download="Hunt-Mobile.apk"
-              className="flex items-center gap-1.5 rounded-lg border border-accent/35 bg-accent/10 px-3 py-1.5 font-medium text-accent hover:bg-accent/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+              className="flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-accent/35 bg-accent/10 px-3 py-1.5 font-medium text-accent hover:bg-accent/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               <Smartphone className="h-3.5 w-3.5" />
               <span>Download Android APK</span>
@@ -730,7 +730,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={handleExportJson}
               disabled={busy}
               aria-busy={exporting}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+              className="flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               {exported ? (
                 <>
@@ -759,7 +759,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               onClick={() => fileInputRef.current?.click()}
               disabled={busy}
               aria-busy={importing}
-              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+              className="flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-neutral-300 hover:bg-white/[0.08] hover:text-white disabled:cursor-wait disabled:opacity-60 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               <Upload className="h-3.5 w-3.5" />
               <span>Merge Snapshot</span>
