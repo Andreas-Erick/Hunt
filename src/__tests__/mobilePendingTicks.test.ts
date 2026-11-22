@@ -174,4 +174,19 @@ describe("phone page: Pending Ticks on boot", () => {
     expect(shell.calls).toContain("readPendingTicks");
     expect(shell.acks).toEqual([]);
   });
+
+  it("applies nothing while saving is blocked, so no change waits unsaved and nothing is skipped twice", () => {
+    const shell = boot({ corrupt: true });
+    expect(shell.coreCalls).toBe(0);
+    expect(w!.__huntDiagnostics.getBreadcrumbs().filter((b) => b.event === "tick_skipped")).toEqual([]);
+    w!.eval("drainPendingTicks()");
+    expect(shell.coreCalls).toBe(0);
+  });
+
+  it("drains the queue once the user lets Hunt save again", () => {
+    const shell = boot({ corrupt: true });
+    w!.eval("allowSavingAfterLoadFailure()");
+    expect(shell.coreCalls).toBe(1);
+    expect(JSON.parse(shell.acks[0])).toEqual(ticks);
+  });
 });

@@ -4337,8 +4337,9 @@ var HuntCore = (() => {
 
     // Pending Ticks (ADR-0006): Tasks ticked done on the Day Widget wait in a queue the shell owns.
     // Apply them through HuntCore (completion time = the tap), save, log stale ticks, and only then
-    // acknowledge exactly these ticks so the shell keeps any that arrived meanwhile. While saving is
-    // blocked nothing is acknowledged: the ticks stay queued for a start that can save them.
+    // acknowledge exactly these ticks so the shell keeps any that arrived meanwhile, and ask for a sync
+    // as any other change does. While saving is blocked nothing is applied or acknowledged: the ticks
+    // stay queued, untouched, until the user lets Hunt save again (allowSavingAfterLoadFailure drains).
     // The shell removes acknowledged ticks later, on its write thread, so a drain that runs before that
     // (the next tick's signal, a resume) would read them again: they are left out until they are gone.
     // Returns true when the state changed.
@@ -4378,6 +4379,7 @@ var HuntCore = (() => {
         return false;
       }
       reportTickQueueProblems(read);
+      if (persistBlocked) return false;
       const inQueue = new Set(queued.map(pendingTickKey));
       for (const k of ticksAwaitingAck) if (!inQueue.has(k)) ticksAwaitingAck.delete(k);
       const ticks = queued.filter((t) => !ticksAwaitingAck.has(pendingTickKey(t)));
@@ -4388,12 +4390,12 @@ var HuntCore = (() => {
         state = result.state;
         syncMeta.localRev++;
         persistState();
+        requestSyncSoon();
         recordMobileBreadcrumb("INFO", "widget", "ticks_applied", { count: ticks.length - result.skipped.length });
       }
       for (const s of result.skipped) {
         recordMobileBreadcrumb("WARN", "widget", "tick_skipped", { taskId: s.tick && s.tick.taskId, reason: s.reason });
       }
-      if (persistBlocked) return changed;
       bridgeCall("ackPendingTicks", JSON.stringify(ticks));
       for (const t of ticks) ticksAwaitingAck.add(pendingTickKey(t));
       return changed;
@@ -6501,6 +6503,7 @@ var HuntCore = (() => {
       recordMobileBreadcrumb("WARN", "storage", "persist_unblocked", {});
       closeSheet();
       persistState();
+      drainPendingTicksAndRender(); // widget ticks waited, untouched, while saving was blocked
       showToast("Changes on this phone are saved again");
     }
 
