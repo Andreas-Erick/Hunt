@@ -130,9 +130,12 @@ final class PendingTicks {
     /**
      * Bridge: what the page drains, as JSON object text: {"ticks": [...]}, plus "heldBack": n
      * when n ended Undo windows could not be queued yet (they are kept and retried), and
-     * "unreadable": "corrupt" or "read-error" when the queue could not be read. A corrupt queue
-     * is renamed aside (named in "keptAs"; kept for recovery, never overwritten) so the widget can
-     * queue again; a read error leaves the file in place for the next read. Any thread.
+     * "unreadable": "corrupt", "malformed" or "read-error" when (part of) the queue could not be
+     * read. A corrupt queue is renamed aside (named in "keptAs"; kept for recovery, never
+     * overwritten) so the widget can queue again; entries that are not tick objects are written
+     * aside (named in "keptAs") and dropped from the queue, which only then is rewritten, so they
+     * stop counting toward {@link #MAX_TICKS} and no tick is lost; a read error leaves the file in
+     * place for the next read. Any thread.
      */
     static String read(File dir, int heldBack) {
         JSONObject out = new JSONObject();
@@ -140,10 +143,10 @@ final class PendingTicks {
             JSONArray ticks = new JSONArray();
             synchronized (HuntFiles.LOCK) {
                 try {
-                    ticks = readQueue(dir);
+                    ticks = setMalformedAside(dir, readQueue(dir), out);
                 } catch (JSONException e) {
                     out.put("unreadable", "corrupt");
-                    File aside = new File(dir, "hunt-pending-ticks-unreadable-" + System.currentTimeMillis() + ".json");
+                    File aside = asideFile(dir, "unreadable");
                     boolean moved = queueFile(dir).renameTo(aside);
                     if (moved) out.put("keptAs", aside.getName());
                     Log.e(TAG, "Pending Tick queue " + HuntFiles.PENDING_TICKS_FILE + " is unreadable; "
@@ -161,22 +164,77 @@ final class PendingTicks {
         return out.toString();
     }
 
-    /** Widget: ids of the Tasks waiting in the queue, so the widget hides them right away. */
-    static Set<String> queuedTaskIds(File dir) {
-        Set<String> ids = new HashSet<>();
+    /**
+     * Caller holds LOCK. Splits off the entries that are not tick objects (the page could never
+     * apply or acknowledge them): writes them to a file of their own, then rewrites the queue
+     * without them, and reports the copy in `out`. If the copy cannot be written the queue is left
+     * exactly as it is and only the ticks are returned, so nothing is lost either way.
+     */
+    private static JSONArray setMalformedAside(File dir, JSONArray queue, JSONObject out) throws JSONException {
+        JSONArray ticks = new JSONArray();
+        JSONArray malformed = new JSONArray();
+        for (int i = 0; i < queue.length(); i++) {
+            Object entry = queue.opt(i);
+            if (entry instanceof JSONObject) ticks.put(entry);
+            else malformed.put(entry);
+        }
+        if (malformed.length() == 0) return queue;
+        File aside = asideFile(dir, "malformed");
+        try {
+            HuntFiles.writeText(aside, malformed.toString());
+        } catch (IOException | RuntimeException e) {
+            Log.e(TAG, "Setting " + malformed.length() + " malformed Pending Tick entries aside failed; queue left as it is", e);
+            return ticks;
+        }
+        out.put("unreadable", "malformed");
+        out.put("keptAs", aside.getName());
+        try {
+            HuntFiles.writeText(queueFile(dir), ticks.toString());
+            Log.e(TAG, malformed.length() + " malformed Pending Tick entries kept as " + aside.getName());
+        } catch (IOException | RuntimeException e) {
+            Log.e(TAG, "Dropping malformed Pending Tick entries failed (copy kept as " + aside.getName() + "); retried next read", e);
+        }
+        return ticks;
+    }
+
+    private static File asideFile(File dir, String why) {
+        return new File(dir, "hunt-pending-ticks-" + why + "-" + System.currentTimeMillis() + ".json");
+    }
+
+    /** What the widget knows of the queue, for hiding queued Tasks ({@link #queued}). */
+    static final class Listing {
+        /** {@link TickKeys#taskDay} of every queued tick: a Task is hidden only on the day it was ticked for. */
+        final Set<String> keys;
+        /**
+         * False when the queue could not be read or parsed. The widget then offers no tick at all
+         * until a read succeeds: an empty key set alone would show already-queued Tasks as
+         * tickable again (ADR-0006).
+         */
+        final boolean readable;
+
+        Listing(Set<String> keys, boolean readable) {
+            this.keys = keys;
+            this.readable = readable;
+        }
+    }
+
+    /** Widget: the Task-day keys waiting in the queue, so the widget hides them right away. Any thread. */
+    static Listing queued(File dir) {
+        Set<String> keys = new HashSet<>();
         synchronized (HuntFiles.LOCK) {
             JSONArray queue;
             try {
                 queue = readQueue(dir);
             } catch (IOException | JSONException e) {
-                return ids; // nothing hidden; the page reports the unreadable queue when it reads it
+                // The page reports the unreadable queue when it reads it; until then nothing is tickable.
+                return new Listing(keys, false);
             }
             for (int i = 0; i < queue.length(); i++) {
                 JSONObject t = queue.optJSONObject(i);
-                if (t != null) ids.add(t.optString("taskId"));
+                if (t != null) keys.add(TickKeys.taskDay(t.optString("taskId"), t.optString("dateKey")));
             }
         }
-        return ids;
+        return new Listing(keys, true);
     }
 
     /**

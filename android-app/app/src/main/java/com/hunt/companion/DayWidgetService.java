@@ -10,9 +10,6 @@ import android.widget.RemoteViewsService;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.Collections;
-import java.util.Set;
-
 /**
  * Rows of the Day Widget's list for its selected day, as {@link SelectedDay} reads them from the
  * Widget Snapshot (ADR-0006). It only draws and never writes anything. Taps go through the list's
@@ -34,10 +31,8 @@ public class DayWidgetService extends RemoteViewsService {
         private final int widgetId;
         private JSONArray rows = new JSONArray();
         private String dateKey = "";
-        /** Tasks of the day in their Undo window, drawn as "✓ Done · Undo". */
-        private Set<String> undoable = Collections.emptySet();
-        /** The snapshot's look, so every row uses the same look's layout and Quest accents. */
-        private WidgetLook look = WidgetLook.NEON;
+        /** The selected day as last read: rows in their Undo window, look, whether rows can be ticked. */
+        private SelectedDay day = new SelectedDay();
 
         Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
@@ -51,10 +46,8 @@ public class DayWidgetService extends RemoteViewsService {
         /** Binder thread: after notifyAppWidgetViewDataChanged, re-reads the snapshot and the day. */
         @Override
         public void onDataSetChanged() {
-            SelectedDay day = SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId));
+            day = SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId));
             dateKey = day.date.toString();
-            look = day.look;
-            undoable = day.undoable;
             rows = day.hasList() ? day.rows : new JSONArray();
         }
 
@@ -71,7 +64,8 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
-            if (row != null && undoable.contains(row.optString("id", ""))) return undoRow(row);
+            if (row != null && day.undoable.contains(row.optString("id", ""))) return undoRow(row);
+            WidgetLook look = day.look;
             RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayRowLayout);
             if (row == null) return views;
             String title = row.optString("title", "");
@@ -94,7 +88,7 @@ public class DayWidgetService extends RemoteViewsService {
             // The row opens Hunt; a tickable row's 48dp marker box ticks it. The snapshot never marks
             // the Focus Task tickable (HuntCore's rule), so it has no tick target.
             views.setOnClickFillInIntent(R.id.widget_row, rowTap(DayWidgetProvider.ROW_OPEN, row));
-            if (row.optBoolean("tickable", false)) {
+            if (day.canTick(row)) {
                 views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetProvider.ROW_TICK, row));
                 views.setContentDescription(R.id.widget_row_tick, ctx.getString(R.string.day_widget_row_tick, title));
             }
@@ -106,7 +100,7 @@ public class DayWidgetService extends RemoteViewsService {
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayUndoRowLayout);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), day.look.dayUndoRowLayout);
             String title = row.optString("title", "");
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
             views.setContentDescription(R.id.widget_row_undo, ctx.getString(R.string.day_widget_row_undo, title));

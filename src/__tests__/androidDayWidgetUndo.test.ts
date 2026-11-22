@@ -90,14 +90,14 @@ describe.skipIf(!hasJdk)("UndoWindow, run on the JDK", () => {
     ]);
   }, 60_000);
 
-  it("the list hides queued Tasks and ended windows not yet queued, but keeps open windows for Undo", () => {
+  it("the list hides the day's queued Tasks and ended windows not yet queued, but keeps open windows for Undo", () => {
     const lines = runUndo(
       [
         "Map<String, Long> held = new HashMap<>();",
         'held.put(TickKeys.taskDay("t-open", "2026-11-22"), 15_000L);',
         'held.put(TickKeys.taskDay("t-ended", "2026-11-22"), 10_000L);',
         'held.put(TickKeys.taskDay("t-other-day", "2026-11-23"), 10_000L);',
-        'Set<String> queued = new HashSet<>(Arrays.asList("t-queued"));',
+        'Set<String> queued = new HashSet<>(Arrays.asList(TickKeys.taskDay("t-queued", "2026-11-22"), TickKeys.taskDay("t-queued-tomorrow", "2026-11-23")));',
         'System.out.println(new TreeSet<>(UndoWindow.hiddenTaskIds(queued, held, "2026-11-22", 16_500L)));',
       ].join("\n"),
     );

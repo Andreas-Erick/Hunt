@@ -4358,9 +4358,11 @@ var HuntCore = (() => {
       recordMobileBreadcrumb("ERROR", "widget", "ticks_unreadable", { reason: String(read.unreadable), keptAs: String(read.keptAs || "") });
       if (tickQueueProblemShown) return;
       tickQueueProblemShown = true;
-      showToast(read.unreadable === "corrupt"
-        ? "Some ticks from the home-screen widget couldn't be read. A copy was kept on this phone; tick those Tasks again in Hunt."
-        : "Hunt couldn't read the home-screen widget's ticks just now. They stay saved, and Hunt tries again next time it opens.",
+      // "corrupt" / "malformed": the shell kept a copy of what it could not read and moved it out of the
+      // queue; "read-error": the queue is untouched and read again next time.
+      showToast(read.unreadable === "read-error"
+        ? "Hunt couldn't read the home-screen widget's ticks just now. They stay saved, and Hunt tries again next time it opens."
+        : "Some ticks from the home-screen widget couldn't be read. A copy was kept on this phone; tick those Tasks again in Hunt.",
         { ms: 8000 });
     }
     function drainPendingTicks() {

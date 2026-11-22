@@ -13,11 +13,12 @@ import java.util.Set;
  * Test fake of android.util.AtomicFile, file-backed like the real one: a missing file reads as
  * FileNotFoundException, a write goes to a side file and is renamed over the base on finish.
  * {@link #FAIL_READS} names files whose read fails with an IOException (a flaky disk), and
- * {@link #FAIL_WRITES} files whose write fails.
+ * {@link #FAIL_WRITES} files whose write fails ({@link #FAIL_WRITE_PREFIXES}: by name prefix).
  */
 public class AtomicFile {
     public static final Set<String> FAIL_READS = new HashSet<>();
     public static final Set<String> FAIL_WRITES = new HashSet<>();
+    public static final Set<String> FAIL_WRITE_PREFIXES = new HashSet<>();
     private final File base;
     private final File next;
 
@@ -35,6 +36,9 @@ public class AtomicFile {
 
     public FileOutputStream startWrite() throws IOException {
         if (FAIL_WRITES.contains(base.getName())) throw new IOException("simulated write error");
+        for (String prefix : FAIL_WRITE_PREFIXES) {
+            if (base.getName().startsWith(prefix)) throw new IOException("simulated write error");
+        }
         return new FileOutputStream(next);
     }
 

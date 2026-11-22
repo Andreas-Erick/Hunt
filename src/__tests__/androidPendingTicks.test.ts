@@ -128,4 +128,67 @@ describe.skipIf(!hasJdk)("PendingTicks, run on the JDK", () => {
     );
     expect(lines).toEqual(["1", '[{"taskId":"t-2","dateKey":"2026-11-22","tickedAt":8}]', "0", "{not json"]);
   }, 60_000);
+
+  it("the widget learns which Task and day each queued tick is for, so a Task stays hidden only on its day", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7},{"taskId":"t-2","dateKey":"2026-11-23","tickedAt":8},5]'),
+        "PendingTicks.Listing l = PendingTicks.queued(dir);",
+        'System.out.println(l.readable + " " + new TreeSet<>(l.keys));',
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["true [2026-11-22|t-1, 2026-11-23|t-2]"]);
+  }, 60_000);
+
+  it("a queue the widget cannot read says so, rather than looking empty", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7}]'),
+        `AtomicFile.FAIL_READS.add("${QUEUE}");`,
+        "PendingTicks.Listing l = PendingTicks.queued(dir);",
+        'System.out.println(l.readable + " " + l.keys);',
+        `AtomicFile.FAIL_READS.clear();`,
+        write("{not json"),
+        "l = PendingTicks.queued(dir);",
+        'System.out.println(l.readable + " " + l.keys);',
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["false []", "false []"]);
+  }, 60_000);
+
+  it("the bridge's read sets entries that are not ticks aside, keeps every tick, and the queue stays clean", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7},5,"x",null,{"taskId":"t-2","dateKey":"2026-11-22","tickedAt":8}]'),
+        "System.out.println(PendingTicks.read(dir, 0));",
+        printFile,
+        'for (File f : dir.listFiles()) if (f.getName().startsWith("hunt-pending-ticks-malformed-")) System.out.println("kept " + new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8));',
+        "System.out.println(PendingTicks.read(dir, 0));",
+      ].join("\n"),
+    );
+    const ticks = [
+      { taskId: "t-1", dateKey: "2026-11-22", tickedAt: 7 },
+      { taskId: "t-2", dateKey: "2026-11-22", tickedAt: 8 },
+    ];
+    const first = JSON.parse(lines[0]);
+    expect(first.ticks).toEqual(ticks);
+    expect(first.unreadable).toBe("malformed");
+    expect(first.keptAs).toMatch(/^hunt-pending-ticks-malformed-\d+\.json$/);
+    expect(JSON.parse(lines[1])).toEqual(ticks);
+    expect(lines[2]).toBe('kept [5,"x",null]');
+    expect(JSON.parse(lines[3])).toEqual({ ticks });
+  }, 60_000);
+
+  it("the bridge's read leaves the queue as it is when the malformed entries cannot be set aside", () => {
+    const lines = probe(
+      [
+        write('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7},5]'),
+        'AtomicFile.FAIL_WRITE_PREFIXES.add("hunt-pending-ticks-malformed-");',
+        "System.out.println(PendingTicks.read(dir, 0));",
+        printFile,
+      ].join("\n"),
+    );
+    expect(JSON.parse(lines[0])).toEqual({ ticks: [{ taskId: "t-1", dateKey: "2026-11-22", tickedAt: 7 }] });
+    expect(lines[1]).toBe('[{"taskId":"t-1","dateKey":"2026-11-22","tickedAt":7},5]');
+  }, 60_000);
 });
