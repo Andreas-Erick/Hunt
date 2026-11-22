@@ -67,7 +67,7 @@ function PageNotice({
   onAction: () => void;
 }) {
   return (
-    <div role="alert" className="border-b border-hud-amber/20 bg-[#0b0c0e]">
+    <div role="alert" className="border-b border-hud-amber/20 bg-base">
       <div className="bg-hud-amber/[0.06]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3 px-4 py-2.5 text-xs text-hud-amber sm:px-6 lg:px-12 xl:px-16">
           <span className="min-w-0 break-words">{message}</span>
@@ -143,7 +143,7 @@ export default function HomePage() {
 
   if (!booted) {
     return (
-      <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-[#0b0c0e] text-xs text-hud-muted">
+      <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-base text-xs text-hud-muted">
         Loading Hunt...
       </div>
     );
@@ -155,7 +155,7 @@ export default function HomePage() {
   // (eliminating the Framer Motion inline `style="opacity: 0"` rAF stall on fullscreen launch).
   return (
     <MotionConfig reducedMotion="user">
-      <div className="min-h-screen min-h-[100dvh] bg-[#0b0c0e] text-neutral-100">
+      <div className="min-h-screen min-h-[100dvh] bg-base text-neutral-100">
         <TopTelemetryBar />
 
         {(dbError || actionError) && (

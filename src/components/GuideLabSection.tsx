@@ -280,7 +280,7 @@ export function GuideLabSection() {
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="h-28 rounded-2xl border border-white/[0.06] bg-[#111318] p-5"
+                className="h-28 rounded-2xl border border-white/[0.06] bg-surface p-5"
               />
             ))}
           </div>
@@ -288,7 +288,7 @@ export function GuideLabSection() {
           <div className="space-y-4">
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
               {/* Active Quests KPI */}
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
+              <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
                 <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
                   Active Quests
                 </div>
@@ -313,7 +313,7 @@ export function GuideLabSection() {
               </div>
 
               {/* Weekly Deep-Work Budget KPI */}
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
+              <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
                 <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
                   Weekly Target Budget
                 </div>
@@ -338,7 +338,7 @@ export function GuideLabSection() {
               </div>
 
               {/* Open Task Clarity KPI */}
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
+              <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
                 <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
                   Open Task Clarity
                 </div>
@@ -370,7 +370,7 @@ export function GuideLabSection() {
             </div>
 
             {audit.tasksToSharpen.length > 0 && (
-              <div className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
+              <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
                     Open tasks you could sharpen ({audit.tasksToSharpen.length})
@@ -390,7 +390,7 @@ export function GuideLabSection() {
                   {audit.tasksToSharpen.map((item) => (
                     <li
                       key={item.taskId}
-                      className="flex flex-col justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 sm:flex-row sm:items-center"
+                      className="flex flex-col justify-between gap-2 rounded-xl border border-white/[0.06] bg-raised px-4 py-3 sm:flex-row sm:items-center"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm text-white" title={item.title}>
@@ -422,7 +422,7 @@ export function GuideLabSection() {
       {/* 2. Interactive Task & Quest Workshop */}
       <section
         aria-labelledby={`${ids}-workshop-heading`}
-        className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
+        className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7"
       >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
@@ -440,7 +440,7 @@ export function GuideLabSection() {
           <div
             role="group"
             aria-label="Draft type"
-            className="inline-flex shrink-0 rounded-xl border border-white/10 bg-[#0b0c0e] p-1"
+            className="inline-flex shrink-0 rounded-xl border border-white/10 bg-base p-1"
           >
             {(["task", "quest"] as const).map((m) => {
               const active = mode === m;
@@ -726,7 +726,7 @@ export function GuideLabSection() {
           )}
 
           {/* Right: Live Science Evaluation */}
-          <div className="min-w-0 rounded-xl border border-white/[0.06] bg-[#0b0c0e] p-5">
+          <div className="min-w-0 rounded-xl border border-white/[0.06] bg-base p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
                 Science check
@@ -743,7 +743,7 @@ export function GuideLabSection() {
                 {activeEvaluation.checks.map((check) => (
                   <li
                     key={check.id}
-                    className="flex items-start gap-2.5 rounded-lg bg-[#111318] p-3"
+                    className="flex items-start gap-2.5 rounded-lg bg-surface p-3"
                   >
                     <StatusIcon status={check.status} />
                     <div className="min-w-0 flex-1">

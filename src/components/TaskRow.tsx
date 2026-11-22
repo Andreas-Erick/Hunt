@@ -144,7 +144,7 @@ function MaintenanceTaskRow({
     <div
       data-testid="task-row"
       data-task-id={task.id}
-      className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#101115] p-5 pl-6 hover:border-white/15 transition-colors duration-200"
+      className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-surface p-5 pl-6 hover:border-white/15 transition-colors duration-200"
     >
       <div className="absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full bg-neutral-600" />
 
@@ -245,10 +245,10 @@ function QueueTaskRow({
         isExpanded ? "" : "cursor-grab active:cursor-grabbing "
       }${
         isDragOver
-          ? "border-white/40 bg-[#1a1d24]"
+          ? "border-white/40 bg-raised"
           : isTopTask
-          ? "border-[#00f0ff]/35 bg-[#12151c] shadow-[0_0_30px_-12px_rgba(0,240,255,0.22)]"
-          : "border-white/[0.08] bg-[#111318] hover:border-white/[0.15]"
+          ? "border-accent/35 bg-surface shadow-card-accent"
+          : "border-white/[0.08] bg-surface hover:border-white/[0.15]"
       }`}
     >
       {/* Left Rounded Vertical Accent Bar (Quest.app signature detail) */}
@@ -263,7 +263,7 @@ function QueueTaskRow({
           data-task-title="true"
           onClick={startFocus}
           aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-          className="block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-base font-medium leading-snug text-white hover:text-[#00f0ff] transition-colors duration-150 ease-out active:opacity-80"
+          className="block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-base font-medium leading-snug text-white hover:text-accent transition-colors duration-150 ease-out active:opacity-80"
         >
           {task.title}
         </button>
@@ -287,7 +287,7 @@ function QueueTaskRow({
               className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                 isCompleting
                   ? `${style.bg} border-transparent text-black`
-                  : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                  : "border-white/40 text-transparent hover:border-success hover:text-success"
               }`}
             >
               <Check className="h-3 w-3" />
@@ -314,9 +314,9 @@ function QueueTaskRow({
                   suspendTimer();
                 }}
                 aria-label={`Pause focus: ${task.title}`}
-                className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-[#00ff9d] hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
+                className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-success hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
               >
-                <span className="h-2 w-2 rounded-full bg-[#00ff9d] animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                 <span>{formatChronoMMSS(taskTotalSec).formatted}</span>
                 <Pause className="h-3.5 w-3.5" />
               </button>
@@ -366,7 +366,7 @@ function QueueTaskRow({
           }}
           // cursor-auto: the row's grab cursor is inherited, and
           // the notes field should keep its text cursor.
-          className="cursor-auto border-t border-white/[0.06] bg-[#0c0e12] px-6 py-4 space-y-3"
+          className="cursor-auto border-t border-white/[0.06] bg-sunken px-6 py-4 space-y-3"
         >
           <TaskNotesField
             key={task.id}
@@ -375,7 +375,7 @@ function QueueTaskRow({
             rows={2}
             placeholder="Add session notes..."
             aria-label={`Notes for ${task.title}`}
-            className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-[#00f0ff]/50 focus:outline-none"
+            className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent/50 focus:outline-none"
           />
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -416,7 +416,7 @@ function QueueTaskRow({
             <ConfirmDeleteButton
               label="Delete task"
               onConfirm={deleteThisTask}
-              className="-my-1.5 -mr-2 flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg px-2.5 py-1.5 text-hud-muted hover:bg-[#ff2a5f]/10 hover:text-[#ff2a5f]"
+              className="-my-1.5 -mr-2 flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg px-2.5 py-1.5 text-hud-muted hover:bg-danger/10 hover:text-danger"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
@@ -441,7 +441,7 @@ function CompletedTaskRow({
   // Only the accent bar and the check are dimmed (the card used
   // to be, which took the title below AA contrast). While settling
   // in (`isJustCompleted`), the card uses a solid elevated surface
-  // (`z-10 bg-[#11141b]`, below the sticky notice) with a subtle emerald border highlight.
+  // (`z-10 bg-surface`, below the sticky notice) with a subtle emerald border highlight.
   return (
     <div
       data-testid="completed-task-row"
@@ -449,7 +449,7 @@ function CompletedTaskRow({
       className={`group relative overflow-hidden rounded-2xl border p-5 pl-6 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
         isJustCompleted
           ? SETTLING_COMPLETED_CARD_CLASS
-          : "border-white/[0.05] bg-[#0e1014]/60"
+          : "border-white/[0.05] bg-sunken/60"
       }`}
     >
       <div

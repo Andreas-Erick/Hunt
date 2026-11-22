@@ -71,7 +71,7 @@ describe("8 Quest colors end-to-end & Tablet layout in Hunt Mobile", () => {
       });
       rerender(<ReviewHeatmapCard heatmap={qHm} scopeTitle={q.title} paletteAccent={q.accentColor} />);
       expect(container.querySelector('[data-testid="activity-heatmap"]')).not.toBeNull();
-      expect(QUEST_ACCENT_STYLES[q.accentColor].hex).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(QUEST_ACCENT_STYLES[q.accentColor].cssVar).toBe(`--q-${q.accentColor}`);
     }
   });
 

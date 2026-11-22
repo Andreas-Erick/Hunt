@@ -39,7 +39,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
   return (
     <article
       data-testid={`principle-${principle.id}`}
-      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
+      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7"
     >
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -60,7 +60,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
           {principle.science}
         </p>
 
-        <div className="mt-4 rounded-xl border border-white/[0.06] bg-[#0b0c0e] px-4 py-3">
+        <div className="mt-4 rounded-xl border border-white/[0.06] bg-base px-4 py-3">
           <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-hud-cyan">
             In Hunt
           </div>
@@ -185,7 +185,7 @@ export function GuideView() {
               className={`flex flex-col items-start rounded-2xl border px-4 py-3.5 text-left ${PRESSABLE} ${
                 selected
                   ? "border-hud-cyan/40 bg-white/[0.08] text-white"
-                  : "border-white/[0.07] bg-[#111318] text-neutral-300 hover:border-white/20 hover:text-white"
+                  : "border-white/[0.07] bg-surface text-neutral-300 hover:border-white/20 hover:text-white"
               }`}
             >
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -214,7 +214,7 @@ export function GuideView() {
               ))}
             </div>
 
-            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#111318] p-6 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-surface p-6 sm:flex-row sm:items-center">
               <div>
                 <h3 className="text-base font-medium text-white">
                   Ready to turn Quests into friction-free daily steps?
@@ -255,7 +255,7 @@ export function GuideView() {
               ))}
             </div>
 
-            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-[#111318] p-6 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-white/[0.08] bg-surface p-6 sm:flex-row sm:items-center">
               <div>
                 <h3 className="text-base font-medium text-white">
                   Put your own tasks through the science check
@@ -293,7 +293,7 @@ export function GuideView() {
                 return (
                   <article
                     key={item.id}
-                    className="flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-6"
+                    className="flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-surface p-6"
                   >
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -308,7 +308,7 @@ export function GuideView() {
                       <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-neutral-300">
                         {item.summary}
                       </p>
-                      <p className="mt-3 rounded-xl border border-white/[0.06] bg-[#0b0c0e] px-3.5 py-2.5 text-xs leading-relaxed text-neutral-200">
+                      <p className="mt-3 rounded-xl border border-white/[0.06] bg-base px-3.5 py-2.5 text-xs leading-relaxed text-neutral-200">
                         <strong className="font-medium text-white">Practice: </strong>
                         {item.practice}
                       </p>
@@ -333,7 +333,7 @@ export function GuideView() {
             </div>
 
             {/* Quick Pre-Flight Checklist */}
-            <section className="rounded-2xl border border-white/[0.08] bg-[#111318] p-6">
+            <section className="rounded-2xl border border-white/[0.08] bg-surface p-6">
               <h3 className="text-base font-medium text-white">
                 30-second pre-flight checklist
               </h3>
@@ -346,7 +346,7 @@ export function GuideView() {
                 ].map((q) => (
                   <li
                     key={q}
-                    className="flex items-start gap-2.5 rounded-xl border border-white/[0.06] bg-[#0b0c0e] px-3.5 py-3"
+                    className="flex items-start gap-2.5 rounded-xl border border-white/[0.06] bg-base px-3.5 py-3"
                   >
                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-hud-emerald" aria-hidden="true" />
                     <span>{q}</span>

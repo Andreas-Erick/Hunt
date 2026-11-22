@@ -579,7 +579,7 @@ describe("UI Components & User Workflows", () => {
       useCommandStore.setState({ phoneLastSeenAt: Date.now() - 3000 });
       render(<TopTelemetryBar />);
       expect(phoneButton()).toHaveAccessibleName(/Phone connected/);
-      expect(phoneDot().className).toContain("bg-[#00ff9d]");
+      expect(phoneDot().className).toContain("bg-success");
     });
 
     it("is neutral with the last sync time when the phone is away, even though the local server is fine", () => {
@@ -587,7 +587,7 @@ describe("UI Components & User Workflows", () => {
       render(<TopTelemetryBar />);
       expect(phoneButton()).toHaveAccessibleName(/Phone last synced 5 m ago/);
       expect(phoneDot().className).toContain("bg-neutral-500");
-      expect(phoneDot().className).not.toContain("bg-[#00ff9d]");
+      expect(phoneDot().className).not.toContain("bg-success");
     });
 
     it("says the phone has not synced when the server never heard from it", () => {

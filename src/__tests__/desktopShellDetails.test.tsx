@@ -20,7 +20,7 @@ vi.mock("next/font/google", () => {
     variable: `next-font-var${options.variable}`,
     style: { fontFamily: "next-font" },
   });
-  return { Space_Grotesk: font, JetBrains_Mono: font };
+  return { Space_Grotesk: font, JetBrains_Mono: font, Hanken_Grotesk: font, Newsreader: font };
 });
 
 const ROOT = path.resolve(__dirname, "..", "..");
@@ -90,11 +90,13 @@ afterEach(() => {
 // fonts are self-hosted through next/font (no Google request at runtime)
 // ---------------------------------------------------------------------------
 describe("root layout fonts", () => {
-  it("loads no stylesheet or preconnect from Google and sets both font variables on <html>", async () => {
+  it("loads no stylesheet or preconnect from Google and sets every look's font variables on <html>", async () => {
     const source = fs.readFileSync(path.join(ROOT, "src", "app", "layout.tsx"), "utf8");
     expect(source).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
     expect(source).toContain('variable: "--font-space-grotesk"');
     expect(source).toContain('variable: "--font-jetbrains-mono"');
+    expect(source).toContain('variable: "--font-hanken-grotesk"');
+    expect(source).toContain('variable: "--font-newsreader"');
 
     const { default: RootLayout } = await import("@/app/layout");
     const html = RootLayout({ children: <p>child</p> }) as React.ReactElement<{
@@ -107,18 +109,25 @@ describe("root layout fonts", () => {
         "dark",
         "next-font-var--font-space-grotesk",
         "next-font-var--font-jetbrains-mono",
+        "next-font-var--font-hanken-grotesk",
+        "next-font-var--font-newsreader",
       ])
     );
-    // No <head> with external <link> tags is rendered by the layout any more.
-    const children = React.Children.toArray(html.props.children) as React.ReactElement[];
-    expect(children.map((c) => c.type)).toEqual(["body"]);
+    // The only <head> content is the inline look boot script: no external <link> tags.
+    const children = React.Children.toArray(html.props.children) as React.ReactElement<{
+      children?: React.ReactNode;
+    }>[];
+    expect(children.map((c) => c.type)).toEqual(["head", "body"]);
+    const headChildren = React.Children.toArray(children[0].props.children) as React.ReactElement[];
+    expect(headChildren.map((c) => c.type)).toEqual(["script"]);
   });
 
   it("globals.css no longer shadows the next/font variables with a :root definition", () => {
     const css = fs.readFileSync(path.join(ROOT, "src", "app", "globals.css"), "utf8");
     expect(css).not.toMatch(/--font-space-grotesk\s*:/);
     expect(css).not.toMatch(/--font-jetbrains-mono\s*:/);
-    expect(css).toContain("font-family: var(--font-space-grotesk), sans-serif;");
+    expect(css).toContain("--font-body: var(--font-space-grotesk)");
+    expect(css).toContain("--font-body: var(--font-hanken-grotesk)");
   });
 });
 

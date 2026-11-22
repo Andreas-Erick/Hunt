@@ -16,59 +16,59 @@ type HeatmapPalette = QuestAccent | "slate";
 const LEVEL_CLASSES: Record<HeatmapPalette, readonly [string, string, string, string, string]> = {
   amber: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#ffb800]/20 hover:bg-[#ffb800]/30",
-    "bg-[#ffb800]/40 hover:bg-[#ffb800]/55",
-    "bg-[#ffb800]/70 hover:bg-[#ffb800]/80",
-    "bg-[#ffb800] hover:bg-[#ffc633]",
+    "bg-q-amber/20 hover:bg-q-amber/30",
+    "bg-q-amber/40 hover:bg-q-amber/55",
+    "bg-q-amber/70 hover:bg-q-amber/80",
+    "bg-q-amber hover:bg-q-amber-hi",
   ],
   cyan: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#00f0ff]/20 hover:bg-[#00f0ff]/30",
-    "bg-[#00f0ff]/40 hover:bg-[#00f0ff]/55",
-    "bg-[#00f0ff]/70 hover:bg-[#00f0ff]/80",
-    "bg-[#00f0ff] hover:bg-[#4df5ff]",
+    "bg-q-cyan/20 hover:bg-q-cyan/30",
+    "bg-q-cyan/40 hover:bg-q-cyan/55",
+    "bg-q-cyan/70 hover:bg-q-cyan/80",
+    "bg-q-cyan hover:bg-q-cyan-hi",
   ],
   emerald: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#00ff9d]/20 hover:bg-[#00ff9d]/30",
-    "bg-[#00ff9d]/40 hover:bg-[#00ff9d]/55",
-    "bg-[#00ff9d]/70 hover:bg-[#00ff9d]/80",
-    "bg-[#00ff9d] hover:bg-[#4dffb8]",
+    "bg-q-emerald/20 hover:bg-q-emerald/30",
+    "bg-q-emerald/40 hover:bg-q-emerald/55",
+    "bg-q-emerald/70 hover:bg-q-emerald/80",
+    "bg-q-emerald hover:bg-q-emerald-hi",
   ],
   purple: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#b388ff]/20 hover:bg-[#b388ff]/30",
-    "bg-[#b388ff]/40 hover:bg-[#b388ff]/55",
-    "bg-[#b388ff]/70 hover:bg-[#b388ff]/80",
-    "bg-[#b388ff] hover:bg-[#c8a8ff]",
+    "bg-q-purple/20 hover:bg-q-purple/30",
+    "bg-q-purple/40 hover:bg-q-purple/55",
+    "bg-q-purple/70 hover:bg-q-purple/80",
+    "bg-q-purple hover:bg-q-purple-hi",
   ],
   rose: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#ff6b9d]/20 hover:bg-[#ff6b9d]/30",
-    "bg-[#ff6b9d]/40 hover:bg-[#ff6b9d]/55",
-    "bg-[#ff6b9d]/70 hover:bg-[#ff6b9d]/80",
-    "bg-[#ff6b9d] hover:bg-[#ff8fb5]",
+    "bg-q-rose/20 hover:bg-q-rose/30",
+    "bg-q-rose/40 hover:bg-q-rose/55",
+    "bg-q-rose/70 hover:bg-q-rose/80",
+    "bg-q-rose hover:bg-q-rose-hi",
   ],
   sky: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#38bdf8]/20 hover:bg-[#38bdf8]/30",
-    "bg-[#38bdf8]/40 hover:bg-[#38bdf8]/55",
-    "bg-[#38bdf8]/70 hover:bg-[#38bdf8]/80",
-    "bg-[#38bdf8] hover:bg-[#7dd3fc]",
+    "bg-q-sky/20 hover:bg-q-sky/30",
+    "bg-q-sky/40 hover:bg-q-sky/55",
+    "bg-q-sky/70 hover:bg-q-sky/80",
+    "bg-q-sky hover:bg-q-sky-hi",
   ],
   orange: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#ff8547]/20 hover:bg-[#ff8547]/30",
-    "bg-[#ff8547]/40 hover:bg-[#ff8547]/55",
-    "bg-[#ff8547]/70 hover:bg-[#ff8547]/80",
-    "bg-[#ff8547] hover:bg-[#ffa070]",
+    "bg-q-orange/20 hover:bg-q-orange/30",
+    "bg-q-orange/40 hover:bg-q-orange/55",
+    "bg-q-orange/70 hover:bg-q-orange/80",
+    "bg-q-orange hover:bg-q-orange-hi",
   ],
   lime: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
-    "bg-[#a3e635]/20 hover:bg-[#a3e635]/30",
-    "bg-[#a3e635]/40 hover:bg-[#a3e635]/55",
-    "bg-[#a3e635]/70 hover:bg-[#a3e635]/80",
-    "bg-[#a3e635] hover:bg-[#bef264]",
+    "bg-q-lime/20 hover:bg-q-lime/30",
+    "bg-q-lime/40 hover:bg-q-lime/55",
+    "bg-q-lime/70 hover:bg-q-lime/80",
+    "bg-q-lime hover:bg-q-lime-hi",
   ],
   slate: [
     "bg-white/[0.04] hover:bg-white/[0.09]",
@@ -129,7 +129,7 @@ export function ReviewHeatmapCard({
     <section
       aria-label="Activity heatmap"
       data-testid="activity-heatmap"
-      className="cq-card mt-6 rounded-2xl border border-white/[0.08] bg-[#111318] p-4 sm:p-7"
+      className="cq-card mt-6 rounded-2xl border border-white/[0.08] bg-surface p-4 sm:p-7"
     >
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="min-w-0">
@@ -147,7 +147,7 @@ export function ReviewHeatmapCard({
 
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-neutral-200 tabular-nums">
-            <Flame className="h-3.5 w-3.5 text-[#ffb800]" />
+            <Flame className="h-3.5 w-3.5 text-now" />
             <span>
               Streak: <strong>{loading ? "–" : `${heatmap.currentStreak}d`}</strong>
             </span>
@@ -158,7 +158,7 @@ export function ReviewHeatmapCard({
 
           {!loading && heatmap.bestWeekday && (
             <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-neutral-300 tabular-nums">
-              <Sparkles className="h-3.5 w-3.5 text-[#00f0ff]" />
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
               <span>
                 Peak rhythm: <strong>{heatmap.bestWeekday.label}</strong> (
                 {heatmap.bestWeekday.avgHours}h avg)
@@ -225,7 +225,7 @@ export function ReviewHeatmapCard({
                         onClick={() => setSelectedDateKey(cell.dateKey)}
                         className={`h-3.5 coarse:h-6 min-w-[12px] rounded-[3px] ${shades[cell.level]} ${
                           isSelected
-                            ? "ring-1 ring-white ring-offset-1 ring-offset-[#111318]"
+                            ? "ring-1 ring-white ring-offset-1 ring-offset-surface"
                             : cell.isToday
                             ? "ring-1 ring-white/40"
                             : ""

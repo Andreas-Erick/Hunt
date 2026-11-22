@@ -1132,7 +1132,7 @@ describe("QuestMatrixPanel", () => {
         "Delete quest? 2 open tasks move to Other work"
       );
       expect(del).toHaveTextContent("Delete quest? 2 open tasks move to Other work");
-      expect(del).toHaveClass("data-[state=armed]:bg-[#ff2a5f]/20");
+      expect(del).toHaveClass("data-[state=armed]:bg-danger/20");
       // deleteQuest writes its tombstone synchronously; none means no delete started.
       expect(window.localStorage.getItem(TOMBSTONE_KEY)).toBeNull();
 

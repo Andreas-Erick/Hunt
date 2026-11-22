@@ -12,7 +12,7 @@ export const COMPLETION_HIGHLIGHT_MS = 650;
  * PageNotice it can scroll beneath.
  */
 export const SETTLING_COMPLETED_CARD_CLASS =
-  "z-10 border-[#00ff9d]/35 bg-[#11141b] shadow-[0_12px_32px_-12px_rgba(0,255,157,0.32)]";
+  "z-10 border-success/35 bg-surface shadow-lift-success";
 
 /**
  * Fill of a completed card's dimmed (opacity-65) Reopen dot. The slate "Other"
@@ -56,7 +56,7 @@ function prefersReducedMotion(): boolean {
 export function captureTaskCompletionScene(
   containerEl: HTMLElement | null,
   taskId: string,
-  accentHex: string
+  accentCss: string
 ): TaskCompletionScene | null {
   if (
     !containerEl ||
@@ -127,10 +127,10 @@ export function captureTaskCompletionScene(
     'button[aria-label="Mark complete"]'
   );
   if (checkBtn) {
-    checkBtn.style.backgroundColor = accentHex;
+    checkBtn.style.backgroundColor = accentCss;
     checkBtn.style.borderColor = "transparent";
-    checkBtn.style.color = "#05070a";
-    checkBtn.style.boxShadow = `0 0 14px -2px ${accentHex}`;
+    checkBtn.style.color = "rgb(var(--c-void))";
+    checkBtn.style.boxShadow = `0 0 14px -2px ${accentCss}`;
     checkBtn.innerHTML =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><polyline data-ghost-check="true" points="20 6 9 17 4 12" style="stroke-dasharray:24;stroke-dashoffset:0;"/></svg>';
   }
@@ -139,9 +139,9 @@ export function captureTaskCompletionScene(
     ghost.querySelector<HTMLElement>("[data-task-title]") ??
     ghost.querySelector<HTMLElement>("button");
   if (titleEl) {
-    titleEl.style.color = "#8b93a4";
+    titleEl.style.color = "rgb(var(--c-muted))";
     titleEl.style.textDecoration = "line-through";
-    titleEl.style.textDecorationColor = "rgba(163, 171, 188, 0.85)";
+    titleEl.style.textDecorationColor = "rgb(var(--c-neutral-400) / 0.85)";
     titleEl.style.textDecorationThickness = "1.5px";
   }
 

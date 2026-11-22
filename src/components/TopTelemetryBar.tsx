@@ -9,12 +9,21 @@ import {
   VolumeX,
   Radio,
   Smartphone,
+  Sunrise,
   TriangleAlert,
+  Zap,
 } from "lucide-react";
 import { formatChronoMMSS } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
+import {
+  LOOK_LABEL,
+  applyLook,
+  readLook,
+  saveLook,
+  type Look,
+} from "@/lib/lookPreference";
 import {
   DesktopWindowControls,
   useIsDesktopLauncher,
@@ -80,7 +89,7 @@ function ActiveSessionPill() {
       type="button"
       onClick={() => setActiveView("focus")}
       title={`Open Focus: ${activeTask.title}`}
-      className="flex items-center gap-2 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-[#00ff9d] hover:bg-[#00ff9d]/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+      className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-success hover:bg-success/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
     >
       <Radio className="h-3.5 w-3.5 animate-pulse" />
       {/* Title only on wide headers, so the nav tabs keep their room at laptop widths. */}
@@ -120,15 +129,51 @@ function PhoneSyncButton({ onOpen }: { onOpen: () => void }) {
       <span
         className={`h-2 w-2 rounded-full transition-colors ${
           phone.live
-            ? "bg-[#00ff9d] shadow-[0_0_6px_#00ff9d]"
+            ? "bg-success shadow-dot-success"
             : "bg-neutral-500"
         }`}
       />
-      <Smartphone className="h-4 w-4 text-[#00f0ff]" />
+      <Smartphone className="h-4 w-4 text-accent" />
       <span className="hidden xl:inline">Phone</span>
       {server.state === "error" && (
-        <TriangleAlert className="h-3.5 w-3.5 text-[#ffb800]" />
+        <TriangleAlert className="h-3.5 w-3.5 text-warning" />
       )}
+    </button>
+  );
+}
+
+/**
+ * Switches this device between the Neon and Dawn looks (ADR-0005). The icon
+ * and label name the look you are on; the accessible name says what a press does.
+ */
+function LookSwitch() {
+  const [look, setLook] = useState<Look>("neon");
+
+  useEffect(() => {
+    const saved = readLook();
+    // Re-applies so theme-color matches; the head script already set data-theme.
+    applyLook(saved);
+    setLook(saved);
+  }, []);
+
+  const next: Look = look === "neon" ? "dawn" : "neon";
+  const Icon = look === "dawn" ? Sunrise : Zap;
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        hudAudio.playClick();
+        saveLook(next);
+        setLook(next);
+      }}
+      title={`Look: ${LOOK_LABEL[look]}. Switch to ${LOOK_LABEL[next]}`}
+      aria-label={`Switch to the ${LOOK_LABEL[next]} look`}
+      data-testid="look-switch"
+      className="inline-flex items-center justify-center gap-2 coarse:min-h-11 coarse:min-w-11 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-xs text-neutral-300 hover:border-white/15 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+    >
+      <Icon className="h-4 w-4 text-accent" aria-hidden="true" />
+      <span className="hidden xl:inline">{LOOK_LABEL[look]}</span>
     </button>
   );
 }
@@ -175,7 +220,7 @@ export function TopTelemetryBar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0b0c0e]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-base/90 backdrop-blur-md">
         <div className="top-telemetry-shell mx-auto flex h-16 sm:h-20 max-w-[1440px] items-center justify-between gap-2 sm:gap-3 px-3.5 sm:px-6 lg:px-12 xl:px-16">
           {/* Left: HUNT Logo + App Version + Clean Navigation Tabs */}
           <div className="flex min-w-0 items-center gap-2.5 sm:gap-4 lg:gap-7">
@@ -205,7 +250,7 @@ export function TopTelemetryBar() {
 
             <nav
               ref={navRef}
-              className="scroll-shadow-x -my-1 flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar px-1 py-1 [--scroll-shadow-cover:#0b0c0e] [--scroll-shadow-cover-clear:rgba(11,12,14,0)]"
+              className="scroll-shadow-x -my-1 flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar px-1 py-1 [--scroll-shadow-cover:rgb(var(--c-base))] [--scroll-shadow-cover-clear:rgb(var(--c-base)_/_0)]"
             >
               {NAV_ITEMS.map((item) => {
                 const isActive =
@@ -241,6 +286,8 @@ export function TopTelemetryBar() {
 
             {/* Mobile & Cross-Device Sync Button */}
             <PhoneSyncButton onOpen={() => setSyncModalOpen(true)} />
+
+            <LookSwitch />
 
             <button
               type="button"

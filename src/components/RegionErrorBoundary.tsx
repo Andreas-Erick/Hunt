@@ -94,7 +94,7 @@ export class RegionErrorBoundary extends React.Component<
           role="alert"
           className={`mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] px-4 py-3 text-sm text-hud-muted ${
             this.props.onDismiss
-              ? "bg-[#111317] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+              ? "bg-surface shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
               : "bg-white/[0.02]"
           }`}
         >

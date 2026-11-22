@@ -79,7 +79,7 @@ export function TaskComposer({
   };
 
   return (
-    <div className="rounded-2xl border border-dashed border-white/[0.15] bg-[#111318]/60 p-4 transition-colors focus-within:border-white/40">
+    <div className="rounded-2xl border border-dashed border-white/[0.15] bg-surface/60 p-4 transition-colors focus-within:border-white/40">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="text"

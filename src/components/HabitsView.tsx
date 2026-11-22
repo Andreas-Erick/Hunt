@@ -275,7 +275,7 @@ export function HabitsView() {
       {/* Dashed Quick-Add Habit Box */}
       <form
         onSubmit={handleAdd}
-        className="mb-8 rounded-2xl border border-dashed border-white/[0.15] bg-[#111318]/60 p-4 transition-colors focus-within:border-white/40"
+        className="mb-8 rounded-2xl border border-dashed border-white/[0.15] bg-surface/60 p-4 transition-colors focus-within:border-white/40"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
@@ -290,7 +290,7 @@ export function HabitsView() {
           <button
             type="submit"
             disabled={!newTitle.trim()}
-            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#00f0ff] px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Habit</span>
@@ -368,7 +368,7 @@ export function HabitsView() {
           {[0, 1].map((slot) => (
             <div
               key={slot}
-              className="rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 pl-6"
+              className="rounded-2xl border border-white/[0.06] bg-surface/70 p-5 pl-6"
             >
               <div className="h-5 w-1/2 animate-pulse rounded-lg bg-white/[0.06]" />
               <div className="mt-3.5 h-4 w-1/3 animate-pulse rounded-lg bg-white/[0.04]" />
@@ -397,7 +397,7 @@ export function HabitsView() {
                 key={habit.id}
                 data-testid="habit-row"
                 data-habit-id={habit.id}
-                className="cq-card group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111318] transition-colors hover:border-white/[0.15]"
+                className="cq-card group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface transition-colors hover:border-white/[0.15]"
               >
                 <div
                   className={`absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full ${style.bg} ${
@@ -420,7 +420,7 @@ export function HabitsView() {
                         className={`relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[transform,opacity,background-color,border-color,color] duration-150 ease-out active:scale-90 active:opacity-80 ${
                           doneToday
                             ? `${style.bg} border-transparent text-black`
-                            : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                            : "border-white/40 text-transparent hover:border-success hover:text-success"
                         }`}
                       >
                         {doneToday ? (
@@ -494,7 +494,7 @@ export function HabitsView() {
                         label={`Delete habit ${habit.title}`}
                         confirmLabel="Delete habit?"
                         onConfirm={() => deleteHabit(habit.id)}
-                        className="ml-1 flex h-9 min-w-9 coarse:h-11 coarse:min-w-11 items-center justify-center rounded-lg px-2 text-hud-muted hover:bg-white/[0.05] hover:text-[#ff2a5f] data-[state=armed]:opacity-100"
+                        className="ml-1 flex h-9 min-w-9 coarse:h-11 coarse:min-w-11 items-center justify-center rounded-lg px-2 text-hud-muted hover:bg-white/[0.05] hover:text-danger data-[state=armed]:opacity-100"
                       >
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
@@ -566,7 +566,7 @@ export function HabitsView() {
                         cancelEdit();
                       }
                     }}
-                    className="border-t border-white/[0.06] bg-[#0c0e12] px-6 py-4 space-y-3"
+                    className="border-t border-white/[0.06] bg-sunken px-6 py-4 space-y-3"
                   >
                     <div>
                       <label
@@ -582,7 +582,7 @@ export function HabitsView() {
                         autoFocus
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none"
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
                       />
                     </div>
 
@@ -599,7 +599,7 @@ export function HabitsView() {
                         value={editNotes}
                         onChange={(e) => setEditNotes(e.target.value)}
                         placeholder="Optional reminder copied to each day's task..."
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-[#00f0ff] focus:outline-none"
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent focus:outline-none"
                       />
                     </div>
 

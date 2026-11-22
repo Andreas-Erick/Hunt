@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import React from "react";
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -31,10 +33,6 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -60,11 +58,11 @@ describe("accentStyle()", () => {
     ["toString", "toString"],
     ["hasOwnProperty", "hasOwnProperty"],
     ["a number", 5],
-    ["an object", { hex: "#fff" }],
+    ["an object", { cssVar: "--q-cyan" }],
   ])("falls back to slate for %s", (_name, key) => {
     const style = accentStyle(key);
     expect(style).toBe(QUEST_ACCENT_STYLES.slate);
-    expect(style.hex).toBe("#64748b");
+    expect(style.cssVar).toBe("--q-slate");
   });
 });
 
@@ -565,13 +563,60 @@ describe("tailwind.config.ts", () => {
     return (hi + 0.05) / (lo + 0.05);
   }
 
-  function hudColor(name: string): string {
-    const colors: unknown = tailwindConfig.theme?.extend?.colors;
-    const hud = isRecord(colors) ? colors.hud : undefined;
-    const value = isRecord(hud) ? hud[name] : undefined;
-    if (typeof value !== "string") throw new Error(`hud.${name} is not defined`);
-    return value;
+  const GLOBALS_CSS = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
+
+  /** Token values ("R G B" channels) declared for one look in globals.css, as #rrggbb. */
+  function lookTokens(look: "neon" | "dawn"): Record<string, string> {
+    const at = GLOBALS_CSS.indexOf(`:root[data-theme="${look}"] {`);
+    if (at < 0) throw new Error(`no ${look} token block in globals.css`);
+    const block = GLOBALS_CSS.slice(at, GLOBALS_CSS.indexOf("}", at));
+    const tokens: Record<string, string> = {};
+    for (const m of block.matchAll(/--([a-z0-9-]+):\s*(\d+) (\d+) (\d+);/g)) {
+      tokens[m[1]] = "#" + [m[2], m[3], m[4]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
+    }
+    return tokens;
   }
+
+  const GROUNDS = ["c-void", "c-base", "c-sunken", "c-surface", "c-raised"];
+
+  it("defines every Neon token again for Dawn", () => {
+    const neon = Object.keys(lookTokens("neon")).sort();
+    expect(Object.keys(lookTokens("dawn")).sort()).toEqual(neon);
+  });
+
+  it("keeps Neon's muted text and quest colours at their original values", () => {
+    const neon = lookTokens("neon");
+    expect(neon["c-muted"]).toBe("#8c96a8");
+    expect(neon["q-cyan"]).toBe("#00f0ff");
+    expect(neon["q-emerald"]).toBe("#00ff9d");
+    expect(neon["q-amber"]).toBe("#ffb800");
+    expect(neon["c-surface"]).toBe("#111318");
+  });
+
+  it.each(["neon", "dawn"] as const)("muted text reads at >= 4.5:1 on every %s ground", (look) => {
+    const t = lookTokens(look);
+    for (const ground of GROUNDS) {
+      const ratio = contrastRatio(t["c-muted"], t[ground]);
+      expect(ratio, `${look}: muted on ${ground} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each(["neon", "dawn"] as const)("all 8 quest colours read at >= 4.5:1 on every %s ground", (look) => {
+    const t = lookTokens(look);
+    for (const key of QUEST_ACCENT_KEYS) {
+      expect(QUEST_ACCENT_STYLES[key].cssVar).toBe(`--q-${key}`);
+      for (const ground of GROUNDS) {
+        const ratio = contrastRatio(t[`q-${key}`], t[ground]);
+        expect(ratio, `${look}: ${key} on ${ground} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it.each(["neon", "dawn"] as const)("dark text on the %s accent reads at >= 4.5:1", (look) => {
+    const t = lookTokens(look);
+    const ratio = contrastRatio(t["c-black"], t["c-accent"]);
+    expect(ratio, `${look}: black on accent = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+  });
 
   function contentGlobs(): string[] {
     const content = tailwindConfig.content;
@@ -583,26 +628,6 @@ describe("tailwind.config.ts", () => {
     expect(contrastRatio("#ffffff", "#000000")).toBeCloseTo(21, 5);
     expect(contrastRatio("#777777", "#ffffff")).toBeCloseTo(4.48, 2);
   });
-
-  it.each(["#0b0c0e", "#111318", "#0d0f14", "#14171f"])(
-    "hud.muted reads at >= 4.5:1 on %s",
-    (surface) => {
-      const ratio = contrastRatio(hudColor("muted"), surface);
-      expect(ratio, `${hudColor("muted")} on ${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
-    }
-  );
-
-  it.each(["#0b0c0e", "#111318", "#0d0f14", "#14171f", "#05070a"])(
-    "all 8 quest accent colours read at >= 4.5:1 WCAG AA on %s",
-    (surface) => {
-      for (const key of QUEST_ACCENT_KEYS) {
-        const hex = QUEST_ACCENT_STYLES[key].hex;
-        const ratio = contrastRatio(hex, surface);
-        expect(ratio, `${key} (${hex}) on ${surface} = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
-        expect(hudColor(key)).toBe(hex);
-      }
-    }
-  );
 
   it("includes a content glob covering src/lib", () => {
     expect(contentGlobs()).toContain("./src/lib/**/*.{js,ts,jsx,tsx,mdx}");
@@ -618,13 +643,13 @@ describe("tailwind.config.ts", () => {
 
     for (const selector of [
       ".bg-slate-500",
-      ".border-\\[\\#00f0ff\\]\\/40",
-      ".border-\\[\\#00ff9d\\]\\/40",
-      ".border-\\[\\#b388ff\\]\\/40",
-      ".border-\\[\\#ff6b9d\\]\\/40",
-      ".border-\\[\\#38bdf8\\]\\/40",
-      ".border-\\[\\#ff8547\\]\\/40",
-      ".border-\\[\\#a3e635\\]\\/40",
+      ".border-q-cyan\\/40",
+      ".border-q-emerald\\/40",
+      ".border-q-purple\\/40",
+      ".border-q-rose\\/40",
+      ".border-q-sky\\/40",
+      ".border-q-orange\\/40",
+      ".border-q-lime\\/40",
       ".bg-neutral-500",
     ]) {
       expect(result.css).toContain(`${selector} {`);

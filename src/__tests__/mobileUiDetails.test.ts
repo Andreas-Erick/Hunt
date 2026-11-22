@@ -85,9 +85,10 @@ function block(css: string, head: string): string {
 }
 
 type Rgb = [number, number, number];
-function hex(text: string): Rgb {
-  const n = parseInt(text.trim().replace("#", ""), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+/** A look token written as "R G B" channels (ADR-0005). */
+function channels(text: string): Rgb {
+  const [r, g, b] = text.trim().split(/\s+/).map(Number);
+  return [r, g, b];
 }
 function luminance(c: Rgb): number {
   const lin = (v: number) => {
@@ -232,9 +233,11 @@ describe("complete-ring contrast", () => {
   it("the resting ring keeps >= 3:1 against the card surface", () => {
     const p = load({ seedState: baseState() });
     const css = cssText(p);
-    const m = /border:\s*[\d.]+px solid rgba\(255, 255, 255, ([\d.]+)\)/.exec(block(css, ".task-check-ring"));
+    // The ring is the ink token at partial opacity (ADR-0005); Neon's ink is white.
+    const m = /border:\s*[\d.]+px solid rgb\(var\(--c-ink\) \/ ([\d.]+)\)/.exec(block(css, ".task-check-ring"));
     const alpha = Number(m?.[1]);
-    const surface = hex(p.getComputedStyle(p.document.documentElement).getPropertyValue("--surface"));
+    // --surface is rgb(var(--p-1)); read the Neon channels behind it.
+    const surface = channels(p.getComputedStyle(p.document.documentElement).getPropertyValue("--p-1"));
     const mix = (i: 0 | 1 | 2) => 255 * alpha + surface[i] * (1 - alpha);
     const ring: Rgb = [mix(0), mix(1), mix(2)];
     expect(alpha).toBeGreaterThan(0);

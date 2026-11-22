@@ -67,10 +67,10 @@ describe("Database & Formatting Utilities (db.ts)", () => {
 
   describe("QUEST_ACCENT_STYLES", () => {
     it("defines styles for cyan, emerald, amber, and slate", () => {
-      expect(QUEST_ACCENT_STYLES.cyan.hex).toBe("#00f0ff");
-      expect(QUEST_ACCENT_STYLES.emerald.hex).toBe("#00ff9d");
-      expect(QUEST_ACCENT_STYLES.amber.hex).toBe("#ffb800");
-      expect(QUEST_ACCENT_STYLES.slate.hex).toBe("#64748b");
+      expect(QUEST_ACCENT_STYLES.cyan.cssVar).toBe("--q-cyan");
+      expect(QUEST_ACCENT_STYLES.emerald.cssVar).toBe("--q-emerald");
+      expect(QUEST_ACCENT_STYLES.amber.cssVar).toBe("--q-amber");
+      expect(QUEST_ACCENT_STYLES.slate.cssVar).toBe("--q-slate");
     });
   });
 

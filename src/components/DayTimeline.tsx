@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { accentStyle } from "@/lib/questAccents";
+import { accentColor, accentStyle } from "@/lib/questAccents";
 import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import { layoutTimelineBlocks } from "@/lib/reviewAnalytics";
 
@@ -79,7 +79,7 @@ export function DayTimeline({
         </span>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#111318] p-5">
+      <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface p-5">
         <div
           className="relative"
           style={{
@@ -158,14 +158,13 @@ export function DayTimeline({
                   height: `${heightPx}px`,
                   left: leftExpr,
                   width: widthExpr,
-                  backgroundImage: `repeating-linear-gradient(-45deg, ${style.hex}18, ${style.hex}18 6px, ${style.hex}08 6px, ${style.hex}08 12px)`,
-                  borderColor: `${style.hex}45`,
+                  ["--q" as string]: `var(${style.cssVar})`,
                 }}
-                className="absolute overflow-hidden rounded-xl border px-3 py-2"
+                className="timeline-block absolute overflow-hidden rounded-xl border px-3 py-2"
               >
                 <div
                   className="bottom-0 left-0 top-0 w-1 absolute"
-                  style={{ backgroundColor: style.hex }}
+                  style={{ backgroundColor: accentColor(style) }}
                 />
                 {/* Two title lines once the block also fits its time row
                     (py-2 + 2 x 16px + ~17px time row); touch has no tooltip. */}
@@ -222,8 +221,8 @@ export function DayTimeline({
                     height: `${heightPx}px`,
                     left: leftExpr,
                     width: widthExpr,
-                    backgroundColor: `${style.hex}1a`,
-                    borderColor: `${style.hex}80`,
+                    backgroundColor: accentColor(style, 0.1),
+                    borderColor: accentColor(style, 0.5),
                   }}
                   className="absolute overflow-hidden rounded-xl border px-3 py-2"
                 >
@@ -247,8 +246,8 @@ export function DayTimeline({
                 }}
                 className="pointer-events-none absolute left-12 right-0 flex items-center"
               >
-                <span className="h-2.5 w-2.5 -translate-x-1 rounded-full bg-[#ffb800] shadow-[0_0_8px_#ffb800]" />
-                <div className="h-[1.5px] flex-1 bg-[#ffb800]/80" />
+                <span className="h-2.5 w-2.5 -translate-x-1 rounded-full bg-now shadow-dot-now" />
+                <div className="h-[1.5px] flex-1 bg-now/80" />
               </div>
             )}
         </div>

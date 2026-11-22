@@ -24,7 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { QUEST_ACCENT_KEYS, type Quest, type QuestAccent, type Task } from "@/lib/domainTypes";
-import { QUEST_ACCENT_STYLES, accentStyle } from "@/lib/questAccents";
+import { QUEST_ACCENT_STYLES, accentColor, accentStyle } from "@/lib/questAccents";
 import { isOpenTask, formatChronoMMSS } from "@/lib/dateUtils";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -287,7 +287,7 @@ const QuestCard = memo(function QuestCard({
       transition={QUEST_CARD_LAYOUT_TRANSITION}
       data-testid="quest-card"
       data-quest-id={quest.id}
-      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7"
+      className="cq-card flex min-w-0 flex-col justify-between rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7"
     >
       <div>
         {/* Top Row: Colored Dot + Quest Title + Complete & Edit Buttons */}
@@ -308,9 +308,9 @@ const QuestCard = memo(function QuestCard({
               confirmLabel={completeQuestConfirmLabel(questTasks.length)}
               armedClassName="text-hud-emerald font-medium"
               onConfirm={() => onCompleteQuest(quest.id)}
-              className="flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-left text-xs text-neutral-300 hover:border-[#00ff9d]/40 hover:bg-[#00ff9d]/10 hover:text-[#00ff9d] data-[state=armed]:border-[#00ff9d]/45 data-[state=armed]:bg-[#00ff9d]/15"
+              className="flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-left text-xs text-neutral-300 hover:border-success/40 hover:bg-success/10 hover:text-success data-[state=armed]:border-success/45 data-[state=armed]:bg-success/15"
             >
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#00ff9d]" />
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
               <span>Complete</span>
             </ConfirmDeleteButton>
 
@@ -380,7 +380,7 @@ const QuestCard = memo(function QuestCard({
             <div
               key={t.id}
               data-task-id={t.id}
-              className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] px-4 py-3 text-sm"
+              className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-raised px-4 py-3 text-sm"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
@@ -393,7 +393,7 @@ const QuestCard = memo(function QuestCard({
                   }}
                   title="Mark complete"
                   aria-label="Mark complete"
-                  className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 before:content-[''] hover:border-[#00ff9d] hover:text-[#00ff9d] transition-colors duration-150 ease-out active:opacity-80"
+                  className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 before:content-[''] hover:border-success hover:text-success transition-colors duration-150 ease-out active:opacity-80"
                 >
                   <Check className="h-2.5 w-2.5" />
                 </button>
@@ -681,7 +681,7 @@ export function QuestMatrixPanel() {
     const scene = captureTaskCompletionScene(
       questFlowRefs.current[questId] ?? null,
       taskId,
-      accentStyle(accent).hex
+      accentColor(accentStyle(accent))
     );
     pendingTaskSceneRef.current = scene ? { questId, scene } : null;
     hudAudio.playComplete();
@@ -800,7 +800,7 @@ export function QuestMatrixPanel() {
       onKeyDown={(e) => {
         if (e.key === "Escape") cancelEdit();
       }}
-      className="mt-5 rounded-xl border border-white/10 bg-[#0b0c0e] p-4 space-y-3.5"
+      className="mt-5 rounded-xl border border-white/10 bg-base p-4 space-y-3.5"
     >
       <div>
         <label
@@ -817,7 +817,7 @@ export function QuestMatrixPanel() {
           pattern={NON_BLANK_PATTERN}
           value={editTitle}
           onChange={(e) => setEditTitle(e.target.value)}
-          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-[#00f0ff] focus:outline-none"
+          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
         />
       </div>
       <div>
@@ -832,7 +832,7 @@ export function QuestMatrixPanel() {
           type="text"
           value={editDesc}
           onChange={(e) => setEditDesc(e.target.value)}
-          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 focus:border-[#00f0ff] focus:outline-none"
+          className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 focus:border-accent focus:outline-none"
         />
       </div>
 
@@ -851,7 +851,7 @@ export function QuestMatrixPanel() {
           label="Delete quest"
           confirmLabel={deleteQuestConfirmLabel(questTasks.length)}
           onConfirm={() => handleDeleteQuest(quest.id)}
-          className="mr-auto flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1 rounded-lg border border-[#ff2a5f]/30 bg-[#ff2a5f]/10 px-3 py-1.5 text-left text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/20 data-[state=armed]:bg-[#ff2a5f]/20"
+          className="mr-auto flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-left text-xs text-danger hover:bg-danger/20 data-[state=armed]:bg-danger/20"
         >
           <Trash2 className="h-3.5 w-3.5 shrink-0" />
           <span>Delete</span>
@@ -917,7 +917,7 @@ export function QuestMatrixPanel() {
               // style, so only "Create Quest" reads as the primary action.
               creatingNew
                 ? "border border-white/15 bg-white/[0.04] text-neutral-300 hover:border-white/25 hover:text-white"
-                : "border border-transparent bg-[#00f0ff] text-black hover:bg-white"
+                : "border border-transparent bg-accent text-black hover:bg-white"
             }`}
           >
             <Plus className="h-4 w-4" />
@@ -933,7 +933,7 @@ export function QuestMatrixPanel() {
           onKeyDown={(e) => {
             if (e.key === "Escape") cancelCreate();
           }}
-          className="cq-card mb-8 rounded-2xl border border-[#00f0ff]/30 bg-[#111318] p-5 sm:p-6 space-y-4"
+          className="cq-card mb-8 rounded-2xl border border-accent/30 bg-surface p-5 sm:p-6 space-y-4"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-base font-medium text-white">
@@ -964,7 +964,7 @@ export function QuestMatrixPanel() {
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="e.g. Launch my idea"
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-white focus:border-[#00f0ff] focus:outline-none"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-white focus:border-accent focus:outline-none"
               />
             </div>
 
@@ -984,7 +984,7 @@ export function QuestMatrixPanel() {
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 placeholder="What moves this quest forward?"
-                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-neutral-200 placeholder:text-hud-muted focus:border-[#00f0ff] focus:outline-none"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-sm text-neutral-200 placeholder:text-hud-muted focus:border-accent focus:outline-none"
               />
             </div>
           </div>
@@ -1003,7 +1003,7 @@ export function QuestMatrixPanel() {
             <button
               type="submit"
               disabled={!newTitle.trim()}
-              className="rounded-xl bg-[#00f0ff] px-5 py-2 text-xs font-semibold text-black hover:bg-white transition-[background-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
+              className="rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-black hover:bg-white transition-[background-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               Create Quest
             </button>
@@ -1023,7 +1023,7 @@ export function QuestMatrixPanel() {
           {[0, 1, 2].map((slot) => (
             <div
               key={slot}
-              className="flex min-h-[320px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 sm:p-7"
+              className="flex min-h-[320px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface/70 p-5 sm:p-7"
             >
               <div className="space-y-4">
                 <div className="h-6 w-2/3 animate-pulse rounded-lg bg-white/[0.06]" />
@@ -1096,9 +1096,9 @@ export function QuestMatrixPanel() {
                   key={quest.id}
                   data-testid="completed-quest-card"
                   data-quest-id={quest.id}
-                  className={`cq-card flex min-w-0 flex-col justify-between rounded-2xl border bg-[#0e1015]/80 p-5 sm:p-6 transition-[border-color,box-shadow] duration-500 ease-out ${
+                  className={`cq-card flex min-w-0 flex-col justify-between rounded-2xl border bg-sunken/80 p-5 sm:p-6 transition-[border-color,box-shadow] duration-500 ease-out ${
                     isJustFinished
-                      ? "border-[#00ff9d]/40 shadow-[0_0_26px_-10px_rgba(0,255,157,0.35)]"
+                      ? "border-success/40 shadow-card-success"
                       : "border-white/[0.06]"
                   }`}
                 >
@@ -1113,7 +1113,7 @@ export function QuestMatrixPanel() {
                         </h3>
                       </div>
 
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-2.5 py-0.5 text-[11px] font-medium text-[#00ff9d]">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-0.5 text-[11px] font-medium text-success">
                         <Check className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />
                         <span>Completed</span>
                       </span>
@@ -1150,7 +1150,7 @@ export function QuestMatrixPanel() {
                         label={`Delete quest ${quest.title}`}
                         confirmLabel="Delete quest?"
                         onConfirm={() => handleDeleteQuest(quest.id)}
-                        className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg border border-[#ff2a5f]/25 bg-[#ff2a5f]/[0.06] px-3 py-1.5 text-xs text-[#ff2a5f] hover:bg-[#ff2a5f]/15 data-[state=armed]:bg-[#ff2a5f]/20"
+                        className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg border border-danger/25 bg-danger/[0.06] px-3 py-1.5 text-xs text-danger hover:bg-danger/15 data-[state=armed]:bg-danger/20"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>Delete</span>

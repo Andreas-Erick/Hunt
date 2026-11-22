@@ -34,12 +34,13 @@
     alt="Android: habits" width="48%" />
 </p>
 
+![Hunt desktop: weekly review](docs/screenshots/desktop-review.png)
+
 <details>
 <summary><b>More screenshots</b></summary>
 
 ![Focus mode](docs/screenshots/desktop-focus.png)
 ![Habits](docs/screenshots/desktop-habits.png)
-![Weekly review](docs/screenshots/desktop-review.png)
 
 <img src="docs/screenshots/mobile-review.png"
   alt="Android: weekly review" width="48%" />
@@ -57,6 +58,21 @@ The desktop app keeps its data in IndexedDB. The phone keeps
 an atomic JSON file through its Android shell. When both are
 on the same network (or Tailscale), they converge through a
 small sync server that runs inside the desktop app.
+
+Two looks ship with it: **Neon** (the original) and **Dawn**
+(blue-hour colours, a serif clock and a sun that crosses the
+Focus screen once an hour). Each device remembers its own
+choice. On the desktop the switch is in the top bar; on the
+phone it is in the Laptop sync sheet.
+
+![Hunt desktop in the Dawn look](docs/screenshots/desktop-home-dawn.png)
+
+<p align="center">
+  <img src="docs/screenshots/desktop-focus-dawn.png"
+    alt="Dawn: Focus with the sun arc" width="62%" />
+  <img src="docs/screenshots/mobile-today-dawn.png"
+    alt="Android in the Dawn look" width="34%" />
+</p>
 
 ## Goals
 
@@ -135,6 +151,7 @@ step.
 | [0002](docs/adr/0002-laptop-as-sync-hub.md) | Laptop is the hub | No sync while it's off |
 | [0003](docs/adr/0003-single-file-phone-app.md) | One-file phone app | Types stop at HuntCore |
 | [0004](docs/adr/0004-direct-apk-build.md) | No-Gradle signed APK | Custom build script |
+| [0005](docs/adr/0005-two-looks.md) | Two looks, one token set | Looks aren't synced |
 
 ## Quickstart
 
