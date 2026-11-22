@@ -59,3 +59,6 @@ pinned key is present.
 - **On a device**: `scripts/android-smoke.sh` boots a headless
   emulator, installs the APK, and takes screenshots, taps and
   long-presses. Look at the screenshot before claiming a UI works.
+  It drives only an emulator (`ANDROID_SERIAL=emulator-*`, else the
+  first one adb lists), never a connected phone, and finds a JDK for
+  avdmanager like `build-apk.sh` (JAVA_HOME, else Studio's JBR).
