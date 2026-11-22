@@ -433,7 +433,7 @@
     }
     .dot-indicator.online {
       background: var(--emerald);
-      box-shadow: 0 0 8px var(--emerald);
+      box-shadow: 0 0 calc(8px * var(--glow)) var(--emerald);
     }
     .dot-indicator.offline {
       background: var(--neutral-dot);
@@ -547,11 +547,12 @@
     .chip-strip {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 8px;
       overflow-x: auto;
-      /* vertical room for the pills' 48 px touch targets (a scroller clips them); same visual spacing */
-      padding: 9px 0;
-      margin: -9px 0 11px;
+      /* room for the pills' 48 px touch targets and the end pills' focus rings (a scroller clips
+         them); the negative margin keeps the same visual spacing */
+      padding: 9px 4px;
+      margin: -9px -4px 11px;
       scrollbar-width: none;
       overscroll-behavior-x: contain;
     }
@@ -1752,14 +1753,22 @@
       font-family: var(--font-mono);
       color: var(--cyan);
     }
+    /* Opens by animating its row height, so Sync Now slides instead of jumping. */
     .sync-hint {
+      display: grid;
+      grid-template-rows: 0fr;
       font-size: 12px;
       color: var(--amber);
-      margin: -4px 0 10px;
-      min-height: 0;
+      margin: 0;
+      transition: grid-template-rows .18s ease-out, margin .18s ease-out;
     }
-    .sync-hint:empty {
-      display: none;
+    .sync-hint > span {
+      min-height: 0;
+      overflow: hidden;
+    }
+    .sync-hint.has-text {
+      grid-template-rows: 1fr;
+      margin: -4px 0 10px;
     }
     .sync-now-btn {
       width: 100%;
@@ -6917,7 +6926,7 @@ var HuntCore = (() => {
             <button type="button" class="paste-link-btn hit-target pressable" onclick="pastePairingLinkFromClipboard()">Paste link</button>
           </div>
           <input id="modalLaptopUrl" class="sheet-input mono-input" type="url" inputmode="url" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="${escapeHtml(getLaptopBaseUrl())}" placeholder="Pairing link or http://&lt;laptop-ip&gt;:3000" oninput="syncSheetUi.urlDirty=true;setSyncHint('')" onchange="applyLaptopUrlInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();manualSyncFromSheet();}" />
-          <div id="syncUrlHint" class="sync-hint" role="alert"></div>
+          <div id="syncUrlHint" class="sync-hint" role="alert"><span></span></div>
 
           <button id="syncNowBtn" class="sync-now-btn pressable" onclick="manualSyncFromSheet()"></button>
           <div id="syncResultLine" class="sync-result" aria-live="polite"></div>
@@ -6954,7 +6963,14 @@ var HuntCore = (() => {
 
     function setSyncHint(text) {
       syncSheetUi.hint = text || "";
-      setTextIfChanged(document.getElementById("syncUrlHint"), syncSheetUi.hint);
+      renderSyncHint();
+    }
+
+    function renderSyncHint() {
+      const el = document.getElementById("syncUrlHint");
+      if (!el) return;
+      setTextIfChanged(el.firstElementChild, syncSheetUi.hint);
+      el.classList.toggle("has-text", !!syncSheetUi.hint);
     }
 
     function nextTryText() {
@@ -7085,7 +7101,7 @@ var HuntCore = (() => {
       const input = document.getElementById("modalLaptopUrl");
       const url = getLaptopBaseUrl();
       if (input && !syncSheetUi.urlDirty && document.activeElement !== input && input.value !== url) input.value = url;
-      setTextIfChanged(document.getElementById("syncUrlHint"), syncSheetUi.hint);
+      renderSyncHint();
       const btn = document.getElementById("syncNowBtn");
       const running = !!manualSyncPromise;
       if (btn) {
@@ -7223,7 +7239,7 @@ var HuntCore = (() => {
             </button>
           </div>
 
-          <div class="sheet-actions">
+          <div class="sheet-actions single">
             <button class="pressable" onclick="saveNewHabit()" style="width:100%;height:var(--touch-min);border-radius:14px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
               + Add Daily Habit
             </button>
@@ -8673,10 +8689,10 @@ var HuntCore = (() => {
                   </div>
                   ${quest.description ? `<p style="font-size:12px;color:var(--dim);margin:6px 0 0;line-height:1.45;overflow-wrap:anywhere;">${escapeHtml(quest.description)}</p>` : ""}
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-                    <span style="font-family:var(--font-mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;">${formatTelemetryDuration(totalSec, "0.0h")} logged</span>
-                    <div style="display:flex;align-items:center;gap:8px;">
+                    <button class="sync-chip pressable" style="color:var(--dim);border-color:transparent;background:transparent;" onclick="deleteQuestItem(${jsArg(quest.id)})" aria-label="Delete quest ${escapeHtml(quest.title)}">Delete</button>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                      <span style="font-family:var(--font-mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;">${formatTelemetryDuration(totalSec, "0.0h")} logged</span>
                       <button class="sync-chip pressable" onclick="reopenQuestItem(${jsArg(quest.id)})" aria-label="Reopen quest ${escapeHtml(quest.title)}">Reopen</button>
-                      <button class="sync-chip pressable" style="color:var(--rose);border-color:rgb(var(--c-danger) / 0.3);" onclick="deleteQuestItem(${jsArg(quest.id)})" aria-label="Delete quest ${escapeHtml(quest.title)}">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -9137,7 +9153,7 @@ var HuntCore = (() => {
 
           <div class="review-kpi-grid">
             <div class="review-card" style="grid-column:span 2;margin-bottom:0;">
-              <div class="hero-eyebrow">${effectiveScope === "OTHER" ? "Other Work Hours" : selectedQuest ? escapeHtml(selectedQuest.title) + " · Hours" : "Quest Hours"}</div>
+              <div class="hero-eyebrow" style="overflow-wrap:anywhere;">${effectiveScope === "OTHER" ? "Other Work Hours" : selectedQuest ? escapeHtml(selectedQuest.title) + " · Hours" : "Quest Hours"}</div>
               <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;font-variant-numeric:tabular-nums;">
                 <span style="font-family:var(--font-display);font-size:36px;font-weight:700;color:${scopeHex};">${formatTelemetryDuration(scopeSec, "0.0h")}</span>
                 ${effectiveScope !== "OTHER" ? `<span style="font-size:16px;color:var(--dim);">/ ${totalTargetH}h</span>` : ""}
@@ -9174,7 +9190,7 @@ var HuntCore = (() => {
           <div class="review-card">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:16px;">
               <div class="hero-eyebrow" style="margin-bottom:0;">${reviewChartMetric === "tasks" ? "Completed Tasks" : "Focus Hours"} · ${win.horizon === "day" ? "By Block" : win.horizon === "week" ? "Per Day" : win.horizon === "month" ? "By Week" : "Per Month"}</div>
-              <div style="display:flex;gap:6px;">
+              <div style="display:flex;gap:8px;flex-shrink:0;">
                 <button class="sync-chip mini-chip-btn" aria-pressed="${reviewChartMetric === "hours"}" style="${reviewChartMetric === "hours" ? "background:var(--surface-3);color:var(--white);border-color:var(--border-strong);" : "color:var(--muted);"}" onclick="reviewChartMetric='hours';renderApp();">Hours</button>
                 <button class="sync-chip mini-chip-btn" aria-pressed="${reviewChartMetric === "tasks"}" style="${reviewChartMetric === "tasks" ? "background:var(--surface-3);color:var(--white);border-color:var(--border-strong);" : "color:var(--muted);"}" onclick="reviewChartMetric='tasks';renderApp();">Tasks</button>
               </div>
@@ -9597,7 +9613,7 @@ var HuntCore = (() => {
 
       const nowLineHtml = (curFloat >= START_HR && curFloat <= END_HR) ? `
         <div style="position:absolute;left:44px;right:0;top:${(curFloat - START_HR) * HR_PX}px;display:flex;align-items:center;pointer-events:none;">
-          <span style="width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber);"></span>
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 calc(8px * var(--glow)) var(--amber);"></span>
           <div style="flex:1;height:1.5px;background:var(--amber);"></div>
         </div>
       ` : "";

@@ -241,7 +241,8 @@ describe("Home (CommandCenterView)", () => {
     notes.focus();
     fireEvent.keyDown(notes, { key: "Escape" });
 
-    expect(screen.queryByLabelText("Notes for Bravo")).toBeNull();
+    // The drawer collapses (height animation) before it unmounts.
+    await waitFor(() => expect(screen.queryByLabelText("Notes for Bravo")).toBeNull());
     expect(bravoToggle).toHaveFocus();
     expect(bravoToggle).toHaveAttribute("aria-expanded", "false");
   });
@@ -401,7 +402,9 @@ describe("Plan the week (PlanWeekView)", () => {
 
     const selector = screen.getByRole("group", { name: "Quest for new tasks" });
     // 8px between quest chips so a near-miss does not switch quest.
-    expect(selector).toHaveClass("gap-2", "p-1", "rounded-2xl", "sm:rounded-full");
+    // rounded-2xl at every width: the chips wrap to two rows, where a pill shape would cut the corner chips.
+    expect(selector).toHaveClass("gap-2", "p-1", "rounded-2xl");
+    expect(selector).not.toHaveClass("sm:rounded-full");
     expect(selector).not.toHaveClass("gap-1", "gap-1.5");
 
     const card = taskRow("t-a");
@@ -538,7 +541,7 @@ describe("Daily habits (HabitsView)", () => {
     // A pristine drawer closes without a prompt.
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByLabelText("Habit Title")).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
     expect(confirm).not.toHaveBeenCalled();
 
     fireEvent.click(toggle);
@@ -557,7 +560,7 @@ describe("Daily habits (HabitsView)", () => {
 
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByLabelText("Habit Title")).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
     expect(toggle).toHaveFocus();
     expect((await db.habits.get("hab-1"))?.title).toBe("Stretch");
   });

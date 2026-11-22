@@ -23,6 +23,7 @@ import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
+import { HeightReveal } from "./HeightReveal";
 
 export { computeHabitStreak };
 
@@ -290,7 +291,7 @@ export function HabitsView() {
           <button
             type="submit"
             disabled={!newTitle.trim()}
-            className="flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Habit</span>
@@ -555,8 +556,7 @@ export function HabitsView() {
                   </div>
                 </div>
 
-                {/* Inline Edit Drawer */}
-                {isEditing && (
+                <HeightReveal show={isEditing}>
                   <form
                     aria-label={`Edit habit ${habit.title}`}
                     onSubmit={saveEdit}
@@ -667,7 +667,7 @@ export function HabitsView() {
                       </div>
                     </div>
                   </form>
-                )}
+                </HeightReveal>
               </div>
             );
           })}

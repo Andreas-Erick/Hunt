@@ -176,7 +176,7 @@ export function ReviewHeatmapCard({
             {heatmap.columns.map((col) => (
               <div
                 key={`m-${col.weekKey}`}
-                className="w-3.5 max-w-[1.5rem] flex-1 whitespace-nowrap text-[10px] font-medium text-hud-muted"
+                className="min-w-[12px] max-w-[1.5rem] flex-1 whitespace-nowrap text-[10px] font-medium text-hud-muted"
               >
                 {col.monthLabel ?? ""}
               </div>

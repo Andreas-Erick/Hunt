@@ -74,7 +74,9 @@ export function DayTimeline({
           Today&apos;s Timeline
         </span>
         <span className="text-xs tabular-nums text-hud-muted">
-          {todayLogs.length} session{todayLogs.length === 1 ? "" : "s"}{" "}
+          {weekLogs === undefined
+            ? "–"
+            : `${todayLogs.length} session${todayLogs.length === 1 ? "" : "s"}`}{" "}
           logged
         </span>
       </div>

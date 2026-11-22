@@ -255,7 +255,7 @@ export function CommandCenterView() {
                 type="button"
                 onClick={clearFeedback}
                 aria-label="Dismiss"
-                className="-my-1.5 -mr-2 shrink-0 rounded-lg px-2.5 py-1.5 text-base leading-none text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
+                className="-my-1.5 -mr-2 min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg px-2.5 py-1.5 text-base leading-none text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
               >
                 ×
               </button>
@@ -414,7 +414,7 @@ export function CommandCenterView() {
                           hudAudio.playClick();
                           setActiveView("quests");
                         }}
-                        className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/10 hover:text-white active:opacity-80"
+                        className="mt-4 min-h-8 coarse:min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/10 hover:text-white active:opacity-80"
                       >
                         Go to Quests
                       </button>

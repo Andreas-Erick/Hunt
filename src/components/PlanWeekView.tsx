@@ -69,7 +69,7 @@ function buildDayColumns(todayKey: string, dayOffset: number): DayColumn[] {
 }
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
-const ADD_BUTTON = `rounded-md border border-white/10 bg-white/[0.03] p-2 coarse:p-2.5 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
+const ADD_BUTTON = `grid min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 place-items-center rounded-md border border-white/10 bg-white/[0.03] p-2 coarse:p-2.5 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
 const NAV_BUTTON = `rounded-lg border border-white/10 bg-surface hover:border-white/20 hover:text-white ${PRESSABLE}`;
 
 interface DayTasks {
@@ -356,7 +356,7 @@ export function PlanWeekView() {
           <div
             role="group"
             aria-label="Quest for new tasks"
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-surface p-1 sm:rounded-full"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-surface p-1"
           >
             {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
@@ -411,14 +411,14 @@ export function PlanWeekView() {
             type="button"
             onClick={() => setDayOffset((d) => d - 1)}
             aria-label="Previous day"
-            className={`${NAV_BUTTON} p-2 coarse:p-3 text-neutral-400`}
+            className={`${NAV_BUTTON} grid place-items-center p-2 coarse:min-h-11 coarse:min-w-11 coarse:p-3 text-neutral-400`}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={() => setDayOffset(0)}
-            className={`${NAV_BUTTON} px-4 py-2 coarse:py-3 text-xs font-medium text-white`}
+            className={`${NAV_BUTTON} px-4 py-2 coarse:min-h-11 coarse:py-3 text-xs font-medium text-white`}
           >
             Today
           </button>
@@ -426,7 +426,7 @@ export function PlanWeekView() {
             type="button"
             onClick={() => setDayOffset((d) => d + 1)}
             aria-label="Next day"
-            className={`${NAV_BUTTON} p-2 coarse:p-3 text-neutral-400`}
+            className={`${NAV_BUTTON} grid place-items-center p-2 coarse:min-h-11 coarse:min-w-11 coarse:p-3 text-neutral-400`}
           >
             <ChevronRight className="h-4 w-4" />
           </button>

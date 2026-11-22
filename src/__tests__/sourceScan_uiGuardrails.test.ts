@@ -130,10 +130,11 @@ describe("UI guardrails (source scan)", () => {
   });
 
   it("keeps text-xs chip buttons at least 32px tall", () => {
+    // py-1.5 + text-xs (16px line) + border is ~30px: still under 32px without a min-height.
     const offenders = buttons
-      .filter((b) => has(b.classes, /\spy-(0|0\.5|1)\s/) && has(b.classes, /\stext-(xs|\[1[01]px\])\s/))
+      .filter((b) => has(b.classes, /\spy-(0|0\.5|1|1\.5)\s/) && has(b.classes, /\stext-(xs|\[1[01]px\])\s/))
       .filter((b) => !has(b.classes, /\smin-h-/))
       .map(where);
-    expect(offenders, "add min-h-8 coarse:min-h-11 (and py-1.5)").toEqual([]);
+    expect(offenders, "add min-h-8 coarse:min-h-11").toEqual([]);
   });
 });

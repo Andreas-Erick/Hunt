@@ -42,6 +42,7 @@ import { useTransientHighlight } from "./useTransientHighlight";
 import { useQuestWeekLogs } from "./useQuestWeekLogs";
 import { useLiveBurstSeconds } from "./useLiveBurstSeconds";
 import { computeQuestWeekProgress } from "@/lib/questProgress";
+import { HeightReveal } from "./HeightReveal";
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
@@ -173,7 +174,7 @@ function WeeklyTargetInput({
       aria-label="Weekly target hours"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-16 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs text-white focus:border-hud-cyan focus:outline-none"
+      className="w-16 min-h-8 coarse:min-h-11 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-xs text-white focus:border-hud-cyan focus:outline-none"
     />
   );
 }
@@ -320,7 +321,7 @@ const QuestCard = memo(function QuestCard({
               title="Edit or Delete Quest"
               aria-label={`Edit quest ${quest.title}`}
               aria-expanded={isEditing}
-              className="shrink-0 rounded-lg p-2 coarse:p-3 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+              className="shrink-0 rounded-lg p-2 coarse:p-3.5 text-hud-muted hover:bg-white/[0.05] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
             >
               <SlidersHorizontal className="h-4 w-4" />
             </button>
@@ -334,7 +335,7 @@ const QuestCard = memo(function QuestCard({
         )}
 
         {/* Inline Edit & Delete Drawer */}
-        {isEditing && editDrawer}
+        <HeightReveal show={isEditing}>{editDrawer}</HeightReveal>
 
         {/* Weekly Quest Hours Progress */}
         <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
@@ -410,7 +411,7 @@ const QuestCard = memo(function QuestCard({
                 type="button"
                 onClick={() => onStartFocus(t.id)}
                 aria-label={`Start focus: ${t.title}`}
-                className="-my-1.5 -mr-2 flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                className="-my-1.5 -mr-2 flex min-h-8 coarse:min-h-11 coarse:min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
               >
                 {t.accumulatedSeconds > 0 && (
                   <span className="font-mono tabular-nums">
@@ -426,7 +427,7 @@ const QuestCard = memo(function QuestCard({
 
       {/* Quick Add Task to this Quest */}
       <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
-        <div className="flex items-center gap-2 focus-within:border-white/40">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             value={quickTask}
@@ -445,7 +446,7 @@ const QuestCard = memo(function QuestCard({
             type="button"
             onClick={() => void handleQuickAdd()}
             aria-label={`Add task to ${quest.title}`}
-            className="-my-1.5 -mr-2 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+            className="-my-1.5 -mr-2 rounded-lg p-2 coarse:p-3.5 text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -897,7 +898,7 @@ export function QuestMatrixPanel() {
               hudAudio.playClick();
               setActiveView("guide");
             }}
-            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-xs font-medium text-neutral-300 hover:border-white/25 hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+            className="flex coarse:min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-xs font-medium text-neutral-300 hover:border-white/25 hover:text-white transition-colors duration-150 ease-out active:opacity-80"
           >
             <BookOpen className="h-4 w-4 text-hud-cyan" aria-hidden="true" />
             <span>Quest Guide</span>
@@ -912,7 +913,7 @@ export function QuestMatrixPanel() {
               if (creatingNew) closeCreateForm();
               else setCreatingNew(true);
             }}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98] ${
+            className={`flex coarse:min-h-11 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.98] ${
               // While the form is open this acts as its close toggle: secondary
               // style, so only "Create Quest" reads as the primary action.
               creatingNew
@@ -927,7 +928,7 @@ export function QuestMatrixPanel() {
       </div>
 
       {/* Inline Create Quest Form */}
-      {creatingNew && (
+      <HeightReveal show={creatingNew}>
         <form
           onSubmit={handleCreateQuest}
           onKeyDown={(e) => {
@@ -942,7 +943,7 @@ export function QuestMatrixPanel() {
             <button
               type="button"
               onClick={cancelCreate}
-              className="-my-1.5 -mr-2.5 rounded-lg px-2.5 py-1.5 text-xs text-hud-muted hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+              className="-my-1.5 -mr-2.5 min-h-8 coarse:min-h-11 rounded-lg px-2.5 py-1.5 text-xs text-hud-muted hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
             >
               Cancel
             </button>
@@ -1003,13 +1004,13 @@ export function QuestMatrixPanel() {
             <button
               type="submit"
               disabled={!newTitle.trim()}
-              className="rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-black hover:bg-white transition-[background-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
+              className="coarse:min-h-11 rounded-xl bg-accent px-5 py-2 text-xs font-semibold text-black hover:bg-white transition-[background-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               Create Quest
             </button>
           </div>
         </form>
-      )}
+      </HeightReveal>
 
       <LayoutGroup id="quests-matrix">
       {/* Intrinsic Fluid Quest Grid (1 col -> 2 col split-screen -> 3 col desktop) */}
@@ -1127,15 +1128,24 @@ export function QuestMatrixPanel() {
                   </div>
 
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4 text-xs">
-                    <span className="font-mono text-hud-muted tabular-nums">
-                      {completedQuestLogs === undefined
-                        ? "–"
-                        : `${formatTelemetryDuration(totalSec, {
-                            zeroAs: "0.0h",
-                          })} logged`}
-                    </span>
+                    <ConfirmDeleteButton
+                      label={`Delete quest ${quest.title}`}
+                      confirmLabel="Delete quest?"
+                      onConfirm={() => handleDeleteQuest(quest.id)}
+                      className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-hud-muted hover:bg-danger/10 hover:text-danger data-[state=armed]:bg-danger/20 data-[state=armed]:text-danger"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Delete</span>
+                    </ConfirmDeleteButton>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-hud-muted tabular-nums">
+                        {completedQuestLogs === undefined
+                          ? "–"
+                          : `${formatTelemetryDuration(totalSec, {
+                              zeroAs: "0.0h",
+                            })} logged`}
+                      </span>
                       <button
                         type="button"
                         onClick={() => void handleReopenQuest(quest.id)}
@@ -1145,16 +1155,6 @@ export function QuestMatrixPanel() {
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                         <span>Reopen</span>
                       </button>
-
-                      <ConfirmDeleteButton
-                        label={`Delete quest ${quest.title}`}
-                        confirmLabel="Delete quest?"
-                        onConfirm={() => handleDeleteQuest(quest.id)}
-                        className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg border border-danger/25 bg-danger/[0.06] px-3 py-1.5 text-xs text-danger hover:bg-danger/15 data-[state=armed]:bg-danger/20"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span>Delete</span>
-                      </ConfirmDeleteButton>
                     </div>
                   </div>
                 </motion.div>

@@ -208,7 +208,7 @@ describe("view switch discard guard", () => {
     expect(useCommandStore.getState().discardGuard).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(screen.queryByLabelText("Quest Title")).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText("Quest Title")).toBeNull());
     expect(useCommandStore.getState().discardGuard).toBeNull();
     fireEvent.click(navTab("Habits"));
     await waitFor(() => expect(view()).toBe("habits"));

@@ -474,7 +474,7 @@ describe("Daily Habits — Desktop UI (HabitsView + CommandCenterView)", () => {
     );
     const titleInput = screen.getByLabelText("Habit Title");
     fireEvent.keyDown(titleInput, { key: "Escape" });
-    expect(screen.queryByLabelText("Habit Title")).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
 
     fireEvent.click(
       within(row).getByRole("button", { name: "Edit habit Practice speaking 15m" })

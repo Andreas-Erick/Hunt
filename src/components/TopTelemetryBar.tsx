@@ -89,7 +89,7 @@ function ActiveSessionPill() {
       type="button"
       onClick={() => setActiveView("focus")}
       title={`Open Focus: ${activeTask.title}`}
-      className="flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-success hover:bg-success/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+      className="flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-success hover:bg-success/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
     >
       <Radio className="h-3.5 w-3.5 animate-pulse" />
       {/* Title only on wide headers, so the nav tabs keep their room at laptop widths. */}
