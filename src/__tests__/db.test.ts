@@ -1,12 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  db,
-  toLocalDateKey,
-  formatChronoMMSS,
-  formatTacticalDuration,
-  seedInitialDataIfNeeded as seedWithCheck,
-  QUEST_ACCENT_STYLES,
-} from "@/lib/db";
+import { db, seedInitialDataIfNeeded as seedWithCheck } from "@/lib/db";
+import { toLocalDateKey, formatChronoMMSS, formatTacticalDuration } from "@/lib/dateUtils";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
 import { SEED_SERVER_CHECK_TIMEOUT_MS, syncDataExistsElsewhere } from "@/lib/syncEngine";
 import { MAX_ENTITY_ID_LENGTH, isSafeSyncId } from "@/lib/syncTypes";
 

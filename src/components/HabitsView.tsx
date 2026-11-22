@@ -13,12 +13,9 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import {
-  accentStyle,
-  dateKeyFromOffset,
-  type Habit,
-  type Quest,
-} from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import { dateKeyFromOffset } from "@/lib/dateUtils";
+import type { Habit, Quest } from "@/lib/domainTypes";
 import { computeHabitStreak } from "@/lib/dateUtils";
 import { summarizeHabitDays } from "@/lib/habitDay";
 import { useCommandStore } from "@/store/useCommandStore";

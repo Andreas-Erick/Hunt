@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { db, seedInitialDataIfNeeded, type Habit, type Quest, type Task } from "@/lib/db";
+import { db, seedInitialDataIfNeeded } from "@/lib/db";
+import type { Habit, Quest, Task } from "@/lib/domainTypes";
 import { SYNC_TOKEN_STORAGE_KEY, TOMBSTONE_STORAGE_KEY } from "@/lib/domainTypes";
 import { clearBreadcrumbs, getBreadcrumbs } from "@/lib/diagnostics";
 import {

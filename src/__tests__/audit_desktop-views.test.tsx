@@ -10,16 +10,10 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import {
-  db,
-  QUEST_ACCENT_STYLES,
-  dateKeyFromOffset,
-  habitTaskId,
-  toLocalDateKey,
-  type Habit,
-  type Quest,
-  type Task,
-} from "@/lib/db";
+import { db } from "@/lib/db";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
+import { dateKeyFromOffset, habitTaskId, toLocalDateKey } from "@/lib/dateUtils";
+import type { Habit, Quest, Task } from "@/lib/domainTypes";
 import {
   SETTLING_COMPLETED_CARD_CLASS,
   reopenDotBgClass,

@@ -13,11 +13,8 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import {
-  QUEST_ACCENT_KEYS,
-  QUEST_ACCENT_STYLES,
-  type QuestAccent,
-} from "@/lib/db";
+import { QUEST_ACCENT_KEYS, type QuestAccent } from "@/lib/domainTypes";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import {

@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { accentStyle, type Quest, type Task, type TimeLog } from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import { layoutTimelineBlocks } from "@/lib/reviewAnalytics";
 
 const HOUR_HEIGHT_PX = 52;

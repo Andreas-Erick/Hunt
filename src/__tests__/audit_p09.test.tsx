@@ -1,7 +1,8 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { db, type Habit, type Quest } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Habit, Quest } from "@/lib/domainTypes";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import HomePage from "@/app/page";
 

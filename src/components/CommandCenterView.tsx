@@ -5,14 +5,9 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { motion, AnimatePresence } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import {
-  accentStyle,
-  dateFromKey,
-  formatChronoMMSS,
-  isTaskVisibleToday,
-  toLocalDateKey,
-  type Quest,
-} from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import { dateFromKey, formatChronoMMSS, isTaskVisibleToday, toLocalDateKey } from "@/lib/dateUtils";
+import type { Quest } from "@/lib/domainTypes";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";

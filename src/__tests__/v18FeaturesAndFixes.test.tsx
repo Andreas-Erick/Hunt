@@ -14,14 +14,14 @@ import {
 import { APP_VERSION } from "@/lib/version";
 import {
   QUEST_ACCENT_KEYS,
-  QUEST_ACCENT_STYLES,
-  db,
-  toLocalDateKey,
   type Quest,
   type QuestAccent,
   type Task,
   type TimeLog,
-} from "@/lib/db";
+} from "@/lib/domainTypes";
+import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
+import { db } from "@/lib/db";
+import { toLocalDateKey } from "@/lib/dateUtils";
 import {
   BOOT_SAFETY_TIMEOUT_MS,
   bootOnce,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import type { TimeLog } from "@/lib/db";
+import type { TimeLog } from "@/lib/domainTypes";
 import { reads } from "@/lib/reads";
 import { rollingWeekKeys } from "@/lib/questProgress";
 

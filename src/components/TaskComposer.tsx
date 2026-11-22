@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpToLine } from "lucide-react";
-import { accentStyle, type Quest } from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import type { Quest } from "@/lib/domainTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 

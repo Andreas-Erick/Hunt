@@ -4,7 +4,9 @@ import React from "react";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import { AlignLeft, Check, Pause, Play, Repeat, Trash2 } from "lucide-react";
-import { accentStyle, formatChronoMMSS, type Quest, type Task } from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import { formatChronoMMSS } from "@/lib/dateUtils";
+import type { Quest, Task } from "@/lib/domainTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import {
   SETTLING_COMPLETED_CARD_CLASS,

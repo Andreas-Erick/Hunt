@@ -16,10 +16,8 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import {
-  accentStyle,
-  formatChronoMMSS,
-} from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
+import { formatChronoMMSS } from "@/lib/dateUtils";
 import {
   buildHorizonWindow,
   computeActivityHeatmap,

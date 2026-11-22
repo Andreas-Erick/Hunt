@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { db, type Task, type TimeLog } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Task, TimeLog } from "@/lib/domainTypes";
 import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
 import { useCommandStore, sessionLogId, SYNC_DEBOUNCE_MS } from "@/store/useCommandStore";
 
