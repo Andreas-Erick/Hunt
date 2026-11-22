@@ -26,7 +26,8 @@ and script, with no build step for the UI.
 `scripts/build-mobile-core.mjs` uses esbuild to bundle
 `src/mobile/huntCore.ts` into a marked block in the page.
 That bundle covers the merge, stamps, habit rows, the focus
-state machine, burst logs, and the next-task rule.
+state machine, burst logs, task completion, and the
+next-task rule.
 
 Tests enforce the arrangement:
 
