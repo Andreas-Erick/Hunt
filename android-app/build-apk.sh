@@ -6,7 +6,7 @@
 #
 # Pipeline (same as the one that produced the shipped Hunt-Mobile.apk):
 #   aapt2 compile res -> aapt2 link (manifest + android.jar + assets, emits R.java)
-#   -> javac (MainActivity.java + R.java; any *.kt / *.gradle.kts under android-app
+#   -> javac (every *.java under app/src/main/java + R.java; any *.kt / *.gradle.kts under android-app
 #      fails the build: the old Gradle/Kotlin path built a different app with another key)
 #   -> d8 -> add classes.dex to the APK (JDK jar tool by default)
 #   -> zipalign -p 4 -> apksigner sign (v1+v2+v3, same key as the shipped APK)
@@ -243,7 +243,7 @@ LINK_ARGS+=("$WORK_DIR/resources.zip")
 # -- 3. javac -------------------------------------------------------------------
 log "3/8 javac"
 mapfile -t JAVA_SOURCES < <(find "$JAVA_SRC_DIR" "$WORK_DIR/gen" -type f -name '*.java' | sort)
-[ ${#JAVA_SOURCES[@]} -ge 2 ] || die "expected MainActivity.java + R.java, found: ${JAVA_SOURCES[*]:-none}"
+[ ${#JAVA_SOURCES[@]} -ge 2 ] || die "expected the app sources + R.java, found: ${JAVA_SOURCES[*]:-none}"
 for s in "${JAVA_SOURCES[@]}"; do info "compile $s"; done
 "$JAVAC" --release "$JAVAC_RELEASE" -encoding UTF-8 -Xlint:-options -g \
   -classpath "$ANDROID_JAR" -d "$WORK_DIR/classes" "${JAVA_SOURCES[@]}"
@@ -286,7 +286,7 @@ else
   info "added with: $ZIP_TOOL"
 fi
 
-# Sanity: classes.dex + hunt-mobile.html present; resources.arsc must stay STORED
+# Sanity: classes.dex, hunt-mobile.html and the Day Widget resources present; resources.arsc must stay STORED
 # (Android 11+ refuses targetSdk>=30 APKs with a compressed resources.arsc).
 list_entries() {
   if command -v unzip >/dev/null 2>&1; then unzip -Z1 "$1"
@@ -294,7 +294,7 @@ list_entries() {
   else "$PYTHON" -I -c 'import sys,zipfile;print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$1"; fi
 }
 ENTRIES=$(list_entries "$WORK_DIR/unaligned.apk" | tr -d '\r')
-for e in AndroidManifest.xml resources.arsc classes.dex assets/hunt-mobile.html; do
+for e in AndroidManifest.xml resources.arsc classes.dex assets/hunt-mobile.html res/xml/day_widget_info.xml res/layout/widget_day_neon.xml res/layout/widget_day_row_neon.xml; do
   grep -qx "$e" <<<"$ENTRIES" || die "APK is missing $e"
 done
 if command -v unzip >/dev/null 2>&1; then

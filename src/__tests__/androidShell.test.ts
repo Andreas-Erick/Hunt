@@ -253,6 +253,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
       setKeepScreenOn: "void",
       vibrateClick: "void",
       getAppVersion: "String",
+      saveWidgetSnapshot: "void",
     });
     // Nothing outside the bridge class is exposed to JS.
     expect(javaCode.match(/@JavascriptInterface/g)).toHaveLength(bridgeMethods().size);
@@ -417,6 +418,79 @@ describe("build hygiene", () => {
     expect(script).toMatch(/grep -aqF -f <\(key_patterns\)/);
     expect(script).not.toMatch(/(echo|printf|info|log|die)[^\n]*\$\(\s*(cat|key_patterns)\b/);
     expect(script).toContain("<versionCode above the installed one> <versionName>");
+  });
+});
+
+describe("Day Widget (ADR-0006)", () => {
+  const JAVA_DIR = path.dirname(JAVA_FILE);
+  const RES = path.join(MAIN, "res");
+  const widgetJava = fs
+    .readdirSync(JAVA_DIR)
+    .filter((f) => f.endsWith(".java") && f !== "MainActivity.java")
+    .map((f) => ({ name: f, code: stripJavaComments(read(path.join(JAVA_DIR, f))) }));
+  const widgetSources = widgetJava.filter((f) => /Widget/.test(f.name));
+  const widgetLayouts = fs
+    .readdirSync(path.join(RES, "layout"))
+    .filter((f) => f.startsWith("widget_"))
+    .map((f) => ({ name: f, xml: read(path.join(RES, "layout", f)) }));
+
+  it("declares the widget receiver and its list service, neither exported", () => {
+    const receiver = /<receiver\b[^>]*android:name="\.DayWidgetProvider"[^>]*>([\s\S]*?)<\/receiver>/.exec(manifest);
+    expect(receiver, "DayWidgetProvider receiver").not.toBeNull();
+    expect(receiver![0]).toMatch(/android:exported="false"/);
+    expect(receiver![1]).toContain('<action android:name="android.appwidget.action.APPWIDGET_UPDATE" />');
+    expect(receiver![1]).toMatch(
+      /<meta-data\s+android:name="android\.appwidget\.provider"\s+android:resource="@xml\/day_widget_info"/,
+    );
+    const service = /<service\b[^>]*android:name="\.DayWidgetService"[^>]*>/.exec(manifest)?.[0] ?? "";
+    expect(service).toMatch(/android:exported="false"/);
+    expect(service).toMatch(/android:permission="android\.permission\.BIND_REMOTEVIEWS"/);
+    expect(fs.existsSync(path.join(RES, "xml", "day_widget_info.xml"))).toBe(true);
+  });
+
+  it("the widget code never writes a file: only the bridge saves the snapshot", () => {
+    expect(widgetSources.map((f) => f.name).sort()).toEqual(["DayWidgetProvider.java", "DayWidgetService.java"]);
+    for (const { name, code } of widgetSources) {
+      expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
+      expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
+    }
+    const save = blockAfter(javaCode, /public\s+void\s+saveWidgetSnapshot\(String\s+json\)\s*\{/);
+    expect(save).toContain("saveWidgetSnapshotInternal(json)");
+  });
+
+  it("every widget control is a touch target of at least 48dp", () => {
+    const clickIds = new Set(
+      widgetSources.flatMap(({ code }) =>
+        firstCaptures(code, /setOn(?:Click(?:PendingIntent|FillInIntent))\(\s*R\.id\.(\w+)/g),
+      ),
+    );
+    expect(clickIds.size).toBeGreaterThan(0);
+    for (const id of clickIds) {
+      const tag = widgetLayouts
+        .map(({ xml }) => new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(xml)?.[0])
+        .find(Boolean);
+      expect(tag, `layout view for R.id.${id}`).toBeDefined();
+      const dp = (attr: string) => Number(new RegExp(`android:${attr}="(\\d+)dp"`).exec(tag!)?.[1] ?? 0);
+      expect(Math.max(dp("minHeight"), dp("layout_height")), `${id} height`).toBeGreaterThanOrEqual(48);
+      const fillsWidth = /android:layout_width="match_parent"/.test(tag!);
+      expect(fillsWidth || dp("minWidth") >= 48, `${id} width`).toBe(true);
+    }
+  });
+
+  it("long titles stay on one line with an ellipsis", () => {
+    const row = widgetLayouts.find((l) => l.name === "widget_day_row_neon.xml")?.xml ?? "";
+    const title = /<TextView\b[^>]*android:id="@\+id\/widget_row_title"[^>]*>/.exec(row)?.[0] ?? "";
+    expect(title).toMatch(/android:maxLines="1"/);
+    expect(title).toMatch(/android:ellipsize="end"/);
+    expect(title).toMatch(/android:layout_weight="1"/);
+  });
+
+  it("build-apk.sh refuses an APK without the widget resources", () => {
+    const script = read(BUILD_SCRIPT_FILE);
+    const list = /for e in ([^;]*); do\s*\n\s*grep -qx "\$e" <<<"\$ENTRIES"/.exec(script)?.[1] ?? "";
+    for (const entry of ["res/xml/day_widget_info.xml", "res/layout/widget_day_neon.xml", "res/layout/widget_day_row_neon.xml"]) {
+      expect(list.split(/\s+/), entry).toContain(entry);
+    }
   });
 });
 

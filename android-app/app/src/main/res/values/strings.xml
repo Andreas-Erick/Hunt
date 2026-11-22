@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Hunt</string>
+    <string name="day_widget_description">Today\'s open Tasks</string>
+    <string name="day_widget_today">Today</string>
+    <string name="day_widget_get_started">Open Hunt to get started</string>
+    <string name="day_widget_refresh">Open Hunt to refresh</string>
+    <string name="day_widget_nothing_left">Nothing left for %1$s</string>
+    <string name="day_widget_open_hunt">Open Hunt</string>
+    <string name="day_widget_focus_tag">Focus</string>
+    <string name="day_widget_habit_tag">Habit</string>
+    <string name="day_widget_row_open">%1$s, open Hunt</string>
+    <string name="day_widget_row_focus">%1$s, in Focus, open Hunt</string>
 </resources>

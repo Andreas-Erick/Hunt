@@ -2,6 +2,7 @@ package com.hunt.companion;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -50,8 +51,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -203,8 +202,8 @@ public class MainActivity extends Activity {
     // newest state from memory instead of reading a file that may still be being written.
     // ---------------------------------------------------------------------------------------
 
-    /** Guards every file read/write (state, URL and token files). */
-    private static final Object FILE_LOCK = new Object();
+    /** Guards every file read/write (state, snapshot, URL and token files); shared with the widgets. */
+    private static final Object FILE_LOCK = HuntFiles.LOCK;
     /** Guards the compare-and-set of {@link #latestState} after the one-time disk read. */
     private static final Object LATEST_LOCK = new Object();
     /** Guards the one-time lazy load of the URL cache. */
@@ -221,6 +220,10 @@ public class MainActivity extends Activity {
     private static final AtomicReference<String> pendingState = new AtomicReference<>();
     /** What the state file currently holds, to skip identical rewrites. Guarded by FILE_LOCK. */
     private static String lastWrittenState;
+    /** Newest Widget Snapshot not yet written (same coalescing as pendingState). */
+    private static final AtomicReference<String> pendingWidgetSnapshot = new AtomicReference<>();
+    /** What the snapshot file currently holds. Guarded by FILE_LOCK. */
+    private static String lastWrittenWidgetSnapshot;
 
     /** Normalized laptop URL as saved ("" = nothing saved, null = not loaded yet). */
     private static volatile String laptopUrlCache;
@@ -255,6 +258,8 @@ public class MainActivity extends Activity {
 
     // Written once in onCreate, read from the bridge / executor threads.
     private volatile File filesDir;
+    /** Outlives this Activity: the widget redraw after a snapshot write may run after onDestroy. */
+    private volatile Context appContext;
     private volatile ConnectivityManager connectivity;
     private volatile String appVersion = "";
 
@@ -285,6 +290,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         filesDir = getFilesDir();
+        appContext = getApplicationContext();
         connectivity = getSystemService(ConnectivityManager.class);
         appVersion = readAppVersion();
 
@@ -1024,6 +1030,35 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** JavaBridge thread: records the newest Widget Snapshot and schedules its write on ioExec. */
+    private void saveWidgetSnapshotInternal(String json) {
+        if (!looksLikeJsonObject(json)) {
+            Log.w(TAG, "saveWidgetSnapshot ignored: not a JSON object");
+            return;
+        }
+        pendingWidgetSnapshot.set(json);
+        executeQuietly(ioExec, this::flushWidgetSnapshot);
+    }
+
+    /**
+     * ioExec: writes the newest pending snapshot (last write wins, identical content skipped),
+     * then asks the placed Day Widgets to redraw from it.
+     */
+    private void flushWidgetSnapshot() {
+        synchronized (FILE_LOCK) {
+            String json = pendingWidgetSnapshot.getAndSet(null);
+            if (json == null || json.equals(lastWrittenWidgetSnapshot)) return;
+            try {
+                writeTextFile(file(HuntFiles.WIDGET_SNAPSHOT_FILE), json);
+                lastWrittenWidgetSnapshot = json;
+            } catch (IOException | RuntimeException e) {
+                Log.w(TAG, "Saving the widget snapshot failed; the next save retries", e);
+                return;
+            }
+        }
+        DayWidgetProvider.refreshAll(appContext);
+    }
+
     /** UI thread (onStop): runs a flush on ioExec (after any queued writes) and waits up to timeoutMs. */
     private void flushStateBlocking(long timeoutMs) {
         try {
@@ -1200,33 +1235,14 @@ public class MainActivity extends Activity {
         }
     }
 
-    /**
-     * Reads a whole text file through AtomicFile (which also recovers an interrupted write and
-     * reads the legacy plain files as-is). Returns "" if missing or unreadable.
-     * Caller holds FILE_LOCK.
-     */
+    /** Reads a whole text file ("" if missing or unreadable). Caller holds FILE_LOCK. */
     private static String readTextFile(File f) {
-        try {
-            return new String(new AtomicFile(f).readFully(), StandardCharsets.UTF_8).trim();
-        } catch (FileNotFoundException e) {
-            return "";
-        } catch (IOException | RuntimeException e) {
-            Log.w(TAG, "Reading " + f.getName() + " failed", e);
-            return "";
-        }
+        return HuntFiles.readText(f);
     }
 
     /** Replaces a file atomically (AtomicFile: write aside, fsync, rename). Caller holds FILE_LOCK. */
     private static void writeTextFile(File f, String text) throws IOException {
-        AtomicFile af = new AtomicFile(f);
-        FileOutputStream out = af.startWrite();
-        try {
-            out.write(text.getBytes(StandardCharsets.UTF_8));
-            af.finishWrite(out);
-        } catch (IOException | RuntimeException e) {
-            af.failWrite(out); // the previous file content stays intact
-            throw e;
-        }
+        HuntFiles.writeText(f, text);
     }
 
     // =======================================================================================
@@ -1963,6 +1979,19 @@ public class MainActivity extends Activity {
                 saveStateInternal(json);
             } catch (RuntimeException e) {
                 Log.w(TAG, "saveState failed", e);
+            }
+        }
+
+        /**
+         * Day Widget (ADR-0006): remembers the page's Widget Snapshot, writes it asynchronously
+         * (coalesced, atomic) and then redraws the placed widgets.
+         */
+        @JavascriptInterface
+        public void saveWidgetSnapshot(String json) {
+            try {
+                saveWidgetSnapshotInternal(json);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "saveWidgetSnapshot failed", e);
             }
         }
 
