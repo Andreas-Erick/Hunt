@@ -1,6 +1,6 @@
 {
   "name": "hunt-command-hud",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -13,6 +13,7 @@
     "lint": "eslint --max-warnings 0 src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:geometry": "playwright test",
     "hunt": "Start-Hunt.bat"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

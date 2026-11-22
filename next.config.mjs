@@ -6,6 +6,9 @@ const nextConfig = {
   images: { unoptimized: true },
   // Enabled only by the GitHub Release desktop packager so local `next start` is unchanged.
   ...(process.env.HUNT_STANDALONE === "1" ? { output: "standalone" } : {}),
+  // Set only by the Playwright geometry suite (playwright.config.ts): it builds into its own
+  // folder so it never overwrites the .next build a running local Hunt server is serving.
+  ...(process.env.HUNT_DIST_DIR ? { distDir: process.env.HUNT_DIST_DIR } : {}),
   async headers() {
     return [
       {

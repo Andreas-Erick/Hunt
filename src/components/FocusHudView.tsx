@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import { Play, Pause, Check, ArrowLeft } from "lucide-react";
+import { Play, Pause, Check, ArrowLeft, X } from "lucide-react";
 import { formatChronoMMSS, accentStyle } from "@/lib/db";
 import { pickNextFocusTask, useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
@@ -104,8 +104,15 @@ export function FocusHudView() {
     };
 
     update();
-    const interval = setInterval(update, 500);
-    return () => clearInterval(interval);
+    // No re-renders while the window is hidden; catch up when it shows again.
+    const interval = setInterval(() => {
+      if (!document.hidden) update();
+    }, 500);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", update);
+    };
   }, [isRunning, sessionStartedAt]);
 
   useEffect(() => {
@@ -194,9 +201,9 @@ export function FocusHudView() {
                 type="button"
                 onClick={clearFeedback}
                 aria-label="Dismiss"
-                className="shrink-0 text-neutral-400 transition-colors duration-150 ease-out hover:text-white active:opacity-80"
+                className="-my-1.5 -mr-2 shrink-0 rounded-lg p-1.5 coarse:p-2.5 text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
               >
-                ×
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           )}
@@ -207,7 +214,7 @@ export function FocusHudView() {
         </p>
 
         {topQueuedTask ? (
-          <div className="mt-5 flex max-w-2xl flex-col items-center space-y-6">
+          <div className="mt-5 flex w-full max-w-2xl flex-col items-center space-y-6">
             {topQueuedQuest && (
               <div
                 className={`flex max-w-full items-center gap-2 rounded-full border ${nextQuestStyle.border} bg-white/[0.02] px-3.5 py-1 text-xs text-neutral-200`}
@@ -229,7 +236,7 @@ export function FocusHudView() {
                 hudAudio.playLockOn();
                 initializeFocus(topQueuedTask.id);
               }}
-              className="rounded-xl border border-white/15 bg-white/[0.06] px-7 py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-white/[0.12] active:scale-[0.98]"
+              className="rounded-xl border border-white/15 bg-white/[0.06] px-7 py-3.5 text-sm font-medium text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out hover:bg-white/[0.12] active:scale-[0.98]"
             >
               Start Focus Session
             </button>
@@ -243,7 +250,7 @@ export function FocusHudView() {
         <button
           type="button"
           onClick={() => returnToQueue()}
-          className="mt-10 text-sm text-hud-muted transition-colors duration-150 ease-out hover:text-neutral-300 active:opacity-80"
+          className="mt-8 rounded-lg px-3 py-2 coarse:py-3 text-sm text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
         >
           ← Back to Home
         </button>
@@ -279,7 +286,7 @@ export function FocusHudView() {
             }}
             title="Return to Home"
             aria-label="Return to Home"
-            className="shrink-0 rounded-lg p-2 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-colors"
+            className="shrink-0 rounded-lg p-2 coarse:p-3 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -338,7 +345,7 @@ export function FocusHudView() {
                 hudAudio.playClick();
                 suspendTimer();
               }}
-              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-white/25 hover:bg-white/[0.07] active:scale-[0.98]"
+              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out hover:border-white/25 hover:bg-white/[0.07] active:scale-[0.98]"
             >
               <Pause className="h-4 w-4" />
               <span>Pause</span>
@@ -350,7 +357,7 @@ export function FocusHudView() {
                 hudAudio.playLockOn();
                 engageTimer();
               }}
-              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/25 bg-white/[0.08] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:bg-white/[0.14] active:scale-[0.98]"
+              className="flex min-w-[128px] sm:min-w-[136px] items-center justify-center gap-2.5 rounded-xl border border-white/25 bg-white/[0.08] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out hover:bg-white/[0.14] active:scale-[0.98]"
             >
               <Play className="h-4 w-4 fill-current" />
               <span>Resume</span>
@@ -362,7 +369,7 @@ export function FocusHudView() {
             onClick={handleComplete}
             disabled={completing || !showsFocusedTask}
             aria-busy={completing || !showsFocusedTask}
-            className="flex min-w-[136px] sm:min-w-[148px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-all duration-150 ease-out hover:border-[#00ff9d]/50 hover:bg-[#00ff9d]/10 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+            className="flex min-w-[136px] sm:min-w-[148px] items-center justify-center gap-2.5 rounded-xl border border-white/15 bg-white/[0.03] px-5 sm:px-6 py-3 sm:py-3.5 text-sm font-medium text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out hover:border-[#00ff9d]/50 hover:bg-[#00ff9d]/10 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
           >
             <Check className="h-4 w-4" />
             <span>Complete</span>
@@ -389,7 +396,7 @@ export function FocusHudView() {
             <button
               type="button"
               onClick={() => setNotesOpenForTaskId(activeTask.id)}
-              className="text-xs text-hud-muted hover:text-neutral-300 transition-colors"
+              className="-my-2 rounded-lg px-3 py-2 coarse:py-3 text-xs text-hud-muted transition-colors hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
             >
               + Add notes
             </button>

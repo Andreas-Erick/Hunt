@@ -40,7 +40,7 @@ import {
   type TaskCompletionScene,
 } from "@/lib/taskCompletionMotion";
 import { TaskNotesField } from "./TaskNotesField";
-import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
+import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { useTransientHighlight } from "./useTransientHighlight";
 import { useQuestWeekLogs } from "./useQuestWeekLogs";
 import { computeQuestWeekProgress } from "@/lib/questProgress";
@@ -444,14 +444,15 @@ export function CommandCenterView() {
     <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
       {/* Subtle Completion Banner (the live region stays mounted so the
           message is announced when it appears) */}
-      <div role="status" aria-live="polite">
-        <AnimatePresence>
+      <div role="status" aria-live="polite" className="overflow-hidden">
+        <AnimatePresence initial={false}>
           {lastCompletedFeedback && (
             <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-5 py-3.5 text-sm text-[#00ff9d]"
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="flex items-center justify-between gap-3 rounded-xl border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-5 py-3.5 text-sm text-[#00ff9d]"
             >
               <span className="min-w-0 break-words">
                 Completed{" "}
@@ -465,7 +466,7 @@ export function CommandCenterView() {
                 type="button"
                 onClick={clearFeedback}
                 aria-label="Dismiss"
-                className="shrink-0 text-neutral-400 transition-colors duration-150 ease-out hover:text-white active:opacity-80"
+                className="-my-1.5 -mr-2 shrink-0 rounded-lg px-2.5 py-1.5 text-base leading-none text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
               >
                 ×
               </button>
@@ -529,13 +530,13 @@ export function CommandCenterView() {
             <div
               role="group"
               aria-label="Filter by quest"
-              className="flex min-w-0 flex-wrap items-center gap-1.5"
+              className="flex min-w-0 flex-wrap items-center gap-2"
             >
               <button
                 type="button"
                 onClick={() => setFilterQuestId("ALL")}
                 aria-pressed={effectiveFilterQuestId === "ALL"}
-                className={`rounded-lg px-2.5 py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+                className={`min-h-8 coarse:min-h-11 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
                   effectiveFilterQuestId === "ALL"
                     ? "bg-white/10 text-white"
                     : "text-hud-muted hover:text-neutral-300"
@@ -555,7 +556,7 @@ export function CommandCenterView() {
                     }
                     aria-label={q.title}
                     aria-pressed={active}
-                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+                    className={`flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
                       active
                         ? "bg-white/10 text-white"
                         : "text-hud-muted hover:text-neutral-300"
@@ -592,12 +593,12 @@ export function CommandCenterView() {
                 className="flex-1 bg-transparent px-1 py-1 text-base text-white placeholder:text-hud-muted focus:outline-none"
               />
 
-              <div className="flex items-center justify-end gap-1.5">
+              <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   disabled={!newTitle.trim()}
                   onClick={() => handleAdd(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 transition-all duration-150 ease-out"
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
                 >
                   <ArrowUpToLine className="h-3.5 w-3.5" />
                   <span>Top</span>
@@ -606,7 +607,7 @@ export function CommandCenterView() {
                   type="button"
                   disabled={!newTitle.trim()}
                   onClick={() => handleAdd(false)}
-                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/10 hover:text-white active:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 transition-all duration-150 ease-out"
+                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-neutral-400 hover:bg-white/10 hover:text-white active:opacity-80 disabled:cursor-not-allowed coarse:min-h-11 disabled:opacity-40 transition-[color,background-color,border-color,opacity] duration-150 ease-out"
                 >
                   <ArrowDownToLine className="h-3.5 w-3.5" />
                   <span>Bottom</span>
@@ -649,7 +650,7 @@ export function CommandCenterView() {
                       setQuestChoice(q.id);
                     }}
                     aria-pressed={isSelected}
-                    className={`flex min-w-0 max-w-full sm:max-w-[230px] items-center gap-2 rounded-full border px-3 py-1 text-xs transition-all duration-150 ease-out active:opacity-80 ${
+                    className={`flex min-w-0 max-w-full sm:max-w-[230px] min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
                       isSelected
                         ? `${st.border} bg-white/[0.06] text-white font-medium`
                         : "border-white/[0.07] bg-transparent text-neutral-400 hover:border-white/15 hover:text-neutral-200"
@@ -670,7 +671,7 @@ export function CommandCenterView() {
                   setQuestChoice(null);
                 }}
                 aria-pressed={otherWorkSelected}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-all duration-150 ease-out active:opacity-80 ${
+                className={`flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
                   otherWorkSelected
                     ? "border-white/30 bg-white/[0.08] text-white font-medium"
                     : "border-white/[0.07] text-hud-muted hover:text-neutral-300"
@@ -756,7 +757,9 @@ export function CommandCenterView() {
                     data-testid="task-row"
                     data-task-id={task.id}
                     onKeyDown={(e) => void handleQueueRowKeyDown(e, task.id)}
-                    draggable
+                    // Not draggable while the notes drawer is open, so selecting
+                    // text or placing the caret in the notes field never starts a drag.
+                    draggable={!isExpanded}
                     onDragStart={() => setDraggedTaskId(task.id)}
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -769,7 +772,9 @@ export function CommandCenterView() {
                       setDraggedTaskId(null);
                       setDragOverTaskId(null);
                     }}
-                    className={`group relative cursor-grab overflow-hidden rounded-2xl border transition-colors duration-200 active:cursor-grabbing ${
+                    className={`group relative overflow-hidden rounded-2xl border transition-colors duration-200 ${
+                      isExpanded ? "" : "cursor-grab active:cursor-grabbing "
+                    }${
                       isDragOver
                         ? "border-white/40 bg-[#1a1d24]"
                         : isTopTask
@@ -817,7 +822,7 @@ export function CommandCenterView() {
                             }}
                             title="Mark complete"
                             aria-label="Mark complete"
-                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                            className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
                                 : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
@@ -857,7 +862,7 @@ export function CommandCenterView() {
                                 suspendTimer();
                               }}
                               aria-label={`Pause focus: ${task.title}`}
-                              className="flex items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-[#00ff9d] hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
+                              className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-[#00ff9d] hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
                             >
                               <span className="h-2 w-2 rounded-full bg-[#00ff9d] animate-pulse" />
                               <span>
@@ -873,7 +878,7 @@ export function CommandCenterView() {
                                 initializeFocus(task.id);
                               }}
                               aria-label={`Start focus: ${task.title}`}
-                              className="flex items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                              className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
                             >
                               {taskTotalSec > 0 && (
                                 <span>
@@ -898,7 +903,7 @@ export function CommandCenterView() {
                             className={`rounded-lg p-1.5 transition-colors duration-150 ease-out active:opacity-80 ${
                               task.notes || isExpanded
                                 ? "text-neutral-300 hover:text-white"
-                                : "text-hud-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-neutral-300"
+                                : "text-hud-muted opacity-0 hoverless:opacity-60 group-hover:opacity-100 focus-visible:opacity-100 hover:text-neutral-300"
                             }`}
                           >
                             <AlignLeft className="h-4 w-4" />
@@ -932,7 +937,7 @@ export function CommandCenterView() {
                         />
 
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
                             {activeQuests.map((q) => {
                               const qStyle = accentStyle(q.accentColor);
                               const isCurrentQuest = task.questId === q.id;
@@ -944,7 +949,7 @@ export function CommandCenterView() {
                                     updateTask(task.id, { questId: q.id })
                                   }
                                   aria-pressed={isCurrentQuest}
-                                  className={`flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors duration-150 ease-out active:opacity-80 ${
+                                  className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 transition-colors duration-150 ease-out active:opacity-80 ${
                                     isCurrentQuest
                                       ? "border-white/25 bg-white/10 text-white"
                                       : "border-transparent text-hud-muted hover:text-neutral-300"
@@ -964,7 +969,7 @@ export function CommandCenterView() {
                               onClick={() =>
                                 updateTask(task.id, { questId: null })
                               }
-                              className="rounded-full px-2.5 py-1 text-hud-muted hover:text-neutral-300 transition-colors duration-150 ease-out active:opacity-80"
+                              className="min-h-8 coarse:min-h-11 rounded-full px-3 py-1.5 text-hud-muted hover:text-neutral-300 transition-colors duration-150 ease-out active:opacity-80"
                             >
                               Move to Other
                             </button>
@@ -973,7 +978,7 @@ export function CommandCenterView() {
                           <ConfirmDeleteButton
                             label="Delete task"
                             onConfirm={() => deleteTask(task.id)}
-                            className="flex items-center gap-1 text-hud-muted hover:text-[#ff2a5f]"
+                            className="-my-1.5 -mr-2 flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg px-2.5 py-1.5 text-hud-muted hover:bg-[#ff2a5f]/10 hover:text-[#ff2a5f]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Delete</span>
@@ -1048,7 +1053,7 @@ export function CommandCenterView() {
                           }}
                           title="Mark complete"
                           aria-label="Mark complete"
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150 ease-out active:scale-90 active:opacity-80 ${
+                          className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                             isCompleting
                               ? "border-transparent bg-slate-400 text-black"
                               : "border-white/40 text-transparent hover:border-white hover:text-white"
@@ -1079,7 +1084,7 @@ export function CommandCenterView() {
                             initializeFocus(task.id);
                           }}
                           aria-label={`Start focus: ${task.title}`}
-                          className="flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs tabular-nums text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                          className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs tabular-nums text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
                         >
                           {taskTotalSec > 0 && (
                             <span>
@@ -1090,13 +1095,10 @@ export function CommandCenterView() {
                         </button>
                       </div>
 
-                      {/* The arbitrary transition-property comes after the
-                          component's transition-colors in the compiled CSS,
-                          so both the colour and the hover fade transition. */}
                       <ConfirmDeleteButton
                         label="Delete task"
                         onConfirm={() => deleteTask(task.id)}
-                        className="shrink-0 text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                        className={ROW_DELETE_CLASS}
                       >
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
@@ -1133,7 +1135,7 @@ export function CommandCenterView() {
                 // Only the accent bar and the check are dimmed (the card used
                 // to be, which took the title below AA contrast). While settling
                 // in (`isJustCompleted`), the card uses a solid elevated surface
-                // (`z-20 bg-[#11141b]`) with a subtle emerald border highlight.
+                // (`z-10 bg-[#11141b]`, below the sticky notice) with a subtle emerald border highlight.
                 return (
                   <div
                     key={task.id}
@@ -1163,7 +1165,7 @@ export function CommandCenterView() {
                           }}
                           title="Reopen task"
                           aria-label="Reopen task"
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 transition-all duration-150 ease-out active:scale-90 group-hover:opacity-95 focus-visible:opacity-100`}
+                          className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full before:absolute before:-inset-3 before:content-[''] ${reopenDotBgClass(style)} text-black opacity-65 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 group-hover:opacity-95 focus-visible:opacity-100`}
                         >
                           {isJustCompleted ? (
                             <motion.span
@@ -1221,7 +1223,7 @@ export function CommandCenterView() {
                       <ConfirmDeleteButton
                         label="Delete task"
                         onConfirm={() => deleteTask(task.id)}
-                        className="shrink-0 text-hud-muted opacity-0 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity]"
+                        className={ROW_DELETE_CLASS}
                       >
                         <Trash2 className="h-4 w-4" />
                       </ConfirmDeleteButton>
@@ -1336,7 +1338,13 @@ export function CommandCenterView() {
                       className="bottom-0 left-0 top-0 w-1 absolute"
                       style={{ backgroundColor: style.hex }}
                     />
-                    <div className="truncate text-xs font-medium text-white">
+                    {/* Two title lines once the block also fits its time row
+                        (py-2 + 2 x 16px + ~17px time row); touch has no tooltip. */}
+                    <div
+                      className={`break-words text-xs font-medium text-white ${
+                        heightPx >= 68 ? "line-clamp-2" : "truncate"
+                      }`}
+                    >
                       {log.taskTitleSnapshot}
                     </div>
                     {heightPx >= 46 && (

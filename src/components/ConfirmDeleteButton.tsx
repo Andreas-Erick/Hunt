@@ -8,6 +8,12 @@ export const CONFIRM_DELETE_DISARM_MS = 4000;
 
 const BASE_CLASS =
   "transition-colors duration-150 ease-out active:opacity-80 focus-visible:opacity-100";
+/**
+ * Row-level icon delete: revealed on row hover for mice, always visible (muted)
+ * on touch, with a padded 30px+ target that does not shift the row's layout.
+ */
+export const ROW_DELETE_CLASS =
+  "-m-2 shrink-0 rounded-md p-2 text-hud-muted opacity-0 hoverless:opacity-60 hover:bg-[#ff2a5f]/10 hover:text-[#ff2a5f] group-hover:opacity-100 focus-visible:opacity-100 data-[state=armed]:opacity-100 [transition-property:color,opacity,background-color]";
 /** Keeps the caller's flex gap between an icon and its label inside the live span. */
 const LABEL_CLASS = "flex items-center gap-[inherit]";
 
@@ -26,7 +32,9 @@ export interface ConfirmDeleteButtonProps {
   /**
    * Classes for the button in both states. For state-specific button styles use
    * the `data-[state=armed]:` / `data-[state=idle]:` variants, e.g.
-   * `opacity-0 group-hover:opacity-100 data-[state=armed]:opacity-100`.
+   * `opacity-0 hoverless:opacity-60 group-hover:opacity-100 data-[state=armed]:opacity-100`
+   * (never hover-only: touch has no hover). Row icon deletes use ROW_DELETE_CLASS.
+   * Keep a long `confirmLabel` out of `shrink-0` parents so it can wrap.
    */
   className?: string;
   /**

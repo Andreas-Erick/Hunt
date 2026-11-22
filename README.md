@@ -199,7 +199,7 @@ To revoke a paired phone (lost or compromised), delete `data/hunt-sync.key`. The
 
 ## Releases & Automated Installers
 
-Pushing a version tag (e.g., `git tag v1.10.0 && git push origin v1.10.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,250+ tests, ESLint, and TypeScript and publishes a GitHub Release containing:
+Pushing a version tag (e.g., `git tag v1.11.0 && git push origin v1.11.0`) or triggering **Actions → Release Desktop & Android Installers** runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which verifies all 1,250+ tests, ESLint, and TypeScript and publishes a GitHub Release containing:
 
 - **`Hunt-Desktop-Setup-<version>.exe`** — Windows Inno Setup installer (bundles Node.js + standalone Next.js server + Desktop/Start Menu shortcuts with `HUNT.ico`; no Node.js install required).
 - **`Hunt-Desktop-Windows-<version>.zip`** — Self-contained portable Windows bundle.

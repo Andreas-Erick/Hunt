@@ -11,6 +11,11 @@ out/
 build/
 dist/
 coverage/
+
+# Playwright geometry suite output
+test-results/
+playwright-report/
+blob-report/
 tsconfig.tsbuildinfo
 next-env.d.ts
 

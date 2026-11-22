@@ -384,7 +384,7 @@ export function GuideLabSection() {
                       hudAudio.playClick();
                       setActiveView("command");
                     }}
-                    className={`text-xs text-hud-cyan hover:text-white ${PRESSABLE}`}
+                    className={`-my-1.5 -mr-2 rounded-lg px-2.5 py-1.5 text-xs text-hud-cyan hover:bg-white/[0.06] hover:text-white ${PRESSABLE}`}
                   >
                     Edit on Home
                   </button>
@@ -483,7 +483,7 @@ export function GuideLabSection() {
                     setTaskNotes(preset.notes);
                     setTaskTouched(false);
                   }}
-                  className={`rounded-full border px-3 py-1 text-xs ${PRESSABLE} ${
+                  className={`min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs ${PRESSABLE} ${
                     preset.kind === "strong"
                       ? "border-hud-emerald/25 bg-hud-emerald/[0.06] text-hud-emerald hover:bg-hud-emerald/15"
                       : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/25 hover:text-white"
@@ -504,7 +504,7 @@ export function GuideLabSection() {
                     setQuestAccent(preset.accent);
                     setQuestTouched(false);
                   }}
-                  className={`rounded-full border px-3 py-1 text-xs ${PRESSABLE} ${
+                  className={`min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs ${PRESSABLE} ${
                     preset.kind === "strong"
                       ? "border-hud-emerald/25 bg-hud-emerald/[0.06] text-hud-emerald hover:bg-hud-emerald/15"
                       : "border-white/10 bg-white/[0.03] text-neutral-300 hover:border-white/25 hover:text-white"
@@ -560,7 +560,7 @@ export function GuideLabSection() {
               </div>
 
               {/* Target Quest picker */}
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Assign to Quest">
+              <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Assign to Quest">
                 {activeQuests.map((q) => {
                   const chosen = selectedQuestId === q.id;
                   return (
@@ -569,7 +569,7 @@ export function GuideLabSection() {
                       type="button"
                       aria-pressed={chosen}
                       onClick={() => setTaskQuestChoice(q.id)}
-                      className={`flex min-w-0 max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-xs ${PRESSABLE} ${
+                      className={`flex min-w-0 max-w-full items-center gap-1.5 min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs ${PRESSABLE} ${
                         chosen
                           ? "border-white/30 bg-white/10 text-white"
                           : "border-white/10 text-hud-muted hover:text-neutral-200"
@@ -588,7 +588,7 @@ export function GuideLabSection() {
                   type="button"
                   aria-pressed={selectedQuestId === null}
                   onClick={() => setTaskQuestChoice(null)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs ${PRESSABLE} ${
+                  className={`flex items-center gap-1.5 min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs ${PRESSABLE} ${
                     selectedQuestId === null
                       ? "border-white/30 bg-white/10 text-white"
                       : "border-white/10 text-hud-muted hover:text-neutral-200"
@@ -680,14 +680,14 @@ export function GuideLabSection() {
                   <span className="text-hud-muted">h/wk</span>
                 </div>
 
-                <div role="group" aria-label="Quest accent" className="flex flex-wrap items-center gap-1.5">
+                <div role="group" aria-label="Quest accent" className="flex flex-wrap items-center gap-2">
                   {ACCENT_CHOICES.map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
                       aria-pressed={questAccent === opt.id}
                       onClick={() => setQuestAccent(opt.id)}
-                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${PRESSABLE} ${
+                      className={`flex items-center gap-1.5 min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs ${PRESSABLE} ${
                         questAccent === opt.id
                           ? "border-white/30 bg-white/10 text-white"
                           : "border-white/10 text-hud-muted hover:text-neutral-200"
@@ -746,7 +746,7 @@ export function GuideLabSection() {
                 {activeEvaluation.checks.map((check) => (
                   <li
                     key={check.id}
-                    className="flex items-start gap-2.5 rounded-lg border border-white/[0.05] bg-[#111318] p-3"
+                    className="flex items-start gap-2.5 rounded-lg bg-[#111318] p-3"
                   >
                     <StatusIcon status={check.status} />
                     <div className="min-w-0 flex-1">

@@ -665,7 +665,7 @@ describe("long unbroken titles (MUI-05)", () => {
     expect(p.getComputedStyle(one(p, ".focus-quest-pill")).maxWidth).toBe("100%");
     const header = one(p, ".focus-stage > div > div > span:last-child");
     expect(p.getComputedStyle(header).textOverflow).toBe("ellipsis");
-    expect(p.getComputedStyle(one(p, ".focus-stage .icon-circle-btn")).flexShrink).toBe("0");
+    expect(p.getComputedStyle(one(p, ".focus-stage .sync-chip")).flexShrink).toBe("0");
     expect(pageErrors(p)).toEqual([]);
   });
 });
@@ -1662,7 +1662,7 @@ describe("mobile Review analytics: multi-horizon, Quest X filter, Tasks metric &
 });
 
 describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing", () => {
-  it("removes artificial narrow max-width clamps on >=768px tablets and renders the 5-column Plan board at >=900px", () => {
+  it("removes artificial narrow max-width clamps on >=768px tablets and renders the 5-column Plan board at >=1180px", () => {
     const todayK = localKey(NOW);
     const tomorrowK = localKey(NOW + 86_400_000);
     const p = load({
@@ -1677,7 +1677,7 @@ describe("tablet full-width layout, 5-column Plan board & 1-tap QR app pairing",
         Object.defineProperty(win, "matchMedia", {
           configurable: true,
           value: (q: string) => ({
-            matches: q.includes("min-width: 900px"),
+            matches: q.includes("min-width: 1180px"),
             media: q,
             addEventListener: () => undefined,
             removeEventListener: () => undefined,

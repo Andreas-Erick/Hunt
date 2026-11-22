@@ -15,7 +15,10 @@ import { formatChronoMMSS } from "@/lib/db";
 import { APP_VERSION } from "@/lib/version";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
-import { DesktopWindowControls } from "./DesktopWindowControls";
+import {
+  DesktopWindowControls,
+  useIsDesktopLauncher,
+} from "./DesktopWindowControls";
 import { HuntLogo } from "./HuntLogo";
 import { MobileSyncModal } from "./MobileSyncModal";
 import { RegionErrorBoundary } from "./RegionErrorBoundary";
@@ -77,7 +80,7 @@ function ActiveSessionPill() {
       type="button"
       onClick={() => setActiveView("focus")}
       title={`Open Focus: ${activeTask.title}`}
-      className="flex items-center gap-2 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-[#00ff9d] hover:bg-[#00ff9d]/20 transition-all duration-150 ease-out active:scale-[0.98]"
+      className="flex items-center gap-2 rounded-full border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-3 sm:px-4 py-1.5 text-xs font-medium text-[#00ff9d] hover:bg-[#00ff9d]/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
     >
       <Radio className="h-3.5 w-3.5 animate-pulse" />
       {/* Title only on wide headers, so the nav tabs keep their room at laptop widths. */}
@@ -112,7 +115,7 @@ function PhoneSyncButton({ onOpen }: { onOpen: () => void }) {
       }}
       title={`${description} — open Phone & Cross-Device Sync`}
       aria-label={`Phone sync: ${description}`}
-      className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs text-neutral-300 hover:border-white/20 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
+      className="flex items-center gap-2 coarse:min-h-11 coarse:min-w-11 coarse:justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-xs text-neutral-300 hover:border-white/20 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
     >
       <span
         className={`h-2 w-2 rounded-full transition-colors ${
@@ -137,6 +140,7 @@ export function TopTelemetryBar() {
   const [muted, setMuted] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+  const isDesktopLauncher = useIsDesktopLauncher();
 
   useEffect(() => {
     setMuted(hudAudio.syncFromStorage());
@@ -201,7 +205,7 @@ export function TopTelemetryBar() {
 
             <nav
               ref={navRef}
-              className="scroll-shadow-x flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar [--scroll-shadow-cover:#0b0c0e] [--scroll-shadow-cover-clear:rgba(11,12,14,0)]"
+              className="scroll-shadow-x -my-1 flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar px-1 py-1 [--scroll-shadow-cover:#0b0c0e] [--scroll-shadow-cover-clear:rgba(11,12,14,0)]"
             >
               {NAV_ITEMS.map((item) => {
                 const isActive =
@@ -216,7 +220,7 @@ export function TopTelemetryBar() {
                       hudAudio.playClick();
                       setActiveView(item.id);
                     }}
-                    className={`shrink-0 rounded-lg px-2.5 lg:px-3.5 py-1.5 lg:py-2 text-xs lg:text-sm transition-all duration-150 ease-out active:opacity-80 ${
+                    className={`inline-flex min-h-[40px] coarse:min-h-11 shrink-0 items-center rounded-lg px-3 lg:px-3.5 text-xs lg:text-sm transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:opacity-80 ${
                       isActive
                         ? "bg-white/[0.09] font-medium text-white"
                         : "text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
@@ -243,7 +247,7 @@ export function TopTelemetryBar() {
               onClick={handleToggleMute}
               title={muted ? "Unmute interface audio" : "Mute interface audio"}
               aria-label={muted ? "Unmute interface audio" : "Mute interface audio"}
-              className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-all duration-150 ease-out active:scale-[0.98]"
+              className="inline-flex items-center justify-center coarse:min-h-11 coarse:min-w-11 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               {muted ? (
                 <VolumeX className="h-4 w-4" />
@@ -252,10 +256,12 @@ export function TopTelemetryBar() {
               )}
             </button>
 
-            <span
-              aria-hidden="true"
-              className="hidden sm:block h-5 w-px bg-white/[0.08] mx-0.5"
-            />
+            {isDesktopLauncher && (
+              <span
+                aria-hidden="true"
+                className="hidden sm:block h-5 w-px bg-white/[0.08] mx-0.5"
+              />
+            )}
 
             <DesktopWindowControls />
           </div>

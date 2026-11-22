@@ -44,3 +44,34 @@ jobs:
 
       - name: Verify Next.js production build
         run: npm run build
+
+  geometry:
+    name: Layout geometry (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.ts builds the app (into .next/geometry) and starts it on port 3100.
+      - name: Run layout geometry suite
+        run: npm run test:geometry
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

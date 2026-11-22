@@ -1163,7 +1163,7 @@ describe("CommandCenterView (Home)", () => {
         expect(completedRow).toHaveTextContent("Ship smooth animation");
         // Arrival highlight ring + solid in-flight surface + animated SVG stroke-draw checkmark are active
         expect(completedRow.className).toContain("border-[#00ff9d]/35");
-        expect(completedRow.className).toContain("z-20");
+        expect(completedRow.className).toContain("z-10");
         const reopenBtn = within(completedRow).getByRole("button", {
           name: "Reopen task",
         });

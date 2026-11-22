@@ -309,6 +309,14 @@ describe("Desktop launch reliability & fullscreen taskbar hiding", () => {
       value: exitSpy,
     });
 
+    // Window controls render only inside the desktop launcher (pairing key present);
+    // the native window host declines here, so the DOM Fullscreen API fallback runs.
+    window.localStorage.setItem("hunt-sync-token-v1", "a".repeat(64));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }) as unknown as Response)
+    );
+
     const removeListenerSpy = vi.spyOn(document, "removeEventListener");
     const { unmount } = render(<TopTelemetryBar />);
 
@@ -339,9 +347,9 @@ describe("Desktop launch reliability & fullscreen taskbar hiding", () => {
 // ---------------------------------------------------------------------------
 // 2. App Version Display & Cross-File Sync
 // ---------------------------------------------------------------------------
-describe("App version v1.10.0 display & cross-artifact parity", () => {
+describe("App version v1.11.0 display & cross-artifact parity", () => {
   it("keeps APP_VERSION synchronized across package.json, installer, AndroidManifest, and hunt-mobile.html", () => {
-    expect(APP_VERSION).toBe("1.10.0");
+    expect(APP_VERSION).toBe("1.11.0");
 
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as {
       version: string;
@@ -361,7 +369,7 @@ describe("App version v1.10.0 display & cross-artifact parity", () => {
     expect(mobileHtml).toMatch(new RegExp(`const\\s+APP_VERSION\\s*=\\s*['"]${APP_VERSION}['"]`));
   });
 
-  it("displays v1.10.0 in Desktop TopTelemetryBar, MobileSyncModal, and Mobile/Tablet header + Sync sheet", async () => {
+  it("displays v1.11.0 in Desktop TopTelemetryBar, MobileSyncModal, and Mobile/Tablet header + Sync sheet", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>

@@ -46,6 +46,29 @@ export class RegionErrorBoundary extends React.Component<
     console.error("[hunt] render_error", this.props.region, error);
   }
 
+  componentDidUpdate(): void {
+    this.syncEscapeListener();
+  }
+
+  componentWillUnmount(): void {
+    document.removeEventListener("keydown", this.handleKeyDown);
+  }
+
+  /** An overlay region's card closes with Escape, like the overlay it replaced. */
+  private syncEscapeListener(): void {
+    if (typeof document === "undefined") return;
+    const listening =
+      this.state.failed &&
+      this.props.fallback === undefined &&
+      Boolean(this.props.onDismiss);
+    document.removeEventListener("keydown", this.handleKeyDown);
+    if (listening) document.addEventListener("keydown", this.handleKeyDown);
+  }
+
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") this.handleDismiss();
+  };
+
   private handleRetry = (): void => {
     this.setState({ failed: false });
   };
@@ -60,10 +83,20 @@ export class RegionErrorBoundary extends React.Component<
     if (this.props.fallback !== undefined) return this.props.fallback;
 
     return (
-      <div className="px-4 py-6">
+      <div
+        className={
+          this.props.onDismiss
+            ? "fixed inset-x-0 top-16 z-50 px-4 sm:top-20"
+            : "px-4 py-6"
+        }
+      >
         <div
           role="alert"
-          className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3 text-sm text-hud-muted"
+          className={`mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] px-4 py-3 text-sm text-hud-muted ${
+            this.props.onDismiss
+              ? "bg-[#111317] shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+              : "bg-white/[0.02]"
+          }`}
         >
           <span className="min-w-0">
             Couldn&apos;t load this section from your local Hunt data. Nothing
