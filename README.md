@@ -163,6 +163,9 @@ runs the geometry suite as a second job. The 1,250+ Vitest
 tests are hermetic: virtual clocks, seeded random inputs,
 `fake-indexeddb`, and temp directories.
 
+`npm install` also sets up a pre-push hook that runs
+`npm run check`, so a failing commit never reaches GitHub.
+
 <details>
 <summary><b>Building the Android app</b></summary>
 
