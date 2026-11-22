@@ -175,8 +175,8 @@ export function TelemetryDashboardView() {
     ? accentStyle("slate")
     : null;
 
-  const primaryBarClass = scopeStyle ? scopeStyle.bg : "bg-[#ffb800]";
-  const primaryTextClass = scopeStyle ? scopeStyle.text : "text-[#ffb800]";
+  const primaryBarClass = scopeStyle ? scopeStyle.bg : "bg-now";
+  const primaryTextClass = scopeStyle ? scopeStyle.text : "text-now";
 
   useEffect(() => {
     setVisibleLogLimit(SESSION_LOG_PAGE_SIZE);
@@ -284,7 +284,7 @@ export function TelemetryDashboardView() {
               aria-haspopup="listbox"
               aria-expanded={showScopeMenu}
               aria-label={`Filter review scope: ${scopeTitle}`}
-              className={`flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               {scopeStyle ? (
                 <span className={`h-2 w-2 shrink-0 rounded-full ${scopeStyle.bg}`} />
@@ -303,7 +303,7 @@ export function TelemetryDashboardView() {
                 role="listbox"
                 aria-label="Quest filter options"
                 onKeyDown={handleScopeListKeyDown}
-                className="absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-[#141720] p-1 shadow-2xl"
+                className="absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-raised p-1 shadow-2xl"
               >
                 <button
                   type="button"
@@ -388,7 +388,7 @@ export function TelemetryDashboardView() {
           <div
             role="group"
             aria-label="Review timeframe"
-            className="flex max-w-full flex-wrap items-center rounded-2xl sm:rounded-full border border-white/10 bg-[#111318] p-1"
+            className="flex max-w-full flex-wrap items-center rounded-2xl sm:rounded-full border border-white/10 bg-surface p-1"
           >
             {HORIZON_OPTIONS.map((opt) => {
               const active = horizon === opt.id;
@@ -438,7 +438,7 @@ export function TelemetryDashboardView() {
             <button
               type="button"
               onClick={() => setPeriodOffset(0)}
-              className={`sm:ml-1 flex items-center gap-2 rounded-full border border-white/10 bg-[#111318] px-3.5 sm:px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
+              className={`sm:ml-1 flex items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 sm:px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
             >
               <Calendar className="h-3.5 w-3.5 text-neutral-400" />
               <span>{windowSpec.currentLabel}</span>
@@ -452,7 +452,7 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 sm:gap-6">
         {/* Card 1: QUEST HOURS */}
-        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             {effectiveScope === "OTHER" ? "Other Work Hours" : "Quest Hours"}
           </div>
@@ -474,7 +474,7 @@ export function TelemetryDashboardView() {
         </div>
 
         {/* Card 2: DAILY AVERAGE */}
-        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             Daily Average
           </div>
@@ -491,7 +491,7 @@ export function TelemetryDashboardView() {
         </div>
 
         {/* Card 3: QUEST WORK VS OTHER (or Share of Total Focus when scoped) */}
-        <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+        <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
             {effectiveScope === "ALL" ? "Quest Work vs Other" : "Share of Total Focus"}
           </div>
@@ -517,11 +517,11 @@ export function TelemetryDashboardView() {
       <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))] gap-4">
         <div
           data-testid="stat-tasks-completed"
-          className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5"
+          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
         >
           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
             <span>Tasks Completed</span>
-            <CheckCircle2 className="h-3.5 w-3.5 text-[#00ff9d]" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {completedTasks === undefined ? "–" : report.completedTasksCount}
@@ -539,11 +539,11 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-focus-bouts"
-          className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5"
+          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
         >
           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
             <span>Focus Sessions</span>
-            <Clock className="h-3.5 w-3.5 text-[#00f0ff]" />
+            <Clock className="h-3.5 w-3.5 text-accent" />
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {loading ? "–" : report.sessionsCount}
@@ -559,11 +559,11 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-focus-streak"
-          className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5"
+          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
         >
           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
             <span>Active Streak</span>
-            <Flame className="h-3.5 w-3.5 text-[#ffb800]" />
+            <Flame className="h-3.5 w-3.5 text-now" />
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {heatmapLogs === undefined ? "–" : `${heatmap.currentStreak}d`}
@@ -577,11 +577,11 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-peak-bucket"
-          className="rounded-2xl border border-white/[0.08] bg-[#111318] p-5"
+          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
         >
           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
             <span>Peak Window</span>
-            <TrendingUp className="h-3.5 w-3.5 text-[#ffb800]" />
+            <TrendingUp className="h-3.5 w-3.5 text-now" />
           </div>
           <div className="mt-3 truncate text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {loading ? "–" : report.peakBucket ? report.peakBucket.detailLabel : "—"}
@@ -603,7 +603,7 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left (7 cols): Adaptive Horizon Bar Chart (Hours or Tasks) */}
-        <div className="cq-card min-w-0 lg:col-span-7 flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+        <div className="cq-card min-w-0 lg:col-span-7 flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
               {chartMetric === "hours" ? "Quest Hours" : "Completed Tasks"} ·{" "}
@@ -619,7 +619,7 @@ export function TelemetryDashboardView() {
             <div
               role="group"
               aria-label="Chart metric"
-              className="flex items-center rounded-full border border-white/10 bg-[#0b0d12] p-0.5"
+              className="flex items-center rounded-full border border-white/10 bg-base p-0.5"
             >
               <button
                 type="button"
@@ -698,7 +698,7 @@ export function TelemetryDashboardView() {
                         bucket.isCurrent
                           ? primaryBarClass
                           : rawValue > 0
-                          ? "bg-[#3b3d46]"
+                          ? "bg-edge-2"
                           : "bg-white/[0.06]"
                       }`}
                     />
@@ -722,7 +722,7 @@ export function TelemetryDashboardView() {
 
         {/* Right (5 cols): HOURS & TASKS BY QUEST + QUEST WORK VS OTHER */}
         <div className="min-w-0 lg:col-span-5 flex flex-col gap-6">
-          <div className="cq-card flex-1 rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+          <div className="cq-card flex-1 rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
             <div className="mb-6 flex items-center justify-between gap-2">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
                 Hours by Quest
@@ -802,12 +802,12 @@ export function TelemetryDashboardView() {
           </div>
 
           {/* Card: FOCUS SPLIT (quest work vs other) */}
-          <div className="cq-card rounded-2xl border border-white/[0.08] bg-[#111318] p-5 sm:p-7">
+          <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
             <div className="mb-5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
               Focus Split
             </div>
 
-            <div className="flex h-11 w-full overflow-hidden rounded-lg bg-[#1d1f26]">
+            <div className="flex h-11 w-full overflow-hidden rounded-lg bg-raised-2">
               <div
                 style={{
                   width: `${
@@ -816,17 +816,17 @@ export function TelemetryDashboardView() {
                       : 0
                   }%`,
                 }}
-                className="h-full bg-[#ffb800] transition-[width] duration-500 ease-out"
+                className="h-full bg-now transition-[width] duration-500 ease-out"
               />
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-6 text-xs tabular-nums">
               <div className="flex items-center gap-2 text-neutral-200">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#ffb800]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-now" />
                 <span>Quest work · {durationText(report.questSeconds)}</span>
               </div>
               <div className="flex items-center gap-2 text-hud-muted">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#2c2f3a]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-edge" />
                 <span>
                   Other · {durationText(report.otherSeconds)} ({report.otherTasksCompleted}{" "}
                   {report.otherTasksCompleted === 1 ? "task" : "tasks"})
@@ -867,7 +867,7 @@ export function TelemetryDashboardView() {
         </button>
 
         {showSessionHistory && (
-          <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-[#111318] px-4 sm:px-6 py-2">
+          <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-surface px-4 sm:px-6 py-2">
             {periodLogs !== undefined && report.filteredLogs.length === 0 && (
               <p className="py-3.5 text-sm text-hud-muted">
                 No sessions logged {windowSpec.sessionUnitLabel}.

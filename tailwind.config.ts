@@ -1,57 +1,105 @@
 import type { Config } from "tailwindcss";
 import plugin from "tailwindcss/plugin";
 
+// Every colour resolves to a token in src/app/globals.css (ADR-0005), so the
+// Neon and Dawn looks repaint by swapping one attribute on <html>.
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
+const quest = (key: string) => ({ DEFAULT: token(`q-${key}`), hi: token(`q-${key}-hi`) });
+
 const config: Config = {
   darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    // QUEST_ACCENT_STYLES (src/lib/db.ts) holds class names used nowhere else.
+    // QUEST_ACCENT_STYLES (src/lib/questAccents.ts) holds class names used nowhere else.
     "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        void: {
-          DEFAULT: "#07080a",
-          950: "#050608",
-          900: "#0a0c10",
-          800: "#0f131a",
-          700: "#161c26",
-          600: "#1f2937",
+        white: token("c-ink"),
+        black: token("c-black"),
+        neutral: {
+          100: token("c-neutral-100"),
+          200: token("c-neutral-200"),
+          300: token("c-neutral-300"),
+          400: token("c-neutral-400"),
+          500: token("c-neutral-500"),
+          600: token("c-neutral-600"),
+        },
+        slate: {
+          100: token("c-neutral-100"),
+          200: token("c-slate-200"),
+          300: token("c-slate-300"),
+          400: token("c-slate-400"),
+          500: token("c-slate-500"),
+        },
+        // Grounds, darkest to lightest
+        void: token("c-void"),
+        base: token("c-base"),
+        sunken: token("c-sunken"),
+        surface: token("c-surface"),
+        raised: { DEFAULT: token("c-raised"), 2: token("c-raised-2") },
+        edge: { DEFAULT: token("c-edge"), 2: token("c-edge-2") },
+        // Roles
+        accent: { DEFAULT: token("c-accent"), hi: token("c-accent-hi") },
+        success: { DEFAULT: token("c-success"), hi: token("c-success-hi") },
+        warning: { DEFAULT: token("c-warning"), hi: token("c-warning-hi") },
+        danger: token("c-danger"),
+        now: token("c-now"),
+        // Quest colours, keyed like the stored accentColor values
+        q: {
+          cyan: quest("cyan"),
+          emerald: quest("emerald"),
+          amber: quest("amber"),
+          purple: quest("purple"),
+          rose: quest("rose"),
+          sky: quest("sky"),
+          orange: quest("orange"),
+          lime: quest("lime"),
+          slate: token("q-slate"),
         },
         hud: {
-          cyan: "#00f0ff",
-          emerald: "#00ff9d",
-          amber: "#ffb800",
-          purple: "#b388ff",
-          rose: "#ff6b9d",
-          sky: "#38bdf8",
-          orange: "#ff8547",
-          lime: "#a3e635",
-          crimson: "#ff2a5f",
-          slate: "#64748b",
-          // Slate-tinted secondary text / placeholders: >= 5.9:1 (WCAG AA) on #0b0c0e, #0d0f14, #111318 and #14171f.
-          muted: "#8c96a8",
-          border: "rgba(0, 240, 255, 0.18)",
+          cyan: token("c-accent"),
+          emerald: token("c-success"),
+          amber: token("c-warning"),
+          crimson: token("c-danger"),
+          purple: token("q-purple"),
+          rose: token("q-rose"),
+          sky: token("q-sky"),
+          orange: token("q-orange"),
+          lime: token("q-lime"),
+          slate: token("q-slate"),
+          // Secondary text / placeholders: >= 5.9:1 (WCAG AA) on every ground in both looks.
+          muted: token("c-muted"),
+          border: "rgb(var(--c-accent) / 0.18)",
         },
       },
       fontFamily: {
-        mono: ["var(--font-jetbrains-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
-        display: ["var(--font-space-grotesk)", "sans-serif"],
+        sans: ["var(--font-body)"],
+        mono: ["var(--font-numeric)"],
+        display: ["var(--font-heading)"],
+        chrono: ["var(--font-chrono)"],
       },
       boxShadow: {
-        "neon-cyan": "0 0 15px rgba(0, 240, 255, 0.28), inset 0 0 12px rgba(0, 240, 255, 0.08)",
-        "neon-cyan-strong": "0 0 25px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.15)",
-        "neon-emerald": "0 0 15px rgba(0, 255, 157, 0.28), inset 0 0 12px rgba(0, 255, 157, 0.08)",
-        "neon-amber": "0 0 15px rgba(255, 184, 0, 0.28), inset 0 0 12px rgba(255, 184, 0, 0.08)",
-        "neon-purple": "0 0 15px rgba(179, 136, 255, 0.28), inset 0 0 12px rgba(179, 136, 255, 0.08)",
-        "neon-rose": "0 0 15px rgba(255, 107, 157, 0.28), inset 0 0 12px rgba(255, 107, 157, 0.08)",
-        "neon-sky": "0 0 15px rgba(56, 189, 248, 0.28), inset 0 0 12px rgba(56, 189, 248, 0.08)",
-        "neon-orange": "0 0 15px rgba(255, 133, 71, 0.28), inset 0 0 12px rgba(255, 133, 71, 0.08)",
-        "neon-lime": "0 0 15px rgba(163, 230, 53, 0.28), inset 0 0 12px rgba(163, 230, 53, 0.08)",
-        "neon-crimson": "0 0 15px rgba(255, 42, 95, 0.35), inset 0 0 12px rgba(255, 42, 95, 0.1)",
+        "neon-cyan": "var(--glow-cyan)",
+        "neon-cyan-strong": "var(--glow-cyan-strong)",
+        "neon-emerald": "var(--glow-emerald)",
+        "neon-amber": "var(--glow-amber)",
+        "neon-purple": "var(--glow-purple)",
+        "neon-rose": "var(--glow-rose)",
+        "neon-sky": "var(--glow-sky)",
+        "neon-orange": "var(--glow-orange)",
+        "neon-lime": "var(--glow-lime)",
+        "neon-crimson": "var(--glow-crimson)",
+        "dot-success": "var(--glow-dot-success)",
+        "dot-now": "var(--glow-dot-now)",
+        "card-accent": "var(--glow-card-accent)",
+        "card-success": "var(--glow-card-success)",
+        "card-warning": "var(--glow-card-warning)",
+        "lift-success": "var(--glow-lift-success)",
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",

@@ -2,8 +2,168 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/*
+ * Looks (ADR-0005). Every colour the UI uses is a token below, written as
+ * "R G B" channels so Tailwind can add opacity (`bg-accent/20`). The Neon
+ * look is the original Hunt palette; Dawn is the blue-hour palette taken
+ * from the logo. `src/lib/lookPreference.ts` sets `data-theme` on <html>;
+ * no attribute means Neon. public/hunt-mobile.html carries the same names.
+ */
+:root,
+:root[data-theme="neon"] {
   color-scheme: dark;
+
+  /* Grounds, darkest to lightest */
+  --c-void: 7 8 10;
+  --c-base: 11 12 14;
+  --c-sunken: 13 15 20;
+  --c-surface: 17 19 24;
+  --c-raised: 20 23 31;
+  --c-raised-2: 29 31 38;
+  --c-edge: 44 47 58;
+  --c-edge-2: 59 61 70;
+
+  /* Inks: `white` and `black` in Tailwind resolve to these */
+  --c-ink: 255 255 255;
+  --c-black: 0 0 0;
+  --c-muted: 140 150 168;
+  --c-neutral-100: 245 245 245;
+  --c-neutral-200: 229 229 229;
+  --c-neutral-300: 212 212 212;
+  --c-neutral-400: 163 163 163;
+  --c-neutral-500: 115 115 115;
+  --c-neutral-600: 82 82 82;
+  --c-slate-200: 226 232 240;
+  --c-slate-300: 203 213 225;
+  --c-slate-400: 148 163 184;
+  --c-slate-500: 100 116 139;
+
+  /* Roles */
+  --c-accent: 0 240 255;
+  --c-accent-hi: 77 245 255;
+  --c-success: 0 255 157;
+  --c-success-hi: 77 255 184;
+  --c-warning: 255 184 0;
+  --c-warning-hi: 255 198 51;
+  --c-danger: 255 42 95;
+  --c-now: 255 184 0;
+
+  /* Quest colours (keys match the stored accentColor values) */
+  --q-cyan: 0 240 255;
+  --q-cyan-hi: 77 245 255;
+  --q-emerald: 0 255 157;
+  --q-emerald-hi: 77 255 184;
+  --q-amber: 255 184 0;
+  --q-amber-hi: 255 198 51;
+  --q-purple: 179 136 255;
+  --q-purple-hi: 200 168 255;
+  --q-rose: 255 107 157;
+  --q-rose-hi: 255 143 181;
+  --q-sky: 56 189 248;
+  --q-sky-hi: 125 211 252;
+  --q-orange: 255 133 71;
+  --q-orange-hi: 255 160 112;
+  --q-lime: 163 230 53;
+  --q-lime-hi: 190 242 100;
+  --q-slate: 100 116 139;
+
+  /* Glows: Neon only. Dawn sets every one to none. */
+  --glow-cyan: 0 0 15px rgba(0, 240, 255, 0.28), inset 0 0 12px rgba(0, 240, 255, 0.08);
+  --glow-cyan-strong: 0 0 25px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.15);
+  --glow-emerald: 0 0 15px rgba(0, 255, 157, 0.28), inset 0 0 12px rgba(0, 255, 157, 0.08);
+  --glow-amber: 0 0 15px rgba(255, 184, 0, 0.28), inset 0 0 12px rgba(255, 184, 0, 0.08);
+  --glow-purple: 0 0 15px rgba(179, 136, 255, 0.28), inset 0 0 12px rgba(179, 136, 255, 0.08);
+  --glow-rose: 0 0 15px rgba(255, 107, 157, 0.28), inset 0 0 12px rgba(255, 107, 157, 0.08);
+  --glow-sky: 0 0 15px rgba(56, 189, 248, 0.28), inset 0 0 12px rgba(56, 189, 248, 0.08);
+  --glow-orange: 0 0 15px rgba(255, 133, 71, 0.28), inset 0 0 12px rgba(255, 133, 71, 0.08);
+  --glow-lime: 0 0 15px rgba(163, 230, 53, 0.28), inset 0 0 12px rgba(163, 230, 53, 0.08);
+  --glow-crimson: 0 0 15px rgba(255, 42, 95, 0.35), inset 0 0 12px rgba(255, 42, 95, 0.1);
+  --glow-dot-success: 0 0 6px rgb(0 255 157);
+  --glow-dot-now: 0 0 8px rgb(255 184 0);
+  --glow-card-accent: 0 0 30px -12px rgba(0, 240, 255, 0.22);
+  --glow-card-success: 0 0 26px -10px rgba(0, 255, 157, 0.35);
+  --glow-card-warning: 0 0 24px -10px rgba(255, 184, 0, 0.2);
+  --glow-lift-success: 0 12px 32px -12px rgba(0, 255, 157, 0.32);
+
+  /* Faces (next/font variables from layout.tsx) */
+  --font-body: var(--font-space-grotesk), "Segoe UI", system-ui, sans-serif;
+  --font-heading: var(--font-space-grotesk), "Segoe UI", system-ui, sans-serif;
+  --font-numeric: var(--font-jetbrains-mono), "Cascadia Code", Consolas, ui-monospace, monospace;
+  --font-chrono: ui-sans-serif, system-ui, sans-serif;
+}
+
+:root[data-theme="dawn"] {
+  --c-void: 11 17 28;
+  --c-base: 16 24 38;
+  --c-sunken: 19 28 43;
+  --c-surface: 23 33 51;
+  --c-raised: 31 43 64;
+  --c-raised-2: 38 51 74;
+  --c-edge: 46 59 83;
+  --c-edge-2: 58 72 99;
+
+  --c-ink: 237 230 216;
+  --c-black: 8 12 21;
+  --c-muted: 154 163 181;
+  --c-neutral-100: 239 233 222;
+  --c-neutral-200: 226 221 211;
+  --c-neutral-300: 201 203 209;
+  --c-neutral-400: 166 173 189;
+  --c-neutral-500: 121 131 154;
+  --c-neutral-600: 86 96 122;
+  --c-slate-200: 222 226 233;
+  --c-slate-300: 196 202 214;
+  --c-slate-400: 150 160 180;
+  --c-slate-500: 108 120 145;
+
+  --c-accent: 229 170 80;
+  --c-accent-hi: 236 185 104;
+  --c-success: 143 203 155;
+  --c-success-hi: 166 216 176;
+  --c-warning: 236 145 104;
+  --c-warning-hi: 240 165 133;
+  --c-danger: 232 119 127;
+  --c-now: 229 170 80;
+
+  --q-cyan: 132 184 230;
+  --q-cyan-hi: 160 201 238;
+  --q-emerald: 143 203 155;
+  --q-emerald-hi: 166 216 176;
+  --q-amber: 229 170 80;
+  --q-amber-hi: 236 185 104;
+  --q-purple: 183 163 230;
+  --q-purple-hi: 201 186 238;
+  --q-rose: 230 154 182;
+  --q-rose-hi: 238 178 199;
+  --q-sky: 114 198 192;
+  --q-sky-hi: 146 212 207;
+  --q-orange: 236 145 104;
+  --q-orange-hi: 240 165 133;
+  --q-lime: 189 207 112;
+  --q-lime-hi: 205 220 142;
+  --q-slate: 108 120 145;
+
+  --glow-cyan: none;
+  --glow-cyan-strong: none;
+  --glow-emerald: none;
+  --glow-amber: none;
+  --glow-purple: none;
+  --glow-rose: none;
+  --glow-sky: none;
+  --glow-orange: none;
+  --glow-lime: none;
+  --glow-crimson: none;
+  --glow-dot-success: none;
+  --glow-dot-now: 0 0 0 4px rgba(229, 170, 80, 0.16);
+  --glow-card-accent: none;
+  --glow-card-success: none;
+  --glow-card-warning: none;
+  --glow-lift-success: none;
+
+  --font-body: var(--font-hanken-grotesk), "Segoe UI", system-ui, sans-serif;
+  --font-heading: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
+  --font-numeric: var(--font-hanken-grotesk), "Segoe UI", system-ui, sans-serif;
+  --font-chrono: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
 }
 
 html,
@@ -18,12 +178,61 @@ body {
 }
 
 body {
-  color: #e2e8f0;
-  font-family: var(--font-space-grotesk), sans-serif;
+  color: rgb(var(--c-slate-200));
+  font-family: var(--font-body);
+}
+
+/* Dawn: page and view titles in the serif, section labels in sentence case
+   instead of tracked capitals, and digits that line up without a mono face. */
+:root[data-theme="dawn"] :where(h1, h2) {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+:root[data-theme="dawn"] .uppercase {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+:root[data-theme="dawn"] .font-mono {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+:root[data-theme="dawn"] .animate-scanline {
+  display: none;
+}
+
+/* Day timeline session blocks. DayTimeline sets --q to the quest's channels.
+   Neon: hatched glass. Dawn: a flat tint, so the quest bar carries the colour. */
+.timeline-block {
+  border-color: rgb(var(--q) / 0.27);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgb(var(--q) / 0.094),
+    rgb(var(--q) / 0.094) 6px,
+    rgb(var(--q) / 0.031) 6px,
+    rgb(var(--q) / 0.031) 12px
+  );
+}
+
+:root[data-theme="dawn"] .timeline-block {
+  border-color: rgb(var(--q) / 0.16);
+  background-image: none;
+  background-color: rgb(var(--q) / 0.14);
+}
+
+/* Dawn's Focus sun arc; Neon keeps the plain stage. */
+.focus-sun-arc {
+  display: none;
+}
+
+:root[data-theme="dawn"] .focus-sun-arc {
+  display: block;
 }
 
 :where(button, a, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid #00f0ff;
+  outline: 2px solid rgb(var(--c-accent));
   outline-offset: 2px;
 }
 
@@ -39,8 +248,8 @@ body {
 }
 
 ::selection {
-  background: rgba(0, 240, 255, 0.25);
-  color: #00f0ff;
+  background: rgb(var(--c-accent) / 0.25);
+  color: rgb(var(--c-accent));
 }
 
 /* Custom Tactical Scrollbar */
@@ -50,15 +259,15 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #07080a;
+  background: rgb(var(--c-void));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.22);
+  background: rgb(var(--c-accent) / 0.22);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.45);
+  background: rgb(var(--c-accent) / 0.45);
 }
 
 @layer utilities {
@@ -76,10 +285,10 @@ body {
      --scroll-shadow-cover* variables on other surfaces (e.g. the header nav). */
   .scroll-shadow-x {
     background-image:
-      linear-gradient(to right, var(--scroll-shadow-cover, #111318) 25%, var(--scroll-shadow-cover-clear, rgba(17, 19, 24, 0))),
-      linear-gradient(to left, var(--scroll-shadow-cover, #111318) 25%, var(--scroll-shadow-cover-clear, rgba(17, 19, 24, 0))),
-      radial-gradient(farthest-side at 0 50%, rgba(0, 240, 255, 0.18), transparent),
-      radial-gradient(farthest-side at 100% 50%, rgba(0, 240, 255, 0.18), transparent);
+      linear-gradient(to right, var(--scroll-shadow-cover, rgb(var(--c-surface))) 25%, var(--scroll-shadow-cover-clear, rgb(var(--c-surface) / 0))),
+      linear-gradient(to left, var(--scroll-shadow-cover, rgb(var(--c-surface))) 25%, var(--scroll-shadow-cover-clear, rgb(var(--c-surface) / 0))),
+      radial-gradient(farthest-side at 0 50%, rgb(var(--c-accent) / 0.18), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgb(var(--c-accent) / 0.18), transparent);
     background-position: left center, right center, left center, right center;
     background-repeat: no-repeat;
     background-size: 20px 100%, 20px 100%, 10px 100%, 10px 100%;
@@ -150,6 +359,11 @@ body {
 
   .focus-notes-wrap {
     margin-top: 1rem;
+  }
+
+  /* The sun arc gives way to the clock on short screens. */
+  :root[data-theme="dawn"] .focus-sun-arc {
+    display: none;
   }
 }
 

@@ -680,7 +680,8 @@ function parseColor(text: string): Rgba {
   }
   const fn = /^rgba?\(([^)]+)\)$/.exec(s);
   if (fn) {
-    const [r, g, b, a] = fn[1].split(",").map((v) => Number(v.trim()));
+    // "r, g, b, a" or the token form "r g b / a"
+    const [r, g, b, a] = fn[1].split(/[\s,/]+/).filter(Boolean).map(Number);
     return [r, g, b, a === undefined || Number.isNaN(a) ? 1 : a];
   }
   throw new Error("unparsed colour " + text);
@@ -709,8 +710,12 @@ describe("WCAG AA contrast", () => {
     expect(contrast(parseColor("#64748b"), parseColor("#08090c"))).toBeLessThan(4.5); // slate text: the finding
   });
 
+  /** A :root colour with its var() references to the look tokens resolved (ADR-0005; jsdom leaves them raw). */
   function rootColor(p: MobileWindow, name: string): Rgba {
-    return parseColor(p.getComputedStyle(p.document.documentElement).getPropertyValue(name));
+    const root = p.getComputedStyle(p.document.documentElement);
+    const resolve = (text: string, depth: number): string =>
+      text.replace(/var\((--[\w-]+)\)/g, (_m, ref: string) => (depth > 8 ? "" : resolve(root.getPropertyValue(ref).trim(), depth + 1)));
+    return parseColor(resolve(root.getPropertyValue(name), 0));
   }
 
   it("completed cards: dimmed to 0.75, their muted text keeps 4.5:1 (0.55 did not)", () => {

@@ -208,7 +208,14 @@ async function checkReviewScopeMenu(page: Page, vp: Viewport, failures: string[]
   await page.keyboard.press("Escape");
 }
 
-test.describe("desktop app geometry", () => {
+// Both looks (ADR-0005): Dawn's serif and grotesk have different widths from Neon's faces.
+const LOOKS = ["neon", "dawn"] as const;
+
+for (const look of LOOKS) {
+test.describe(`desktop app geometry (${look})`, () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((value) => window.localStorage.setItem("hunt-look", value), look);
+  });
   for (const vp of DESKTOP_VIEWPORTS) {
     test(`${label(vp)}: no horizontal overflow in any view; Review menu on screen`, async ({
       page,
@@ -236,6 +243,7 @@ test.describe("desktop app geometry", () => {
     });
   }
 });
+}
 
 // ---------------------------------------------------------------------------
 // Phone / tablet app (/hunt-mobile.html)
@@ -296,7 +304,11 @@ async function checkTabletPlanTitles(page: Page, vp: Viewport, failures: string[
   }
 }
 
-test.describe("phone app geometry", () => {
+for (const look of LOOKS) {
+test.describe(`phone app geometry (${look})`, () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((value) => window.localStorage.setItem("hunt-look", value), look);
+  });
   for (const vp of PHONE_APP_VIEWPORTS) {
     test(`${label(vp)}: no horizontal overflow in any view`, async ({ page }) => {
       await page.setViewportSize(vp);
@@ -317,3 +329,4 @@ test.describe("phone app geometry", () => {
     });
   }
 });
+}

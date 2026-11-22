@@ -14,7 +14,7 @@ import {
   Repeat,
   Trash2,
 } from "lucide-react";
-import { accentStyle } from "@/lib/questAccents";
+import { accentColor, accentStyle } from "@/lib/questAccents";
 import {
   dateFromKey,
   dateKeyFromOffset,
@@ -70,7 +70,7 @@ function buildDayColumns(todayKey: string, dayOffset: number): DayColumn[] {
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const ADD_BUTTON = `rounded-md border border-white/10 bg-white/[0.03] p-2 coarse:p-2.5 enabled:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${PRESSABLE}`;
-const NAV_BUTTON = `rounded-lg border border-white/10 bg-[#111318] hover:border-white/20 hover:text-white ${PRESSABLE}`;
+const NAV_BUTTON = `rounded-lg border border-white/10 bg-surface hover:border-white/20 hover:text-white ${PRESSABLE}`;
 
 interface DayTasks {
   pending: Task[];
@@ -223,11 +223,11 @@ export function PlanWeekView() {
   const handleCompleteTask = (taskId: string, colDateKey: string) => {
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
-    const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
+    const accentCss = accentColor(accentStyle(quest?.accentColor ?? "emerald"));
     const scene = captureTaskCompletionScene(
       colFlowRefs.current[colDateKey] ?? null,
       taskId,
-      accentHex
+      accentCss
     );
     pendingSceneRef.current = scene ? { colDateKey, scene } : null;
     flashJustCompleted(taskId);
@@ -356,7 +356,7 @@ export function PlanWeekView() {
           <div
             role="group"
             aria-label="Quest for new tasks"
-            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#111318] p-1 sm:rounded-full"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-surface p-1 sm:rounded-full"
           >
             {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
@@ -463,16 +463,16 @@ export function PlanWeekView() {
               onDrop={() => handleDropOnDay(col.dateKey)}
               className={`flex min-h-[200px] xl:min-h-[560px] min-w-0 flex-col rounded-2xl border p-4 transition-colors ${
                 isDragTarget
-                  ? "border-[#00f0ff]/50 bg-[#141821]"
+                  ? "border-accent/50 bg-raised"
                   : col.isToday
-                  ? "border-white/[0.12] bg-[#111318]"
-                  : "border-white/[0.05] bg-[#0d0f13]"
+                  ? "border-white/[0.12] bg-surface"
+                  : "border-white/[0.05] bg-sunken"
               }`}
             >
               {/* Day Column Header */}
               <div
                 className={`mb-4 border-b pb-3 ${
-                  col.isToday ? "border-[#ffb800]" : "border-white/[0.06]"
+                  col.isToday ? "border-now" : "border-white/[0.06]"
                 }`}
               >
                 <div className="flex items-baseline gap-1.5 text-base">
@@ -488,7 +488,7 @@ export function PlanWeekView() {
                   <span
                     className={`tabular-nums ${
                       col.isToday
-                        ? "font-semibold text-[#ffb800]"
+                        ? "font-semibold text-now"
                         : "text-hud-muted"
                     }`}
                   >
@@ -606,8 +606,8 @@ export function PlanWeekView() {
                         draggedTaskId === task.id ? "opacity-40 " : ""
                       }${
                         isHero
-                          ? "border-[#ffb800]/40 bg-[#151820] shadow-[0_0_24px_-10px_rgba(255,184,0,0.2)]"
-                          : "border-white/[0.08] bg-[#13151b] hover:border-white/20"
+                          ? "border-now/40 bg-raised shadow-card-warning"
+                          : "border-white/[0.08] bg-surface hover:border-white/20"
                       }`}
                     >
                       <div
@@ -623,7 +623,7 @@ export function PlanWeekView() {
                           initializeFocus(task.id);
                         }}
                         aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
-                        className={`block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-sm font-medium leading-snug text-white hover:text-[#00f0ff] ${PRESSABLE}`}
+                        className={`block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-sm font-medium leading-snug text-white hover:text-accent ${PRESSABLE}`}
                       >
                         {task.title}
                       </button>
@@ -649,7 +649,7 @@ export function PlanWeekView() {
                             className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
-                                : "border-white/40 text-transparent hover:border-[#00ff9d] hover:text-[#00ff9d]"
+                                : "border-white/40 text-transparent hover:border-success hover:text-success"
                             }`}
                           >
                             <Check className="h-2.5 w-2.5" />
@@ -681,7 +681,7 @@ export function PlanWeekView() {
                             </span>
                           )}
                           {isRunningHere && (
-                            <span className="h-2 w-2 rounded-full bg-[#00ff9d] animate-pulse" />
+                            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                           )}
                           {/* ROW_DELETE_CLASS: revealed on row hover for mice,
                               always visible (muted) on touch, padded target. */}
@@ -726,7 +726,7 @@ export function PlanWeekView() {
                       className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-[border-color,background-color,box-shadow] duration-500 ease-out ${
                         isJustCompleted
                           ? SETTLING_COMPLETED_CARD_CLASS
-                          : "border-white/[0.05] bg-[#101217]/50"
+                          : "border-white/[0.05] bg-surface/50"
                       }`}
                     >
                       <div

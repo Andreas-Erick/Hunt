@@ -8,7 +8,11 @@ import { buildDemoData, type DemoData } from "./demoData";
  * streaks and Review windows look the same on every run.
  */
 
-const OUT = path.resolve(__dirname, "..", "..", "docs", "screenshots");
+// HUNT_SHOTS_LOOK=dawn captures the Dawn look (ADR-0005); HUNT_SHOTS_OUT writes elsewhere
+// (e.g. a scratch folder for review) instead of overwriting the README images.
+const LOOK = process.env.HUNT_SHOTS_LOOK === "dawn" ? "dawn" : "neon";
+const OUT = process.env.HUNT_SHOTS_OUT ?? path.resolve(__dirname, "..", "..", "docs", "screenshots");
+const LOOK_KEY = "hunt-look"; // LOOK_STORAGE_KEY in src/lib/lookPreference.ts and the phone page
 const DESKTOP_DB_NAME = "JourneyCommandDB"; // src/lib/db.ts
 const DESKTOP_FOCUS_KEY = "journey-hud-command-store"; // zustand persist name in useCommandStore.ts
 const PHONE_STATE_KEY = "hunt-mobile-standalone-v1"; // STORAGE_KEY in public/hunt-mobile.html
@@ -50,7 +54,12 @@ async function shoot(page: Page, name: string): Promise<void> {
 // Desktop app
 // ---------------------------------------------------------------------------
 
+async function applyShotLook(page: Page): Promise<void> {
+  await page.addInitScript(([key, value]) => window.localStorage.setItem(key, value), [LOOK_KEY, LOOK] as const);
+}
+
 async function openDesktop(page: Page, data: DemoData, focusTaskId?: string): Promise<void> {
+  await applyShotLook(page);
   await page.clock.setFixedTime(NOW);
   await fakeHealthySync(page, data);
   await page.goto("/");
@@ -139,6 +148,7 @@ test.describe("phone", () => {
     };
     await page.clock.setFixedTime(NOW);
     await fakeHealthySync(page, data);
+    await applyShotLook(page);
     await page.addInitScript(([key, value]) => window.localStorage.setItem(key, value), [PHONE_STATE_KEY, JSON.stringify(state)] as const);
     await page.goto("/hunt-mobile.html");
     await expect(page.locator("#bottomNav")).toBeAttached();

@@ -129,10 +129,12 @@ function assertClean(win: MobileWindow, where: string) {
   const doc = win.document;
   expect(win.__pwned, where).toBeUndefined();
   expect(doc.querySelectorAll("img, iframe, object, embed").length, where).toBe(0);
-  // Exactly the page's own two scripts: the generated shared core (HuntCore) and the page script.
+  // Exactly the page's own three scripts: the look boot script in <head> (ADR-0005), the generated
+  // shared core (HuntCore) and the page script.
   const scripts = doc.querySelectorAll("script");
-  expect(scripts.length, where).toBe(2);
-  expect(scripts[0].textContent, where).toContain("var HuntCore = ");
+  expect(scripts.length, where).toBe(3);
+  expect(scripts[0].textContent, where).toContain('localStorage.getItem("hunt-look")');
+  expect(scripts[1].textContent, where).toContain("var HuntCore = ");
   for (const el of Array.from(doc.querySelectorAll("*"))) {
     for (const attr of Array.from(el.attributes)) {
       if (!attr.name.startsWith("on")) continue;

@@ -5,7 +5,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { motion, AnimatePresence } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import { accentStyle } from "@/lib/questAccents";
+import { accentColor, accentStyle } from "@/lib/questAccents";
 import { dateFromKey, formatChronoMMSS, isTaskVisibleToday, toLocalDateKey } from "@/lib/dateUtils";
 import type { Quest } from "@/lib/domainTypes";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
@@ -207,11 +207,11 @@ export function CommandCenterView() {
   const handleCompleteTask = (taskId: string) => {
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
-    const accentHex = accentStyle(quest?.accentColor ?? "emerald").hex;
+    const accentCss = accentColor(accentStyle(quest?.accentColor ?? "emerald"));
     pendingSceneRef.current = captureTaskCompletionScene(
       taskFlowRef.current,
       taskId,
-      accentHex
+      accentCss
     );
     setExpandedTaskId((cur) => (cur === taskId ? null : cur));
     flashJustCompleted(taskId);
@@ -241,7 +241,7 @@ export function CommandCenterView() {
               animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
               exit={{ opacity: 0, height: 0, marginBottom: 0 }}
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-center justify-between gap-3 rounded-xl border border-[#00ff9d]/30 bg-[#00ff9d]/10 px-5 py-3.5 text-sm text-[#00ff9d]"
+              className="flex items-center justify-between gap-3 rounded-xl border border-success/30 bg-success/10 px-5 py-3.5 text-sm text-success"
             >
               <span className="min-w-0 break-words">
                 Completed{" "}
@@ -290,7 +290,7 @@ export function CommandCenterView() {
                   track's overflow-hidden clips it, keeping the rounded end. */}
               <div
                 data-testid="week-progress-fill"
-                className="h-full w-full rounded-full bg-[#00f0ff] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                className="h-full w-full rounded-full bg-accent transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                 style={{ transform: `translateX(${weeklyProgressPct - 100}%)` }}
               />
             </div>
@@ -388,7 +388,7 @@ export function CommandCenterView() {
                   {[0, 1].map((slot) => (
                     <div
                       key={slot}
-                      className="rounded-2xl border border-white/[0.06] bg-[#111318]/70 p-5 pl-6"
+                      className="rounded-2xl border border-white/[0.06] bg-surface/70 p-5 pl-6"
                     >
                       <div className="h-5 w-3/5 animate-pulse rounded-lg bg-white/[0.06]" />
                       <div className="mt-3.5 h-4 w-1/3 animate-pulse rounded-lg bg-white/[0.04]" />

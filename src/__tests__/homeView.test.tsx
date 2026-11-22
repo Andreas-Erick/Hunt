@@ -1155,7 +1155,7 @@ describe("CommandCenterView (Home)", () => {
         const completedRow = screen.getByTestId("completed-task-row");
         expect(completedRow).toHaveTextContent("Ship smooth animation");
         // Arrival highlight ring + solid in-flight surface + animated SVG stroke-draw checkmark are active
-        expect(completedRow.className).toContain("border-[#00ff9d]/35");
+        expect(completedRow.className).toContain("border-success/35");
         expect(completedRow.className).toContain("z-10");
         const reopenBtn = within(completedRow).getByRole("button", {
           name: "Reopen task",
@@ -1166,7 +1166,7 @@ describe("CommandCenterView (Home)", () => {
         act(() => {
           vi.advanceTimersByTime(700);
         });
-        expect(completedRow.className).not.toContain("border-[#00ff9d]/35");
+        expect(completedRow.className).not.toContain("border-success/35");
 
         // Reopen and complete again, then unmount mid-highlight to verify deterministic timer cleanup
         await act(async () => {

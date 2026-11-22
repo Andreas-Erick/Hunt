@@ -37,7 +37,7 @@ vi.mock("next/font/google", () => {
     variable: `next-font-var${options.variable}`,
     style: { fontFamily: "next-font" },
   });
-  return { Space_Grotesk: font, JetBrains_Mono: font };
+  return { Space_Grotesk: font, JetBrains_Mono: font, Hanken_Grotesk: font, Newsreader: font };
 });
 
 const ROOT = path.resolve(__dirname, "..", "..");

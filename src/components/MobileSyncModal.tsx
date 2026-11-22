@@ -432,7 +432,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
 
   const serverTone =
     server.state === "error"
-      ? "text-[#ffb800]"
+      ? "text-warning"
       : server.state === "ok"
       ? "text-neutral-200"
       : "text-neutral-400";
@@ -456,11 +456,11 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       }}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
     >
-      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/[0.1] bg-[#111318] p-4 sm:p-8 shadow-2xl">
+      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
         {/* Top Modal Header */}
         <div className="flex items-start justify-between gap-3 sm:gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#00f0ff]/30 bg-[#00f0ff]/10 text-[#00f0ff]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent">
               <Smartphone className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -497,7 +497,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         {/* Main 2-Column Body */}
         <div className="mt-5 sm:mt-7 grid grid-cols-1 gap-5 sm:gap-6 sm:grid-cols-12 items-center">
           {/* Left: Scannable QR Code */}
-          <div className="sm:col-span-5 flex min-w-0 flex-col items-center rounded-2xl border border-white/[0.08] bg-[#0b0c0e] p-4 sm:p-5 text-center">
+          <div className="sm:col-span-5 flex min-w-0 flex-col items-center rounded-2xl border border-white/[0.08] bg-base p-4 sm:p-5 text-center">
             {qr.status === "ready" ? (
               <div
                 data-testid="pairing-qr"
@@ -551,7 +551,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                     title={u}
                     className={`inline-flex min-h-8 coarse:min-h-11 items-center rounded px-2.5 py-1 font-mono text-[10px] transition-colors duration-150 ease-out active:opacity-80 ${
                       u === activeUrl
-                        ? "bg-[#00f0ff]/20 text-[#00f0ff]"
+                        ? "bg-accent/20 text-accent"
                         : "text-hud-muted hover:text-neutral-300"
                     }`}
                   >
@@ -565,7 +565,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
           {/* Right: Sync Status + Install Instructions */}
           <div className="sm:col-span-7 min-w-0 space-y-4">
             {/* Live Sync Status Card: the phone and this laptop's server, separately */}
-            <div className="rounded-xl border border-white/[0.08] bg-[#0d0f14] p-4">
+            <div className="rounded-xl border border-white/[0.08] bg-sunken p-4">
               <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-3">
                   {/* Phone */}
@@ -574,7 +574,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                       <span
                         className={`h-2 w-2 rounded-full transition-colors ${
                           phone.live
-                            ? "bg-[#00ff9d] shadow-[0_0_6px_#00ff9d]"
+                            ? "bg-success shadow-dot-success"
                             : "bg-neutral-500"
                         }`}
                       />
@@ -582,7 +582,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                     <div className="min-w-0">
                       <div
                         className={`text-xs font-medium ${
-                          phone.live ? "text-[#00ff9d]" : "text-neutral-200"
+                          phone.live ? "text-success" : "text-neutral-200"
                         }`}
                       >
                         {phone.label}
@@ -597,12 +597,12 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                   <div className="flex items-start gap-2.5">
                     <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                       {server.state === "error" ? (
-                        <ServerOff className="h-3.5 w-3.5 text-[#ffb800]" />
+                        <ServerOff className="h-3.5 w-3.5 text-warning" />
                       ) : (
                         <Server
                           className={`h-3.5 w-3.5 ${
                             server.state === "ok"
-                              ? "text-[#00ff9d]"
+                              ? "text-success"
                               : "text-hud-muted"
                           }`}
                         />
@@ -634,12 +634,12 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
                     </>
                   ) : syncResult === "ok" ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-[#00ff9d]" />
+                      <Check className="h-3.5 w-3.5 text-success" />
                       <span>Synced</span>
                     </>
                   ) : syncResult === "error" ? (
                     <>
-                      <RefreshCw className="h-3.5 w-3.5 text-[#ffb800]" />
+                      <RefreshCw className="h-3.5 w-3.5 text-warning" />
                       <span>Retry</span>
                     </>
                   ) : (
@@ -653,8 +653,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Laptop address + Copy (copies the pairing link; the key is never shown) */}
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#0b0c0e] px-3.5 py-2.5">
-              <span className="truncate font-mono text-xs text-[#00f0ff]">
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-base px-3.5 py-2.5">
+              <span className="truncate font-mono text-xs text-accent">
                 {activeUrl}
               </span>
               <button
@@ -665,7 +665,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
               >
                 {copied ? (
                   <>
-                    <Check className="h-3.5 w-3.5 text-[#00ff9d]" />
+                    <Check className="h-3.5 w-3.5 text-success" />
                     <span>Copied</span>
                   </>
                 ) : (
@@ -719,7 +719,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             <a
               href="/Hunt-Mobile.apk"
               download="Hunt-Mobile.apk"
-              className="flex items-center gap-1.5 rounded-lg border border-[#00f0ff]/35 bg-[#00f0ff]/10 px-3 py-1.5 font-medium text-[#00f0ff] hover:bg-[#00f0ff]/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+              className="flex items-center gap-1.5 rounded-lg border border-accent/35 bg-accent/10 px-3 py-1.5 font-medium text-accent hover:bg-accent/20 transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               <Smartphone className="h-3.5 w-3.5" />
               <span>Download Android APK</span>
@@ -734,7 +734,7 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             >
               {exported ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-[#00ff9d]" />
+                  <Check className="h-3.5 w-3.5 text-success" />
                   <span>Saved</span>
                 </>
               ) : (

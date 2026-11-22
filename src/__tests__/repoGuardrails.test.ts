@@ -118,6 +118,7 @@ describe("tests describe behaviour", () => {
     "src/__tests__/syncRouteSecurity.test.ts": "secret scan: no key literal or echo in the route source",
     "src/__tests__/readModel.test.ts": "layering scan: only reads.ts / the store touch db tables",
     "src/__tests__/appShell.test.tsx": "scans components for raw error text",
+    "src/__tests__/uiFoundation.test.tsx": "reads the look token blocks in globals.css to check contrast in both looks",
     "src/__tests__/desktopShellDetails.test.tsx": "no Google font request in layout.tsx (a network fact jsdom can't observe)",
   };
 
