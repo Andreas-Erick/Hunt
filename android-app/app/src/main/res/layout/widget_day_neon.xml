@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Day Widget, Neon look, populated or empty day. View ids are shared by every look's layout
-    (Dawn adds widget_day_dawn.xml with the same ids), so Java only picks the layout.
+    (widget_day_dawn.xml is its twin: keep both in step), so Java only picks the layout.
     Header (48dp): previous-day arrow, the day label (open-Hunt target, tracked caps, accent),
     next-day arrow; arrows are 48dp squares 8dp clear of the label and stay in place, dimmed,
     at today and today + 6.

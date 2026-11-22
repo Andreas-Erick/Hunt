@@ -82,7 +82,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
 
     /** What the widget can show for its selected day. */
     static final class Today {
-        /** "neon" or "dawn" (only Neon has layouts so far; anything else draws Neon). */
+        /** "neon" or "dawn" (WidgetLook draws anything else as Neon). */
         String look = "neon";
         /** No snapshot yet, or the user has nothing in Hunt: "Open Hunt to get started". */
         boolean noData = true;
@@ -219,21 +219,21 @@ public class DayWidgetProvider extends AppWidgetProvider {
 
     private static RemoteViews draw(Context ctx, int widgetId, Today today) {
         if (today.noData || today.stale) {
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_message_neon);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.messageLayout(today.look));
             views.setTextViewText(R.id.widget_message,
                     ctx.getString(today.noData ? R.string.day_widget_get_started : R.string.day_widget_refresh));
             views.setOnClickPendingIntent(R.id.widget_message_root, openHunt(ctx));
             return views;
         }
-        RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_neon);
+        RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayLayout(today.look));
         String label = today.offset == 0 ? ctx.getString(R.string.day_widget_today)
                 : today.offset == 1 ? ctx.getString(R.string.day_widget_tomorrow)
                 : shortDayLabel(today.date);
         views.setTextViewText(R.id.widget_header, label);
         views.setOnClickPendingIntent(R.id.widget_header, openHunt(ctx));
         views.setTextViewText(R.id.widget_empty, ctx.getString(R.string.day_widget_nothing_left, label));
-        arrow(ctx, views, R.id.widget_prev, widgetId, today.offset - 1, today.offset > 0);
-        arrow(ctx, views, R.id.widget_next, widgetId, today.offset + 1, today.offset < today.lastOffset);
+        arrow(ctx, views, today.look, R.id.widget_prev, widgetId, today.offset - 1, today.offset > 0);
+        arrow(ctx, views, today.look, R.id.widget_next, widgetId, today.offset + 1, today.offset < today.lastOffset);
 
         Intent service = new Intent(ctx, DayWidgetService.class)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
@@ -249,9 +249,10 @@ public class DayWidgetProvider extends AppWidgetProvider {
      * The previous or next arrow. At an end it stays in place, so the label never shifts, but it is
      * dimmed, disabled and has no intent.
      */
-    private static void arrow(Context ctx, RemoteViews views, int viewId, int widgetId, int target, boolean enabled) {
+    private static void arrow(Context ctx, RemoteViews views, String look, int viewId, int widgetId, int target,
+            boolean enabled) {
         views.setBoolean(viewId, "setEnabled", enabled);
-        views.setTextColor(viewId, ctx.getColor(enabled ? R.color.widget_neon_text : R.color.widget_neon_dim));
+        views.setTextColor(viewId, ctx.getColor(enabled ? WidgetLook.text(look) : WidgetLook.dim(look)));
         if (enabled) views.setOnClickPendingIntent(viewId, navIntent(ctx, widgetId, target));
     }
 
