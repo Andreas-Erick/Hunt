@@ -5,7 +5,8 @@ import {
   summarizeError,
 } from "@/lib/diagnostics";
 import { restoreMirroredNoteDrafts } from "@/lib/noteDraftStore";
-import { getClientSyncToken, syncDataExistsElsewhere } from "@/lib/syncEngine";
+import { syncDataExistsElsewhere } from "@/lib/syncEngine";
+import { getClientSyncToken } from "@/lib/syncToken";
 import { useCommandStore } from "@/store/useCommandStore";
 
 /** Upper bound on initial boot checks so a stalled IDB lock never hangs on "Loading Hunt...". */

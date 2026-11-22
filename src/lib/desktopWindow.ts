@@ -1,6 +1,6 @@
 "use client";
 
-import { getClientSyncToken } from "./syncEngine";
+import { getClientSyncToken } from "./syncToken";
 import type { DesktopWindowAction } from "./win32WindowCtl";
 
 const WINDOW_CMD_TIMEOUT_MS = 3500;
