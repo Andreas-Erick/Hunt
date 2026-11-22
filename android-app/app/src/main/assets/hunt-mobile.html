@@ -2751,6 +2751,8 @@ var HuntCore = (() => {
   // src/mobile/huntCore.ts
   var huntCore_exports = {};
   __export(huntCore_exports, {
+    SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
+    TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     buildHabitTaskRow: () => buildHabitTaskRow,
     canonicalString: () => canonicalString,
     compareRank: () => compareRank,
@@ -2926,127 +2928,79 @@ var HuntCore = (() => {
     lime: true
   };
   var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
+  var TOMBSTONE_KEY = {
+    quests: "deletedQuestIds",
+    tasks: "deletedTaskIds",
+    timeLogs: "deletedLogIds",
+    habits: "deletedHabitIds"
+  };
+  var SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY);
+  function mergeRowsById(baseRows, incomingRows, deleted, spec) {
+    var _a;
+    const normalize = (_a = spec.normalize) != null ? _a : (row) => row;
+    const rows = /* @__PURE__ */ new Map();
+    for (const row of baseRows != null ? baseRows : []) {
+      if (!deleted.has(row.id)) rows.set(row.id, normalize(row));
+    }
+    for (const raw of incomingRows != null ? incomingRows : []) {
+      if (deleted.has(raw.id)) continue;
+      const incoming = normalize(raw);
+      const existing = rows.get(raw.id);
+      rows.set(raw.id, existing ? spec.resolve(existing, incoming) : incoming);
+    }
+    return rows;
+  }
   function mergeSyncPayloads(base, incoming) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u;
+    var _a, _b, _c, _d, _e, _f, _g;
     const now = Date.now();
-    const deletedQuestSet = /* @__PURE__ */ new Set([
-      ...(_a = base.deletedQuestIds) != null ? _a : [],
-      ...(_b = incoming.deletedQuestIds) != null ? _b : []
-    ]);
-    const deletedTaskSet = /* @__PURE__ */ new Set([
-      ...(_c = base.deletedTaskIds) != null ? _c : [],
-      ...(_d = incoming.deletedTaskIds) != null ? _d : []
-    ]);
-    const deletedLogSet = /* @__PURE__ */ new Set([
-      ...(_e = base.deletedLogIds) != null ? _e : [],
-      ...(_f = incoming.deletedLogIds) != null ? _f : []
-    ]);
-    const deletedHabitSet = /* @__PURE__ */ new Set([
-      ...(_g = base.deletedHabitIds) != null ? _g : [],
-      ...(_h = incoming.deletedHabitIds) != null ? _h : []
-    ]);
-    const questMap = /* @__PURE__ */ new Map();
-    for (const q of (_i = base.quests) != null ? _i : []) {
-      if (!deletedQuestSet.has(q.id)) {
-        questMap.set(q.id, q);
+    const deleted = {};
+    for (const key of SYNCED_ENTITY_KEYS) {
+      const tombstoneKey = TOMBSTONE_KEY[key];
+      deleted[key] = /* @__PURE__ */ new Set([...(_a = base[tombstoneKey]) != null ? _a : [], ...(_b = incoming[tombstoneKey]) != null ? _b : []]);
+    }
+    const unlinkDeletedQuest = (row) => ({
+      ...row,
+      questId: row.questId && deleted.quests.has(row.questId) ? null : row.questId
+    });
+    const specs = {
+      // R1: newer wins; equal stamps → deterministic content tie-break.
+      quests: {
+        resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+        order: (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
+      },
+      habits: {
+        normalize: unlinkDeletedQuest,
+        resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+        order: compareRank
+      },
+      // R1 on the questId-sanitised rows; the focus counter only grows (max).
+      tasks: {
+        normalize: unlinkDeletedQuest,
+        resolve: (a, b) => ({
+          ...pickRowWinner(a, taskRowStamp(a), b, taskRowStamp(b)),
+          accumulatedSeconds: Math.max(a.accumulatedSeconds || 0, b.accumulatedSeconds || 0)
+        }),
+        order: compareRank
+      },
+      // R2: two versions of one log id → the earlier end wins (deterministic).
+      timeLogs: {
+        resolve: pickLogWinner,
+        order: (a, b) => b.startTime - a.startTime
       }
-    }
-    for (const incQ of (_j = incoming.quests) != null ? _j : []) {
-      if (deletedQuestSet.has(incQ.id)) continue;
-      const existing = questMap.get(incQ.id);
-      if (!existing) {
-        questMap.set(incQ.id, incQ);
-      } else {
-        const existingTs = questOrHabitRowStamp(existing);
-        const incomingTs = questOrHabitRowStamp(incQ);
-        questMap.set(
-          incQ.id,
-          pickRowWinner(existing, existingTs, incQ, incomingTs)
-        );
-      }
-    }
-    const mergedQuests = Array.from(questMap.values()).sort(
-      (a, b) => (Number(a.slotIndex) || 0) - (Number(b.slotIndex) || 0)
-    );
-    const habitMap = /* @__PURE__ */ new Map();
-    for (const h of (_k = base.habits) != null ? _k : []) {
-      if (!deletedHabitSet.has(h.id)) {
-        habitMap.set(h.id, {
-          ...h,
-          questId: h.questId && deletedQuestSet.has(h.questId) ? null : h.questId
-        });
-      }
-    }
-    for (const incH of (_l = incoming.habits) != null ? _l : []) {
-      if (deletedHabitSet.has(incH.id)) continue;
-      const existing = habitMap.get(incH.id);
-      const sanitizedInc = {
-        ...incH,
-        questId: incH.questId && deletedQuestSet.has(incH.questId) ? null : incH.questId
-      };
-      if (!existing) {
-        habitMap.set(incH.id, sanitizedInc);
-      } else {
-        const existingTs = questOrHabitRowStamp(existing);
-        const incomingTs = questOrHabitRowStamp(sanitizedInc);
-        habitMap.set(
-          incH.id,
-          pickRowWinner(existing, existingTs, sanitizedInc, incomingTs)
-        );
-      }
-    }
-    const mergedHabits = Array.from(habitMap.values()).sort(compareRank);
-    const taskMap = /* @__PURE__ */ new Map();
-    for (const t of (_m = base.tasks) != null ? _m : []) {
-      if (!deletedTaskSet.has(t.id)) {
-        taskMap.set(t.id, {
-          ...t,
-          questId: t.questId && deletedQuestSet.has(t.questId) ? null : t.questId
-        });
-      }
-    }
-    for (const incT of (_n = incoming.tasks) != null ? _n : []) {
-      if (deletedTaskSet.has(incT.id)) continue;
-      const existing = taskMap.get(incT.id);
-      const sanitizedInc = {
-        ...incT,
-        questId: incT.questId && deletedQuestSet.has(incT.questId) ? null : incT.questId
-      };
-      if (!existing) {
-        taskMap.set(incT.id, sanitizedInc);
-      } else {
-        const existingTs = taskRowStamp(existing);
-        const incomingTs = taskRowStamp(sanitizedInc);
-        const winner = pickRowWinner(existing, existingTs, sanitizedInc, incomingTs);
-        taskMap.set(incT.id, {
-          ...winner,
-          accumulatedSeconds: Math.max(
-            existing.accumulatedSeconds || 0,
-            sanitizedInc.accumulatedSeconds || 0
-          )
-        });
-      }
-    }
-    const logMap = /* @__PURE__ */ new Map();
-    for (const l of (_o = base.timeLogs) != null ? _o : []) {
-      if (!deletedLogSet.has(l.id)) {
-        logMap.set(l.id, l);
-      }
-    }
-    for (const incL of (_p = incoming.timeLogs) != null ? _p : []) {
-      if (deletedLogSet.has(incL.id)) continue;
-      const existing = logMap.get(incL.id);
-      logMap.set(incL.id, existing ? pickLogWinner(existing, incL) : incL);
-    }
-    const mergedLogs = Array.from(logMap.values()).sort(
-      (a, b) => b.startTime - a.startTime
-    );
+    };
+    const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
+    const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+    const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
+    const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
+    const mergedQuests = Array.from(questMap.values()).sort(specs.quests.order);
+    const mergedHabits = Array.from(habitMap.values()).sort(specs.habits.order);
+    const mergedLogs = Array.from(logMap.values()).sort(specs.timeLogs.order);
     const loggedByTask = /* @__PURE__ */ new Map();
     for (const l of mergedLogs) {
       if (!l.taskId) continue;
       loggedByTask.set(
         l.taskId,
-        ((_q = loggedByTask.get(l.taskId)) != null ? _q : 0) + (Number(l.durationSeconds) || 0)
+        ((_c = loggedByTask.get(l.taskId)) != null ? _c : 0) + (Number(l.durationSeconds) || 0)
       );
     }
     loggedByTask.forEach((logged, taskId) => {
@@ -3055,20 +3009,20 @@ var HuntCore = (() => {
         taskMap.set(taskId, { ...t, accumulatedSeconds: logged });
       }
     });
-    const mergedTasks = Array.from(taskMap.values()).sort(compareRank);
-    const baseFocus = (_r = base.activeFocus) != null ? _r : {
+    const mergedTasks = Array.from(taskMap.values()).sort(specs.tasks.order);
+    const baseFocus = (_d = base.activeFocus) != null ? _d : {
       activeTaskId: null,
       isRunning: false,
       sessionStartedAt: null,
       updatedAt: 0
     };
-    const incFocus = (_s = incoming.activeFocus) != null ? _s : {
+    const incFocus = (_e = incoming.activeFocus) != null ? _e : {
       activeTaskId: null,
       isRunning: false,
       sessionStartedAt: null,
       updatedAt: 0
     };
-    let mergedFocus = ((_t = incFocus.updatedAt) != null ? _t : 0) >= ((_u = baseFocus.updatedAt) != null ? _u : 0) ? incFocus : baseFocus;
+    let mergedFocus = ((_f = incFocus.updatedAt) != null ? _f : 0) >= ((_g = baseFocus.updatedAt) != null ? _g : 0) ? incFocus : baseFocus;
     if (mergedFocus.activeTaskId) {
       const activeTask = taskMap.get(mergedFocus.activeTaskId);
       if (!activeTask || activeTask.status === "completed") {
@@ -3088,10 +3042,10 @@ var HuntCore = (() => {
       tasks: mergedTasks,
       timeLogs: mergedLogs,
       habits: mergedHabits,
-      deletedQuestIds: Array.from(deletedQuestSet),
-      deletedTaskIds: Array.from(deletedTaskSet),
-      deletedLogIds: Array.from(deletedLogSet),
-      deletedHabitIds: Array.from(deletedHabitSet),
+      deletedQuestIds: Array.from(deleted.quests),
+      deletedTaskIds: Array.from(deleted.tasks),
+      deletedLogIds: Array.from(deleted.timeLogs),
+      deletedHabitIds: Array.from(deleted.habits),
       activeFocus: mergedFocus,
       lastSyncedAt: now
     };
@@ -3962,18 +3916,18 @@ var HuntCore = (() => {
       if (flushed) raiseCountersToLoggedTotals(tMap, lMap);
       if (report) report.createdLocal = !!(flushed || requeued);
 
-      return {
-        ...base, // keeps base.lastSyncedAt (no stamp: merging identical data yields identical JSON) and unknown fields
-        quests: shared.quests,
-        tasks: Array.from(tMap.values()).sort(compareRank),
-        timeLogs: Array.from(lMap.values()).sort((a, b) => (b.startTime || 0) - (a.startTime || 0)),
-        habits: shared.habits.map(h => (h.questId ? h : { ...h, questId: null })),
-        deletedQuestIds: shared.deletedQuestIds,
-        deletedTaskIds: shared.deletedTaskIds,
-        deletedLogIds: shared.deletedLogIds,
-        deletedHabitIds: shared.deletedHabitIds,
-        activeFocus: mf
-      };
+      // Every synced collection and tombstone list comes from the shared merge (the core's own list),
+      // so a collection added there can never silently keep the phone's pre-merge copy.
+      const merged = { ...base }; // keeps base.lastSyncedAt (no stamp: identical data -> identical JSON) and unknown fields
+      for (const key of HuntCore.SYNCED_ENTITY_KEYS) {
+        merged[key] = shared[key];
+        merged[HuntCore.TOMBSTONE_KEY[key]] = shared[HuntCore.TOMBSTONE_KEY[key]];
+      }
+      merged.tasks = Array.from(tMap.values()).sort(compareRank);
+      merged.timeLogs = Array.from(lMap.values()).sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+      merged.habits = shared.habits.map(h => (h.questId ? h : { ...h, questId: null }));
+      merged.activeFocus = mf;
+      return merged;
     }
 
     function isRunningSession(f) {

@@ -25,5 +25,7 @@ export {
   losingSessionEndAt,
   mergeSyncPayloads,
   sameContent,
+  SYNCED_ENTITY_KEYS,
+  TOMBSTONE_KEY,
 } from "../lib/syncTypes";
 export { buildHabitTaskRow, nextStamp, sessionLogId } from "../lib/taskQueue";
