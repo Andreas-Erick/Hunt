@@ -1,4 +1,4 @@
-import { habitTaskId, isOpenTask, isTaskVisibleToday } from "./dateUtils";
+import { dateKeyFromOffset, habitTaskId, isOpenTask, isTaskVisibleToday } from "./dateUtils";
 import { QUEST_ACCENT_KEYS } from "./domainTypes";
 import type { QuestAccent, Task } from "./domainTypes";
 import type { Look } from "./lookPreference";
@@ -19,6 +19,12 @@ import type { WidgetStatsEntry } from "./widgetStats";
  */
 export const WIDGET_SNAPSHOT_VERSION = 1;
 
+/**
+ * Days in a snapshot: today to today + 7. The ‹ › arrows reach today + 6; the
+ * eighth day lets the widget roll over at midnight before Hunt is opened.
+ */
+export const WIDGET_SNAPSHOT_DAYS = 8;
+
 export interface WidgetTaskRow {
   /** Task id; a Pending Tick names it. */
   id: string;
@@ -38,6 +44,8 @@ export interface WidgetDay {
   dateKey: string;
   /** What the Day Widget lists when `dateKey` is the current local date. */
   today: WidgetTaskRow[];
+  /** What it lists when `dateKey` is a later day: Tasks scheduled on it, no Habits. */
+  future: WidgetTaskRow[];
 }
 
 export interface WidgetSnapshot {
@@ -47,7 +55,7 @@ export interface WidgetSnapshot {
   todayKey: string;
   /** True before the user has any Quest, Task or Habit: "Open Hunt to get started". */
   noData: boolean;
-  /** One entry per date, starting with today. */
+  /** WIDGET_SNAPSHOT_DAYS entries, one per date, starting with today. */
   days: WidgetDay[];
   /** Stats Widget: today's entry, then tomorrow's for the midnight rollover. */
   stats: WidgetStatsEntry[];
@@ -61,6 +69,17 @@ const ACCENTS: ReadonlySet<string> = new Set(QUEST_ACCENT_KEYS);
  * order, with today's Habits filled in by their fixed ids when Hunt has not
  * created the rows yet. Pure: `state` is not modified.
  */
+/**
+ * A later day's list as the Day Widget shows it before that day comes: open
+ * Tasks scheduled on exactly that date, in rank order. Habits are left out,
+ * since Hunt creates a Habit's row only on its own day.
+ */
+function futureTasks(state: SyncPayload, dateKey: string): Task[] {
+  return (state.tasks ?? [])
+    .filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey))
+    .sort(compareRank);
+}
+
 function todayTasks(state: SyncPayload, todayKey: string): Task[] {
   const tasks = state.tasks ?? [];
   const known = new Set(tasks.map((t) => t.id));
@@ -99,7 +118,14 @@ export function buildWidgetSnapshot(
     look,
     todayKey,
     noData,
-    days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }],
+    days: Array.from({ length: WIDGET_SNAPSHOT_DAYS }, (_, i) => {
+      const dateKey = dateKeyFromOffset(todayKey, i);
+      return {
+        dateKey,
+        today: todayTasks(state, dateKey).map(toRow),
+        future: futureTasks(state, dateKey).map(toRow),
+      };
+    }),
     stats: buildWidgetStats(state, todayKey),
   };
 }

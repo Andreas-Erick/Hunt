@@ -124,3 +124,49 @@ describe("buildWidgetSnapshot (Day Widget, today view)", () => {
     expect(allDone.days[0].today).toEqual([]);
   });
 });
+
+describe("buildWidgetSnapshot (Day Widget, ‹ › days)", () => {
+  it("covers today to today + 7, across a month end", () => {
+    const keys = buildWidgetSnapshot(state(), "2026-11-27", "neon").days.map((d) => d.dateKey);
+    expect(keys).toEqual([
+      "2026-11-27", "2026-11-28", "2026-11-29", "2026-11-30",
+      "2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04",
+    ]);
+  });
+
+  const s = state({
+    habits: [habit],
+    tasks: [
+      task("loose", { rank: 4000 }),
+      task("overdue", { scheduledDate: "2026-11-01", rank: 3000 }),
+      task("today", { scheduledDate: TODAY, rank: 2000 }),
+      task("tomorrow-b", { scheduledDate: "2026-11-23", rank: 2000 }),
+      task("tomorrow-a", { scheduledDate: "2026-11-23", rank: 1000 }),
+      task("tomorrow-done", { scheduledDate: "2026-11-23", status: "completed" }),
+      task("in-6", { scheduledDate: "2026-11-28" }),
+      // A Habit row that already exists for tomorrow (e.g. synced from the desktop).
+      task("habtsk-2026-11-23-h1", { habitId: "h1", scheduledDate: "2026-11-23", rank: 500 }),
+    ],
+  });
+  const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+  const days = buildWidgetSnapshot(s, TODAY, "neon").days;
+
+  it("a future view lists only the open Tasks scheduled on that date, in rank order", () => {
+    expect(ids(days[1].future)).toEqual(["tomorrow-a", "tomorrow-b"]);
+    expect(ids(days[6].future)).toEqual(["in-6"]);
+    expect(days[3].future).toEqual([]);
+  });
+
+  it("a future view never has Habits, while that day's today view does", () => {
+    for (const d of days) expect(d.future.some((r) => r.habit), d.dateKey).toBe(false);
+    expect(days[1].today.find((r) => r.habit)).toMatchObject({ id: "habtsk-2026-11-23-h1" });
+  });
+
+  it("tomorrow's today view is what the app shows tomorrow, for the midnight rollover", () => {
+    const rolledOver = buildWidgetSnapshot(s, "2026-11-23", "neon").days[0].today;
+    expect(days[1].today).toEqual(rolledOver);
+    expect(ids(days[1].today)).toEqual([
+      "habtsk-2026-11-23-h1", "tomorrow-a", "today", "tomorrow-b", "overdue", "loose",
+    ]);
+  });
+});

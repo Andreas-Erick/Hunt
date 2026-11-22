@@ -3505,7 +3505,12 @@ var HuntCore = (() => {
 
   // src/lib/widgetSnapshot.ts
   var WIDGET_SNAPSHOT_VERSION = 1;
+  var WIDGET_SNAPSHOT_DAYS = 8;
   var ACCENTS2 = new Set(QUEST_ACCENT_KEYS);
+  function futureTasks(state, dateKey) {
+    var _a;
+    return ((_a = state.tasks) != null ? _a : []).filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey)).sort(compareRank);
+  }
   function todayTasks(state, todayKey) {
     var _a, _b, _c;
     const tasks = (_a = state.tasks) != null ? _a : [];
@@ -3535,7 +3540,14 @@ var HuntCore = (() => {
       look,
       todayKey,
       noData,
-      days: [{ dateKey: todayKey, today: todayTasks(state, todayKey).map(toRow) }],
+      days: Array.from({ length: WIDGET_SNAPSHOT_DAYS }, (_, i) => {
+        const dateKey = dateKeyFromOffset(todayKey, i);
+        return {
+          dateKey,
+          today: todayTasks(state, dateKey).map(toRow),
+          future: futureTasks(state, dateKey).map(toRow)
+        };
+      }),
       stats: buildWidgetStats(state, todayKey)
     };
   }

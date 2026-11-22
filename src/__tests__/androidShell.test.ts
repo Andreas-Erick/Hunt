@@ -809,6 +809,113 @@ describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK", () => {
   }, 60_000);
 });
 
+// Day Widget ‹ › navigation (#7): today to today + 6, back to today at local midnight.
+const DAY_PROVIDER_FILE = path.join(path.dirname(JAVA_FILE), "DayWidgetProvider.java");
+const dayProviderCode = stripJavaComments(read(DAY_PROVIDER_FILE));
+const dayLayoutXml = read(path.join(MAIN, "res", "layout", "widget_day_neon.xml"));
+
+/** A package-private `static` field or method (header + body) from DayWidgetProvider.java. */
+function dayProviderMember(name: string): string {
+  const field = new RegExp(`static\\s+final\\s+[\\w\\[\\]]+\\s+${name}\\s*=[^;]*;`).exec(dayProviderCode);
+  if (field) return field[0];
+  const header = new RegExp(`static\\s+[\\w\\[\\]]+\\s+${name}\\s*\\([^)]*\\)\\s*\\{`);
+  const m = header.exec(dayProviderCode);
+  if (!m) throw new Error(`member ${name} not found in DayWidgetProvider.java`);
+  return dayProviderCode.slice(m.index, m.index + m[0].length - 1) + blockAfter(dayProviderCode, header);
+}
+
+describe("Day Widget ‹ › navigation", () => {
+  const tagOf = (id: string) => new RegExp(`<\\w+\\b[^>]*android:id="@\\+id/${id}"[^>]*>`).exec(dayLayoutXml)?.[0] ?? "";
+  const dp = (tag: string, attr: string) => Number(new RegExp(`android:${attr}="(\\d+)dp"`).exec(tag)?.[1] ?? 0);
+
+  it("‹ and › are 48dp square targets in the header, 8dp clear of the day label", () => {
+    for (const id of ["widget_prev", "widget_next"]) {
+      const tag = tagOf(id);
+      expect(tag, id).not.toBe("");
+      expect(dp(tag, "minWidth"), `${id} minWidth`).toBeGreaterThanOrEqual(48);
+      expect(dp(tag, "minHeight"), `${id} minHeight`).toBeGreaterThanOrEqual(48);
+      expect(tag, `${id} label`).toMatch(/android:contentDescription="@string\/day_widget_(prev|next)"/);
+      expect(dayProviderCode).toContain(`R.id.${id}`);
+    }
+    const label = tagOf("widget_header");
+    expect(dp(label, "layout_marginStart")).toBeGreaterThanOrEqual(8);
+    expect(dp(label, "layout_marginEnd")).toBeGreaterThanOrEqual(8);
+  });
+
+  it("the arrows are explicit, immutable broadcasts to the non-exported provider", () => {
+    expect(dayProviderMember("MAX_DAY_OFFSET")).toMatch(/=\s*6\s*;/);
+    expect(dayProviderMember("ACTION_NAV")).toMatch(/"com\.hunt\.companion\.action\.DAY_WIDGET_NAV"/);
+    const nav = blockAfter(dayProviderCode, /static\s+PendingIntent\s+navIntent\s*\([^)]*\)\s*\{/);
+    expect(nav).toContain("new Intent(ctx, DayWidgetProvider.class)");
+    expect(nav).toContain("setAction(ACTION_NAV)");
+    expect(nav).toContain("PendingIntent.getBroadcast(");
+    expect(nav).toContain("PendingIntent.FLAG_IMMUTABLE");
+    expect(blockAfter(dayProviderCode, /public\s+void\s+onReceive\s*\([^)]*\)\s*\{/)).toContain("ACTION_NAV.equals(action)");
+    // Explicit only: no intent filter lets another app send the nav action.
+    expect(manifest).not.toContain("DAY_WIDGET_NAV");
+  });
+
+  it("the selected day lives only in the widget's own private preferences", () => {
+    const prefs = captures(dayProviderCode, /getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g, 1, 2);
+    expect(prefs.length).toBeGreaterThan(0);
+    for (const [name, mode] of prefs) {
+      expect(name).toBe("NAV_PREFS");
+      expect(mode).toBe("Context.MODE_PRIVATE");
+    }
+  });
+});
+
+/** Reads "<probe>\t<args...>" lines on stdin and prints one result per line. */
+function dayNavProbeSource(): string {
+  return [
+    "import java.time.LocalDate;",
+    "import java.time.format.DateTimeFormatter;",
+    "import java.util.Locale;",
+    "public class DayNavProbe {",
+    ...["MAX_DAY_OFFSET", "SHORT_DAY", "selectedOffset", "viewFor", "shortDayLabel"].map(dayProviderMember),
+    "  public static void main(String[] args) throws Exception {",
+    "    java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(System.in, \"UTF-8\"));",
+    "    StringBuilder out = new StringBuilder();",
+    "    for (String line; (line = in.readLine()) != null; ) {",
+    '      String[] p = line.split("\\t", -1);',
+    '      String r = p[0].equals("offset") ? String.valueOf(selectedOffset(p[1].equals("-") ? null : p[1], Integer.parseInt(p[2]), p[3]))',
+    '          : p[0].equals("view") ? viewFor(p[1], p[2])',
+    "          : shortDayLabel(LocalDate.parse(p[1]));",
+    "      out.append(r).append('\\n');",
+    "    }",
+    "    System.out.print(out);",
+    "  }",
+    "}",
+  ].join("\n");
+}
+
+describe.skipIf(!javaExe)("Day Widget navigation helpers, run on the JDK", () => {
+  const cases: Array<[string, string]> = [
+    ["offset\t2026-11-22\t3\t2026-11-22", "3"],
+    ["offset\t2026-11-22\t6\t2026-11-22", "6"],
+    ["offset\t2026-11-22\t7\t2026-11-22", "6"], // stops at today + 6
+    ["offset\t2026-11-22\t-1\t2026-11-22", "0"], // stops at today
+    ["offset\t2026-11-22\t3\t2026-11-23", "0"], // local midnight passed: back to today
+    ["offset\t-\t3\t2026-11-22", "0"], // never navigated
+    ["view\t2026-11-22\t2026-11-22", "today"],
+    ["view\t2026-11-23\t2026-11-22", "future"],
+    ["day\t2026-11-24", "Tue 24"],
+    ["day\t2026-12-01", "Tue 1"],
+  ];
+
+  it("clamps the selected day, expires it at midnight, picks the view and labels the day", () => {
+    const file = path.join(tmpRoot, "DayNavProbe.java");
+    fs.writeFileSync(file, dayNavProbeSource(), "utf8");
+    const r = spawnSync(javaExe ?? "java", [file], {
+      cwd: tmpRoot,
+      input: cases.map(([line]) => line).join("\n"),
+      encoding: "utf8",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout.trim().split("\n")).toEqual(cases.map(([, want]) => want));
+  }, 60_000);
+});
+
 // the build script's final hand-off and its help text.
 describe("build-apk.sh output and help", () => {
   it("writes the APK atomically: a temp file next to the output (git-ignored *.apk), renamed over it", () => {
