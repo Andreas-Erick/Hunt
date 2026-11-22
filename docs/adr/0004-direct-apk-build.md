@@ -4,16 +4,19 @@ Status: Accepted · Date: 2026-11-22
 
 ## Context
 
-The Android shell is one Activity (`MainActivity.java`)
-with no third-party libraries. Android installs an update
-only if it is signed with the same key as the installed
-app. A different key means uninstalling first, and that
-deletes the phone's data.
+The Android shell is a small set of framework-only Java
+classes with no third-party libraries: one Activity
+(`MainActivity.java`) hosting the WebView, the home-screen
+widget classes (ADR-0006), and `DayWidgetTapActivity`, a
+no-UI trampoline for widget row taps. Android installs an
+update only if it is signed with the same key as the
+installed app. A different key means uninstalling first,
+and that deletes the phone's data.
 
 ## Options considered
 
 - **Gradle with the Android Gradle Plugin.** The standard
-  route, but a large toolchain for one Java file. An earlier
+  route, but a large toolchain for a handful of Java files. An earlier
   Gradle setup also signed with a different key from the
   one the shipped app used.
 - **Direct SDK tools.** `aapt2`, `javac`, `d8`, `zipalign`
@@ -22,7 +25,9 @@ deletes the phone's data.
 ## Decision
 
 `android-app/build-apk.sh` calls the SDK tools directly.
-Before it finishes, it:
+It compiles every `*.java` file under `app/src/main/java`,
+so a new class needs no script change. Before it finishes,
+it:
 
 - refuses a versionCode lower than the manifest's (a
   downgrade can't be installed);
@@ -30,6 +35,7 @@ Before it finishes, it:
   (`EXPECTED_CERT_SHA256`);
 - checks that the packaged page matches
   `public/hunt-mobile.html`;
+- refuses an APK without the widget resources;
 - scans the output for leaked secrets.
 
 Release CI decodes the keystore from the

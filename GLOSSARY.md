@@ -24,6 +24,12 @@ A task marked done from a Widget that Hunt has not applied
 yet.
 _Avoid_: offline completion, queued done
 
+**Undo Window**:
+The few seconds after a Day Widget tick when it can still be
+taken back. The tick becomes a Pending Tick only once its
+Undo Window ends.
+_Avoid_: grace period, undo timer
+
 **Widget Snapshot**:
 The ready-to-draw data Hunt hands to the Widgets after every
 save. Widgets only draw it.
