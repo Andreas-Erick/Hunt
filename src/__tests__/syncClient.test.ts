@@ -308,8 +308,8 @@ describe("desktop sync client (syncEngine.ts)", () => {
       expect(window.localStorage.length).toBe(0);
     });
 
-    it("the module source holds no 64-hex key literal", () => {
-      const source = fs.readFileSync(path.resolve(__dirname, "..", "lib", "syncEngine.ts"), "utf8");
+    it.each(["syncEngine.ts", "syncToken.ts"])("the %s source holds no 64-hex key literal", (file) => {
+      const source = fs.readFileSync(path.resolve(__dirname, "..", "lib", file), "utf8");
       expect(source).not.toMatch(/[0-9a-f]{64}/i);
     });
   });
