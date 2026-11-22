@@ -56,6 +56,7 @@ interface LogMeta {
 type SyncLogEvent =
   | "key_unavailable"
   | "unreadable"
+  | "recovered_from_backup"
   | "write_failed"
   | "backup_failed"
   | "snapshot_failed"
@@ -317,15 +318,54 @@ function getLanUrls(port = 3000): string[] {
 // Storage
 // ---------------------------------------------------------------------------
 
-type ServerRead =
-  | { payload: SyncPayload; source: "main" | "backup" | "snapshot" | "empty" }
-  | { payload: null; source: "unreadable" };
+/** A sync file that exists but could not be used, and why (never its content). */
+interface UnreadableFile {
+  file: string;
+  reason: string;
+}
 
-function readPayloadFile(filePath: string): SyncPayload | null {
+type ServerRead =
+  | {
+      payload: SyncPayload;
+      source: "main" | "backup" | "snapshot" | "empty";
+      /** Files skipped before `source` was reached (empty when main was read). */
+      skipped: UnreadableFile[];
+    }
+  | { payload: null; source: "unreadable"; skipped: UnreadableFile[] };
+
+type PayloadFileRead = { payload: SyncPayload } | { payload: null; reason: string };
+
+function readPayloadFile(filePath: string): PayloadFileRead {
+  let raw: string;
   try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    const check = validateSyncPayload(JSON.parse(raw) as unknown);
-    return check.valid ? check.payload : null;
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    return { payload: null, reason: `read failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch (err) {
+    return { payload: null, reason: `invalid JSON: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  const check = validateSyncPayload(parsed);
+  return check.valid ? { payload: check.payload } : { payload: null, reason: `invalid payload: ${check.error}` };
+}
+
+function describeSkipped(skipped: UnreadableFile[]): string {
+  return skipped.map((s) => `${s.file} (${s.reason})`).join("; ");
+}
+
+/**
+ * Copies an unreadable main file to `hunt-sync.corrupt-<ms>.json` before a recovery
+ * write replaces it, so the bytes stay available for manual repair. Returns the
+ * copy's file name, or null when it could not be kept.
+ */
+function preserveCorruptMainFile(): string | null {
+  try {
+    const name = `hunt-sync.corrupt-${Date.now()}.json`;
+    fs.copyFileSync(SYNC_FILE, path.join(DATA_DIR, name));
+    return name;
   } catch {
     return null;
   }
@@ -352,6 +392,7 @@ function listSnapshotsNewestFirst(): string[] {
  * against an empty base (that would drop everything but the posting client's data).
  */
 function readServerSyncFile(): ServerRead {
+  const skipped: UnreadableFile[] = [];
   let sawFile = false;
   for (const [source, filePath] of [
     ["main", SYNC_FILE],
@@ -359,16 +400,18 @@ function readServerSyncFile(): ServerRead {
   ] as const) {
     if (!fs.existsSync(filePath)) continue;
     sawFile = true;
-    const payload = readPayloadFile(filePath);
-    if (payload) return { payload, source };
+    const read = readPayloadFile(filePath);
+    if (read.payload) return { payload: read.payload, source, skipped };
+    skipped.push({ file: path.basename(filePath), reason: read.reason });
   }
-  if (!sawFile) return { payload: createEmptySyncPayload(), source: "empty" };
+  if (!sawFile) return { payload: createEmptySyncPayload(), source: "empty", skipped };
 
   for (const name of listSnapshotsNewestFirst()) {
-    const payload = readPayloadFile(path.join(SNAPSHOT_DIR, name));
-    if (payload) return { payload, source: "snapshot" };
+    const read = readPayloadFile(path.join(SNAPSHOT_DIR, name));
+    if (read.payload) return { payload: read.payload, source: "snapshot", skipped };
+    skipped.push({ file: `backups/${name}`, reason: read.reason });
   }
-  return { payload: null, source: "unreadable" };
+  return { payload: null, source: "unreadable", skipped };
 }
 
 /**
@@ -439,11 +482,15 @@ function writeServerSyncFileAtomic(
   }
 }
 
-function unreadableResponse(client: string, meta: LogMeta & { correlationId: string }) {
+function unreadableResponse(
+  client: string,
+  skipped: UnreadableFile[],
+  meta: LogMeta & { correlationId: string }
+) {
   logEvent(
     "unreadable",
     client,
-    "Sync file(s) exist but none could be read; refusing to merge or overwrite. Check data/hunt-sync.json.",
+    `Sync file(s) exist but none could be read; refusing to merge or overwrite. ${describeSkipped(skipped)}`,
     meta
   );
   return errorResponse(
@@ -466,7 +513,7 @@ export async function GET(request: Request) {
 
   const current = readServerSyncFile();
   if (!current.payload) {
-    return unreadableResponse(clientLabel(request), {
+    return unreadableResponse(clientLabel(request), current.skipped, {
       correlationId,
       durationMs: Date.now() - startedAt,
     });
@@ -524,7 +571,7 @@ export async function POST(request: Request) {
     // concurrent requests are serialized.
     const current = readServerSyncFile();
     if (!current.payload) {
-      return unreadableResponse(client, {
+      return unreadableResponse(client, current.skipped, {
         correlationId,
         durationMs: Date.now() - startedAt,
       });
@@ -564,6 +611,20 @@ export async function POST(request: Request) {
     // Idle syncs (nothing new) must not touch the disk: compare content,
     // ignoring the lastSyncedAt stamp and key order.
     const recovered = current.source === "backup" || current.source === "snapshot";
+    if (recovered) {
+      // The write below replaces the unreadable main file: keep its bytes and say why.
+      const kept = fs.existsSync(SYNC_FILE) ? preserveCorruptMainFile() : null;
+      logEvent(
+        "recovered_from_backup",
+        client,
+        {
+          source: current.source,
+          skipped: describeSkipped(current.skipped),
+          keptCorruptCopy: kept,
+        },
+        { correlationId, durationMs: Date.now() - startedAt }
+      );
+    }
     if (recovered || syncContentKey(toStore) !== syncContentKey(current.payload)) {
       const stored = writeServerSyncFileAtomic(toStore, {
         rotate: current.source === "main",

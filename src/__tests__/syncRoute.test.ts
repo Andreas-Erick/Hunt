@@ -191,6 +191,48 @@ describe("/api/sync route", () => {
     expect(restored.tasks.map((t) => t.id)).toEqual(expect.arrayContaining([...backupIds, "t5"]));
   });
 
+  it("keeps the corrupt main file aside and logs why it fell back before overwriting it", async () => {
+    await postTasks(task("t1"));
+    await postTasks(task("t2"));
+    fs.writeFileSync(syncFile(), "{ corrupt", "utf8");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await route.POST(request("POST", "desktop", body({ tasks: [task("t6")] })));
+    expect(res.status).toBe(200);
+
+    const kept = fs.readdirSync(dir).filter((n) => /^hunt-sync\.corrupt-\d+\.json$/.test(n));
+    expect(kept).toHaveLength(1);
+    expect(read(path.join(dir, kept[0]))).toBe("{ corrupt");
+
+    const recovered = errors.mock.calls.find((c) => c[0] === "[hunt-sync] recovered_from_backup");
+    expect(recovered).toBeDefined();
+    expect(recovered?.[1]).toMatchObject({ client: "desktop", correlationId: expect.any(String) });
+    const detail = JSON.stringify(recovered?.[2]);
+    expect(detail).toContain("hunt-sync.json");
+    expect(detail).toContain('"source":"backup"');
+    expect(detail).toMatch(/JSON|parse/i);
+    expect(detail).toContain(kept[0]);
+
+    // Once recovered, the main file is valid again: the next sync neither logs nor keeps a copy.
+    errors.mockClear();
+    await postTasks(task("t7"));
+    expect(errors.mock.calls.some((c) => c[0] === "[hunt-sync] recovered_from_backup")).toBe(false);
+    expect(fs.readdirSync(dir).filter((n) => n.startsWith("hunt-sync.corrupt-"))).toHaveLength(1);
+  });
+
+  it("names every unreadable file and the reason in the 507 log", async () => {
+    fs.writeFileSync(syncFile(), "{ corrupt", "utf8");
+    fs.writeFileSync(backupFile(), JSON.stringify({ tasks: "not-an-array" }), "utf8");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const res = await route.POST(request("POST", "desktop", body({ tasks: [task("x")] })));
+    expect(res.status).toBe(507);
+    const call = errors.mock.calls.find((c) => c[0] === "[hunt-sync] unreadable");
+    const detail = JSON.stringify(call?.[2]);
+    expect(detail).toContain("hunt-sync.json");
+    expect(detail).toContain("hunt-sync.backup.json");
+  });
+
   it("refuses (507) to merge over sync files it cannot read, and leaves them untouched", async () => {
     fs.writeFileSync(syncFile(), "{ corrupt", "utf8");
     fs.writeFileSync(backupFile(), "also corrupt", "utf8");
