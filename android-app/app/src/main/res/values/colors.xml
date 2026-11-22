@@ -15,9 +15,11 @@
 
     <!-- Neon ink -->
     <color name="widget_neon_text">#FFF8FAFC</color>
+    <color name="widget_neon_text_2">#FFCBD5E1</color>
     <color name="widget_neon_muted">#FF94A3B8</color>
     <color name="widget_neon_dim">#FF7C8AA0</color>
     <color name="widget_neon_accent">#FF00F0FF</color>
+    <color name="widget_neon_success">#FF00FF9D</color>
 
     <!-- Neon Quest accents (bars, rings and dots only: slate is below 4.5:1 as text) -->
     <color name="widget_neon_q_cyan">#FF00F0FF</color>

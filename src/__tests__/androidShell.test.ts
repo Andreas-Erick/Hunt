@@ -449,7 +449,13 @@ describe("Day Widget (ADR-0006)", () => {
   });
 
   it("the widget code never writes a file: only the bridge saves the snapshot", () => {
-    expect(widgetSources.map((f) => f.name).sort()).toEqual(["DayWidgetProvider.java", "DayWidgetService.java"]);
+    expect(widgetSources.map((f) => f.name).sort()).toEqual([
+      "DayWidgetProvider.java",
+      "DayWidgetService.java",
+      "StatsWidgetFit.java",
+      "StatsWidgetProvider.java",
+      "WidgetLook.java",
+    ]);
     for (const { name, code } of widgetSources) {
       expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
       expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);

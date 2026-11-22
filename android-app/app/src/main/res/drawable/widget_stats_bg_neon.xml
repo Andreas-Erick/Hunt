@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Stats Widget ground, Neon look: the whole widget is one open-Hunt target, so the ground itself
+    carries the accent ripple as pressed feedback over the usual fill and 1dp cyan@25% ring.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/widget_neon_ripple">
+    <item android:drawable="@drawable/widget_bg_neon" />
+</ripple>
