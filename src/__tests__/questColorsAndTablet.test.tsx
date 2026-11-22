@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
-import { QUEST_ACCENT_KEYS, type Quest, type Task, type TimeLog } from "@/lib/domainTypes";
+import { QUEST_ACCENT_KEYS, type TimeLog } from "@/lib/domainTypes";
 import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
 import { toLocalDateKey } from "@/lib/dateUtils";
 import { computeActivityHeatmap } from "@/lib/reviewAnalytics";

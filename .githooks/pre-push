@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the same gate as CI's verify job (lint, typecheck, tests, build) before
+# commits or tags leave this machine. Installed by `npm install` (scripts/install-hooks.mjs).
+echo "pre-push: npm run check"
+exec npm run check
