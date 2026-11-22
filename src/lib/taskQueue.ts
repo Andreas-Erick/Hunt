@@ -1,5 +1,5 @@
-import { habitTaskId, isTaskVisibleToday } from "./dateUtils";
-import type { Habit, Task } from "./domainTypes";
+import { habitTaskId, isTaskVisibleToday, toLocalDateKey } from "./dateUtils";
+import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
 import { compareRank } from "./syncTypes";
 
 /**
@@ -9,6 +9,36 @@ import { compareRank } from "./syncTypes";
  */
 export function sessionLogId(taskId: string, sessionStartedAt: number): string {
   return `log-${sessionStartedAt}-${taskId}`;
+}
+
+/** Seconds one focus burst counts for: whole seconds, never less than 1 (R3). */
+export function burstSeconds(sessionStartedAt: number, endAt: number): number {
+  return Math.max(1, Math.round((endAt - sessionStartedAt) / 1000));
+}
+
+/**
+ * The TimeLog row for one focus burst of `task`, from `sessionStartedAt` to
+ * `endAt`, under the shared id (R3). Desktop and phone both build their logs
+ * here, so the same burst logged on either device is the same row. Pure.
+ */
+export function buildBurstLog(
+  task: Pick<Task, "id" | "title" | "questId">,
+  quest: Pick<Quest, "title" | "accentColor"> | null | undefined,
+  sessionStartedAt: number,
+  endAt: number
+): TimeLog {
+  return {
+    id: sessionLogId(task.id, sessionStartedAt),
+    taskId: task.id,
+    taskTitleSnapshot: task.title,
+    questId: task.questId,
+    questCodeSnapshot: quest ? quest.title : "Other",
+    accentColorSnapshot: quest ? quest.accentColor : "slate",
+    startTime: sessionStartedAt,
+    endTime: endAt,
+    durationSeconds: burstSeconds(sessionStartedAt, endAt),
+    dateKey: toLocalDateKey(endAt),
+  };
 }
 
 /**

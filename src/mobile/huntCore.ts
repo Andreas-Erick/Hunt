@@ -28,4 +28,12 @@ export {
   SYNCED_ENTITY_KEYS,
   TOMBSTONE_KEY,
 } from "../lib/syncTypes";
-export { buildHabitTaskRow, nextStamp, sessionLogId } from "../lib/taskQueue";
+export { fromFocusSession, toFocusSession } from "../lib/domainTypes";
+export { transitionFocus } from "../lib/focusSession";
+export {
+  buildBurstLog,
+  buildHabitTaskRow,
+  nextStamp,
+  pickNextFocusTask,
+  sessionLogId,
+} from "../lib/taskQueue";
