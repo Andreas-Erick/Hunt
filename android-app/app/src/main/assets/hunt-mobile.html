@@ -4334,21 +4334,30 @@ var HuntCore = (() => {
     // Apply them through HuntCore (completion time = the tap), save, log stale ticks, and only then
     // acknowledge exactly these ticks so the shell keeps any that arrived meanwhile. While saving is
     // blocked nothing is acknowledged: the ticks stay queued for a start that can save them.
+    // The shell removes acknowledged ticks later, on its write thread, so a drain that runs before that
+    // (the next tick's signal, a resume) would read them again: they are left out until they are gone.
     // Returns true when the state changed.
+    const ticksAwaitingAck = new Set();
+    function pendingTickKey(t) {
+      return t && typeof t === "object" ? `${t.taskId}|${t.dateKey}|${Number(t.tickedAt)}` : JSON.stringify(t);
+    }
     function drainPendingTicks() {
       if (!isApkShell()) return false;
       const raw = bridgeCall("readPendingTicks");
       if (!raw) return false;
-      let ticks;
+      let queued;
       try {
-        ticks = JSON.parse(raw);
+        queued = JSON.parse(raw);
       } catch (e) {
-        ticks = null;
+        queued = null;
       }
-      if (!Array.isArray(ticks)) {
+      if (!Array.isArray(queued)) {
         recordMobileBreadcrumb("WARN", "widget", "ticks_unreadable", { length: String(raw).length });
         return false;
       }
+      const inQueue = new Set(queued.map(pendingTickKey));
+      for (const k of ticksAwaitingAck) if (!inQueue.has(k)) ticksAwaitingAck.delete(k);
+      const ticks = queued.filter((t) => !ticksAwaitingAck.has(pendingTickKey(t)));
       if (!ticks.length) return false;
       const result = HuntCore.applyPendingTicks(state, ticks);
       const changed = result.state !== state;
@@ -4363,8 +4372,16 @@ var HuntCore = (() => {
       }
       if (persistBlocked) return changed;
       bridgeCall("ackPendingTicks", JSON.stringify(ticks));
+      for (const t of ticks) ticksAwaitingAck.add(pendingTickKey(t));
       return changed;
     }
+
+    // While Hunt is open the shell signals each newly queued tick; resume drains too, for a tick whose
+    // signal found no page to call. Either way the drain is the boot one, then a repaint.
+    function drainPendingTicksAndRender() {
+      if (drainPendingTicks()) renderAppSafely();
+    }
+    window.__huntPendingTicksArrived = drainPendingTicksAndRender;
 
     function syncKeepScreenOn() {
       const on = !!(state.activeFocus && state.activeFocus.activeTaskId && state.activeFocus.isRunning);
@@ -5288,7 +5305,8 @@ var HuntCore = (() => {
       appInBackground = false;
       syncRun.failures = Math.min(syncRun.failures, 1);
       syncRun.retryAt = 0;
-      if (wasHidden) renderAppSafely(); // time-dependent views (timers, date rollover)
+      const ticked = drainPendingTicks(); // widget ticks whose signal reached no page (see __huntPendingTicksArrived)
+      if (wasHidden || ticked) renderAppSafely(); // time-dependent views (timers, date rollover)
       kickSync();
     }
 
