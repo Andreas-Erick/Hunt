@@ -155,7 +155,10 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             views.setColorStateList(QUEST_BARS[i], "setProgressTintList", ColorStateList.valueOf(accent));
         }
-        views.setTextViewText(QUEST_CODES[i], q.optString("code", ""));
+        // The Quest's full title, as the app names it (one line, ellipsized); a snapshot from an
+        // older app has only the short code.
+        String name = q.optString("title", "").trim();
+        views.setTextViewText(QUEST_CODES[i], name.isEmpty() ? q.optString("code", "") : name);
         views.setProgressBar(QUEST_BARS[i], 100, Math.max(0, Math.min(100, q.optInt("pct", 0))), false);
         views.setTextViewText(QUEST_HOURS[i], StatsWidgetFit.formatHours(q.optLong("weekSeconds", 0), q.optDouble("targetHours", 0), met));
         views.setTextColor(QUEST_HOURS[i], ctx.getColor(met ? look.success : look.text));

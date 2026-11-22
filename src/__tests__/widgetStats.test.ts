@@ -102,10 +102,16 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
   it("lists every active Quest in slot order with its rolling-week hours and target", () => {
     const [today] = statsOf(state({ quests, timeLogs }));
     expect(today.quests).toEqual([
-      { code: "WRT", accent: "cyan", weekSeconds: 19800, targetHours: 8, pct: 69, met: false },
-      { code: "FIT", accent: "slate", weekSeconds: 36000, targetHours: 6, pct: 100, met: true },
-      { code: "LRN", accent: "lime", weekSeconds: 0, targetHours: 5, pct: 0, met: false },
+      { code: "WRT", title: "Quest wrt", accent: "cyan", weekSeconds: 19800, targetHours: 8, pct: 69, met: false },
+      { code: "FIT", title: "Quest fit", accent: "slate", weekSeconds: 36000, targetHours: 6, pct: 100, met: true },
+      { code: "LRN", title: "Quest lrn", accent: "lime", weekSeconds: 0, targetHours: 5, pct: 0, met: false },
     ]);
+  });
+
+  it("carries each Quest's full title, not just its short code, so the widget can name it as the app does", () => {
+    const long = "Conversational Spanish before the trip to Seville";
+    const [today] = statsOf(state({ quests: [quest("es", { code: "CONVERSATI", title: long })] }));
+    expect(today.quests[0]).toMatchObject({ code: "CONVERSATI", title: long });
   });
 
   it("matches the app's Quest progress (computeQuestWeekProgress) for every Quest", () => {

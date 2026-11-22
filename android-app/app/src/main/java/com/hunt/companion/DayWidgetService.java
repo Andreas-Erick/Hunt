@@ -24,6 +24,24 @@ public class DayWidgetService extends RemoteViewsService {
                 intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID));
     }
 
+    /**
+     * API 31+: the selected day's rows as items carried inside the widget's own RemoteViews. A
+     * list served through this service (setRemoteAdapter with an Intent) makes the system send the
+     * launcher only "update deferred" for the whole widget, which the launcher may apply late, so
+     * the header lagged behind the list; with the items inline the header and the rows arrive in
+     * one update.
+     */
+    @android.annotation.TargetApi(31)
+    static RemoteViews.RemoteCollectionItems items(Context ctx, int widgetId, SelectedDay day) {
+        Rows rows = new Rows(ctx, widgetId);
+        rows.load(day);
+        RemoteViews.RemoteCollectionItems.Builder items = new RemoteViews.RemoteCollectionItems.Builder()
+                .setHasStableIds(rows.hasStableIds())
+                .setViewTypeCount(rows.getViewTypeCount());
+        for (int i = 0; i < rows.getCount(); i++) items.addItem(rows.getItemId(i), rows.getViewAt(i));
+        return items.build();
+    }
+
     private static final class Rows implements RemoteViewsFactory {
         /** Row layouts per look: the task row and the Undo row. */
         private static final int ROW_KINDS = 2;
@@ -46,7 +64,12 @@ public class DayWidgetService extends RemoteViewsService {
         /** Binder thread: after notifyAppWidgetViewDataChanged, re-reads the snapshot and the day. */
         @Override
         public void onDataSetChanged() {
-            day = SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId));
+            load(SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId)));
+        }
+
+        /** Takes the selected day's rows (the service's re-read, or the provider's own read on API 31+). */
+        void load(SelectedDay selected) {
+            day = selected;
             dateKey = day.date.toString();
             rows = day.hasList() ? day.rows : new JSONArray();
         }
