@@ -29,6 +29,11 @@ final class SelectedDay {
     JSONArray rows = new JSONArray();
     /** Rows in their Undo window, drawn as "✓ Done · Undo". */
     Set<String> undoable = Collections.emptySet();
+    /**
+     * The Pending Tick queue could not be read, so which Tasks are already queued is unknown: no
+     * row offers a tick until a read succeeds (ADR-0006).
+     */
+    boolean ticksPaused;
     /** Days after today that are shown (0 = today), within [0, lastOffset]. */
     int offset;
     /** The furthest day the next arrow can reach: today + 6, or less if the snapshot ends sooner. */
@@ -74,7 +79,9 @@ final class SelectedDay {
 
         long now = System.currentTimeMillis();
         Map<String, ?> held = DayWidgetUndo.held(ctx);
-        Set<String> hidden = UndoWindow.hiddenTaskIds(PendingTicks.queuedTaskIds(ctx.getFilesDir()), held, dateKey, now);
+        PendingTicks.Listing queued = PendingTicks.queued(ctx.getFilesDir());
+        day.ticksPaused = !queued.readable;
+        Set<String> hidden = UndoWindow.hiddenTaskIds(queued.keys, held, dateKey, now);
         day.undoable = UndoWindow.openTaskIds(held, dateKey, now);
         JSONArray rows = entry.optJSONArray(DaySelection.viewFor(dateKey, todayKey));
         for (int i = 0; rows != null && i < rows.length(); i++) {
@@ -82,6 +89,11 @@ final class SelectedDay {
             if (row != null && !hidden.contains(row.optString("id"))) day.rows.put(row);
         }
         return day;
+    }
+
+    /** Whether `row` offers a tick now: the snapshot marks it tickable and the queue is readable. */
+    boolean canTick(JSONObject row) {
+        return row != null && !ticksPaused && row.optBoolean("tickable", false);
     }
 
     /** The row for `taskId`, or null when it is not listed. */

@@ -470,7 +470,7 @@ describe("Day Widget (ADR-0006)", () => {
       expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
       // The only queue operation a widget may use is appending; reading back is for hiding queued Tasks.
       const queueCalls = firstCaptures(code, /PendingTicks\.(\w+)\s*\(/g);
-      for (const call of queueCalls) expect(["append", "queuedTaskIds"], `${name}: PendingTicks.${call}`).toContain(call);
+      for (const call of queueCalls) expect(["append", "queued"], `${name}: PendingTicks.${call}`).toContain(call);
     }
     expect(widgetSources.some(({ code }) => /PendingTicks\.append\s*\(/.test(code))).toBe(true);
     const save = blockAfter(javaCode, /public\s+void\s+saveWidgetSnapshot\(String\s+json\)\s*\{/);
@@ -483,7 +483,9 @@ describe("Day Widget (ADR-0006)", () => {
     expect(queue).not.toMatch(/hunt-mobile-state\.json|STATE_FILE|WIDGET_SNAPSHOT_FILE/);
     const writes = firstCaptures(queue, /HuntFiles\.writeText\(\s*([^,]+),/g);
     expect(writes.length).toBeGreaterThan(0);
-    for (const target of writes) expect(target.trim()).toBe("queueFile(dir)");
+    // Besides the queue, only its own set-aside copy of malformed entries (hunt-pending-ticks-*).
+    for (const target of writes) expect(["queueFile(dir)", "aside"]).toContain(target.trim());
+    expect(blockAfter(queue, /private\s+static\s+File\s+asideFile\([^)]*\)\s*\{/)).toContain('"hunt-pending-ticks-"');
     expect(blockAfter(queue, /static\s+File\s+queueFile\(File\s+dir\)\s*\{/)).toContain("HuntFiles.PENDING_TICKS_FILE");
     expect(read(path.join(JAVA_DIR, "HuntFiles.java"))).toMatch(/PENDING_TICKS_FILE\s*=\s*"hunt-pending-ticks\.json"/);
     // Acknowledging (which removes entries) happens only through the bridge, on the write thread.

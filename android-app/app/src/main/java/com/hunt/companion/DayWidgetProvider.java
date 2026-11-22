@@ -10,8 +10,6 @@ import android.os.Build;
 import android.util.Log;
 import android.widget.RemoteViews;
 
-import org.json.JSONObject;
-
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
@@ -134,8 +132,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
         if (offset < 0 || offset > DaySelection.MAX_DAY_OFFSET) return false;
         SelectedDay day = SelectedDay.read(ctx, (int) offset);
         if (!day.hasList() || !dateKey.equals(day.date.toString())) return false;
-        JSONObject row = day.row(taskId);
-        return row != null && row.optBoolean("tickable", false);
+        return day.canTick(day.row(taskId));
     }
 
     @Override

@@ -26,8 +26,9 @@ and habit rules that live only in HuntCore (ADR-0003).
 
 Pending ticks. The Android shell owns a queue file beside
 the state file. The widget only appends to it and reads
-it to hide queued tasks. Hunt drains it through HuntCore
-on its next start, or at once if it is already running.
+it to hide each queued task on the day it was ticked
+for. Hunt drains it through HuntCore on its next start,
+or at once if it is already running.
 
 ## Consequences
 
@@ -53,11 +54,18 @@ on its next start, or at once if it is already running.
 - No tick is dropped silently. A queue the shell cannot
   read is never written over. If it will not parse, the
   page's read moves it aside and names the copy in
-  `keptAs`. If the read itself failed, it stays in place
-  for the next read. Either way the page logs it and tells
-  the user. A tick the queue refuses (unreadable, full, a
-  failed write) keeps its Undo window, stays hidden, and is
-  offered again on the next redraw or read. The read
+  `keptAs`; entries that are not tick objects are copied
+  aside the same way and dropped from the queue, so they
+  never fill it. If the read itself failed, it stays in
+  place for the next read. Either way the page logs it and
+  tells the user. While the widget cannot read the queue,
+  it offers no tick at all: it cannot tell which tasks are
+  already queued, and showing them tickable again would
+  contradict "they stay saved". Remembering the last good
+  read was rejected: it is lost with the process. A tick
+  the queue refuses (unreadable, full, a failed write)
+  keeps its Undo window, stays hidden, and is offered
+  again on the next redraw or read. The read
   reports these as `heldBack` for diagnostics.
 - A tick first opens a 4-second Undo window: the row shows
   "✓ Done · Undo" and the tick is appended to the queue

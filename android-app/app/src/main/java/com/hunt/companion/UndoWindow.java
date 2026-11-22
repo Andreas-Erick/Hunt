@@ -72,13 +72,14 @@ final class UndoWindow {
 
     /**
      * Tasks of `dateKey` the Day Widget's list leaves out: those waiting in the Pending Tick
-     * queue, and those whose window has ended but are not queued yet. Tasks still in their
-     * window stay listed (drawn as "✓ Done · Undo").
+     * queue for that day, and those whose window has ended but are not queued yet. Both are
+     * keyed {@link TickKeys#taskDay}, so a tick hides its Task only on the day it was for. Tasks
+     * still in their window stay listed (drawn as "✓ Done · Undo").
      */
-    static Set<String> hiddenTaskIds(Set<String> queued, Map<String, ?> held, String dateKey, long now) {
+    static Set<String> hiddenTaskIds(Set<String> queuedKeys, Map<String, ?> held, String dateKey, long now) {
         Set<String> hidden = heldTaskIds(held, dateKey);
         hidden.removeAll(openTaskIds(held, dateKey, now));
-        hidden.addAll(queued);
+        hidden.addAll(taskIdsOn(queuedKeys, dateKey));
         return hidden;
     }
 
@@ -96,8 +97,13 @@ final class UndoWindow {
 
     /** Every Task of `dateKey` with a window, open or ended but not yet queued. */
     static Set<String> heldTaskIds(Map<String, ?> held, String dateKey) {
+        return taskIdsOn(held.keySet(), dateKey);
+    }
+
+    /** The Tasks among {@link TickKeys#taskDay} keys that are for `dateKey`. */
+    private static Set<String> taskIdsOn(Set<String> taskDayKeys, String dateKey) {
         Set<String> ids = new HashSet<>();
-        for (String k : held.keySet()) {
+        for (String k : taskDayKeys) {
             if (dateKey.equals(TickKeys.dateKeyOf(k))) ids.add(TickKeys.taskIdOf(k));
         }
         return ids;

@@ -41,7 +41,7 @@ interface Shell {
 }
 
 /** What the shell's readPendingTicks answers: the queued ticks plus anything to report (ADR-0006). */
-type QueueRead = { ticks: unknown; heldBack?: number; unreadable?: "corrupt" | "read-error"; keptAs?: string };
+type QueueRead = { ticks: unknown; heldBack?: number; unreadable?: "corrupt" | "malformed" | "read-error"; keptAs?: string };
 
 function boot(options: { queue?: unknown; read?: QueueRead; rawQueue?: string; corrupt?: boolean } = {}): Shell {
   const shell: Shell = { calls: [], saved: [], acks: [], coreCalls: 0 };
@@ -153,6 +153,15 @@ describe("phone page: Pending Ticks on boot", () => {
     // A second report in the same run is logged but not shown again.
     w!.eval("drainPendingTicks()");
     expect(w!.document.querySelectorAll("#toastHost .toast-msg")).toHaveLength(1);
+  });
+
+  it("tells the user when entries that were not ticks were set aside, and applies the ticks it read", () => {
+    const keptAs = "hunt-pending-ticks-malformed-1763800000000.json";
+    boot({ read: { ticks: [ticks[0]], unreadable: "malformed", keptAs } });
+    expect(task("tsk-a")).toMatchObject({ status: "completed" });
+    const toast = w!.document.querySelector("#toastHost .toast-msg")?.textContent ?? "";
+    expect(toast).toMatch(/copy was kept/);
+    expect(toast).not.toMatch(/stay saved/);
   });
 
   it("tells the user a queue it could not read stays saved, and applies nothing", () => {
