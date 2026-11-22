@@ -2891,6 +2891,7 @@ var HuntCore = (() => {
     buildHabitTaskRow: () => buildHabitTaskRow,
     canonicalString: () => canonicalString,
     compareRank: () => compareRank,
+    completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
     fromFocusSession: () => fromFocusSession,
@@ -3348,6 +3349,14 @@ var HuntCore = (() => {
   }
   function nextStamp(row, now = Date.now()) {
     return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
+  }
+  function completeTaskRow(task, completedAt) {
+    return {
+      ...task,
+      status: "completed",
+      completedAt,
+      updatedAt: nextStamp(task, completedAt)
+    };
   }
   return __toCommonJS(huntCore_exports);
 })();
@@ -5520,9 +5529,7 @@ var HuntCore = (() => {
         flushActiveBurst(now, { ...af, isRunning: true, sessionStartedAt: now - 1000 });
       }
 
-      currentTask.status = "completed";
-      currentTask.completedAt = now;
-      currentTask.updatedAt = nextStamp(currentTask, now);
+      Object.assign(currentTask, HuntCore.completeTaskRow(currentTask, now));
       justCompletedTaskId = currentTask.id;
 
       const nextTask = HuntCore.pickNextFocusTask(state.tasks, toLocalDateKey(now));
@@ -5793,9 +5800,7 @@ var HuntCore = (() => {
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
       const prev = { status: t.status, completedAt: t.completedAt };
-      t.status = "completed";
-      t.completedAt = now;
-      t.updatedAt = nextStamp(t, now);
+      Object.assign(t, HuntCore.completeTaskRow(t, now));
       justCompletedTaskId = taskId;
       commitLocalChange();
       if (twoBeatScene) playTwoBeatTaskCompletion(twoBeatScene, taskId);

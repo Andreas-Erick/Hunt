@@ -212,3 +212,19 @@ export function nextStamp(
 ): number {
   return Math.max(now, (row?.updatedAt || 0) + 1);
 }
+
+/**
+ * SHARED "complete a Task" rule: the row for `task` completed at `completedAt`,
+ * stamped by R6 at that time (never older than the row it replaces). The
+ * phone's completion and the desktop store's both write this row, so the same
+ * Task completed at the same moment is the same row on either device. Pure:
+ * `task` is not modified.
+ */
+export function completeTaskRow(task: Task, completedAt: number): Task {
+  return {
+    ...task,
+    status: "completed",
+    completedAt,
+    updatedAt: nextStamp(task, completedAt),
+  };
+}

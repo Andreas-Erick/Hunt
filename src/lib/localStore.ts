@@ -19,6 +19,7 @@ import {
 import {
   buildBurstLog,
   buildHabitTaskRow,
+  completeTaskRow,
   nextStamp,
   planRankMoves,
   RANK_STEP,
@@ -192,8 +193,18 @@ async function updateTask(
   return changed(await writeTask(taskId, changes));
 }
 
+/**
+ * Completes a task with the shared rule (completeTaskRow, the phone's too),
+ * reading the row in the same rw transaction. False when it does not exist.
+ */
 async function completeTask(taskId: string, completedAt: number = Date.now()): Promise<boolean> {
-  return changed(await writeTask(taskId, { status: "completed", completedAt }));
+  const done = await db.transaction("rw", db.tasks, async () => {
+    const row = await db.tasks.get(taskId);
+    if (!row) return false;
+    await db.tasks.update(taskId, completeTaskRow(row, completedAt));
+    return true;
+  });
+  return changed(done);
 }
 
 async function reopenTask(taskId: string): Promise<boolean> {

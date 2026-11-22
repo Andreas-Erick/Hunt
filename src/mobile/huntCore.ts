@@ -33,6 +33,7 @@ export { transitionFocus } from "../lib/focusSession";
 export {
   buildBurstLog,
   buildHabitTaskRow,
+  completeTaskRow,
   nextStamp,
   pickNextFocusTask,
   sessionLogId,
