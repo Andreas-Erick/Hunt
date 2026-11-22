@@ -28,6 +28,8 @@ public class DayWidgetService extends RemoteViewsService {
         private final int widgetId;
         private JSONArray rows = new JSONArray();
         private String dateKey = "";
+        /** The snapshot's look, so every row uses the same look's layout and Quest accents. */
+        private String look = "neon";
 
         Rows(Context ctx, int widgetId) {
             this.ctx = ctx;
@@ -45,6 +47,7 @@ public class DayWidgetService extends RemoteViewsService {
                     DayWidgetProvider.readDay(ctx, DayWidgetProvider.savedOffset(ctx, widgetId));
             rows = today.noData || today.stale ? new JSONArray() : today.rows;
             dateKey = today.date.toString();
+            look = today.look;
         }
 
         @Override
@@ -60,12 +63,12 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public RemoteViews getViewAt(int position) {
             JSONObject row = rows.optJSONObject(position);
-            RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_day_row_neon);
+            RemoteViews views = new RemoteViews(ctx.getPackageName(), WidgetLook.dayRowLayout(look));
             if (row == null) return views;
             String title = row.optString("title", "");
             boolean focus = row.optBoolean("focus", false);
             boolean tickable = row.optBoolean("tickable", false) && !focus;
-            int accent = ctx.getColor(accentColor(row.optString("accent", "slate")));
+            int accent = ctx.getColor(WidgetLook.questAccent(look, row.optString("accent", "slate")));
 
             views.setTextViewText(R.id.widget_row_title, title);
             views.setInt(R.id.widget_row_bar, "setColorFilter", accent);
@@ -104,7 +107,7 @@ public class DayWidgetService extends RemoteViewsService {
 
         @Override
         public int getViewTypeCount() {
-            return 1;
+            return WidgetLook.COUNT; // one row layout per look; a look change swaps them all
         }
 
         @Override
@@ -116,21 +119,6 @@ public class DayWidgetService extends RemoteViewsService {
         @Override
         public boolean hasStableIds() {
             return true;
-        }
-
-        /** Quest accent key from the snapshot -> the Neon colour resource (slate for unknown keys). */
-        private static int accentColor(String key) {
-            switch (key) {
-                case "cyan": return R.color.widget_neon_q_cyan;
-                case "emerald": return R.color.widget_neon_q_emerald;
-                case "amber": return R.color.widget_neon_q_amber;
-                case "purple": return R.color.widget_neon_q_purple;
-                case "rose": return R.color.widget_neon_q_rose;
-                case "sky": return R.color.widget_neon_q_sky;
-                case "orange": return R.color.widget_neon_q_orange;
-                case "lime": return R.color.widget_neon_q_lime;
-                default: return R.color.widget_neon_q_slate;
-            }
         }
     }
 }

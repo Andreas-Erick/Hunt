@@ -37,6 +37,13 @@ font faces are tokens too. Dawn sets the glows to `none`.
   tokens, so existing classes follow the look.
 - Phone: the same names in the `:root` block of
   `public/hunt-mobile.html`.
+- Android widgets: RemoteViews cannot read CSS, so
+  `res/values/colors.xml` mirrors the tokens as
+  `widget_neon_*` and `widget_dawn_*`, and every widget
+  layout has a `_neon` and a `_dawn` twin with the same
+  view ids. The widget snapshot carries the look name and
+  `WidgetLook.java` picks the set. A test keeps the colours
+  equal to both CSS token blocks and the twins in step.
 - Roles (`accent`, `success`, `warning`, `danger`, `now`)
   are separate from quest colours (`q-cyan` … `q-lime`).
   In Neon they share values; in Dawn they do not.
