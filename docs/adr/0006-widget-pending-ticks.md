@@ -44,8 +44,10 @@ on its next start, or at once if it is already running.
   with HuntCore's
   `applyPendingTicks`, saves, then calls `ackPendingTicks`
   with the ticks it read. The shell removes exactly those,
-  so a tick queued meanwhile survives. While the page
-  cannot save, it acknowledges nothing.
+  so a tick queued meanwhile survives. Applied ticks ask
+  for a sync like any other change. While the page cannot
+  save, it applies and acknowledges nothing: the ticks
+  wait, untouched, until the user lets Hunt save again.
 - A stale tick (Task gone, already done, archived, or in
   Focus) is skipped and logged, never forced through.
 - No tick is dropped silently. A queue the shell cannot

@@ -135,6 +135,18 @@ describe("phone page: Pending Ticks while Hunt is open", () => {
     expect(breadcrumbs("ticks_applied").map((b) => b.context)).toEqual([{ count: 1 }, { count: 1 }]);
   });
 
+  it("an applied widget tick asks for a sync, like any other change", () => {
+    const shell = new FakeShell();
+    boot(shell);
+    w!.eval("clearSyncTimer()");
+    w!.__huntPendingTicksArrived(); // an empty queue changes nothing
+    expect(w!.eval("syncRun.dueAt")).toBe(0);
+
+    shell.append(tick("tsk-a"));
+    w!.__huntPendingTicksArrived();
+    expect(w!.eval("syncRun.dueAt")).toBeGreaterThan(0);
+  });
+
   it("coming back to the foreground drains ticks no signal reached", () => {
     const shell = new FakeShell();
     boot(shell);
