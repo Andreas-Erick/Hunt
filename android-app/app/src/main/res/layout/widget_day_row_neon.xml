@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One Day Widget row, Neon look: 48dp marker box (open ring tinted with the Quest accent, or
+    ▶ for the Focus Task), accent bar, one-line title (ellipsized), optional Focus/Habit tag.
+    The whole row is one open-Hunt target in this read-only widget; ticking comes later.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:minHeight="48dp"
+    android:background="@drawable/widget_row_neon"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingEnd="12dp">
+
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp">
+
+        <ImageView
+            android:id="@+id/widget_row_ring"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_ring" />
+
+        <TextView
+            android:id="@+id/widget_row_focus_mark"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:text="▶"
+            android:textColor="@color/widget_neon_accent"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <ImageView
+        android:id="@+id/widget_row_bar"
+        android:layout_width="3dp"
+        android:layout_height="20dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_bar" />
+
+    <TextView
+        android:id="@+id/widget_row_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:maxLines="1"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:textColor="@color/widget_neon_text"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/widget_row_tag"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.14"
+        android:maxLines="1"
+        android:textAllCaps="true"
+        android:textColor="@color/widget_neon_dim"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</LinearLayout>

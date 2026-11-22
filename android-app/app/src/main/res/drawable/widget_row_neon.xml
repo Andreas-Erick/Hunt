@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neon row: surface step 2 with an accent ripple as the pressed feedback (no theme attributes). -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/widget_neon_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_neon_row" />
+            <corners android:radius="@dimen/widget_inner_radius" />
+        </shape>
+    </item>
+</ripple>

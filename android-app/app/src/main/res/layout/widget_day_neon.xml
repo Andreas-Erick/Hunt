@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Day Widget, Neon look, populated or empty day. View ids are shared by every look's layout
+    (Dawn adds widget_day_dawn.xml with the same ids), so Java only picks the layout.
+    Header: 48dp open-Hunt target with the day label (tracked caps, accent).
+    Body: the day's list; widget_empty is its empty view ("Nothing left for Today").
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_neon"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
+        android:background="@drawable/widget_header_neon"
+        android:contentDescription="@string/day_widget_open_hunt"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:letterSpacing="0.14"
+        android:maxLines="1"
+        android:text="@string/day_widget_today"
+        android:textAllCaps="true"
+        android:textColor="@color/widget_neon_accent"
+        android:textSize="15sp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/widget_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="8dp"
+            android:listSelector="@android:color/transparent"
+            android:scrollbars="none" />
+
+        <TextView
+            android:id="@+id/widget_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:textColor="@color/widget_neon_muted"
+            android:textSize="14sp" />
+    </FrameLayout>
+</LinearLayout>
