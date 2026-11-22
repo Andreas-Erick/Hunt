@@ -4,7 +4,9 @@ import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -119,7 +121,8 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         }
         RemoteViews views = new RemoteViews(ctx.getPackageName(), look.statsLayout);
         String focus = StatsWidgetFit.formatFocus(stats.focusSeconds);
-        views.setTextViewText(R.id.widget_stats_focus, focus);
+        views.setImageViewBitmap(R.id.widget_stats_focus,
+                WidgetDisplayText.hero(ctx, look, focus, ctx.getString(R.string.stats_widget_today)));
         views.setContentDescription(R.id.widget_stats_root, ctx.getString(R.string.stats_widget_open, focus));
         views.setOnClickPendingIntent(R.id.widget_stats_root, WidgetSupport.openHunt(ctx, WidgetRequestCodes.STATS_OPEN_HUNT));
 
@@ -146,7 +149,12 @@ public class StatsWidgetProvider extends AppWidgetProvider {
 
     private static void drawQuest(Context ctx, RemoteViews views, int i, JSONObject q, WidgetLook look) {
         boolean met = q.optBoolean("met", false);
-        views.setInt(QUEST_DOTS[i], "setColorFilter", ctx.getColor(look.questAccent(q.optString("accent"))));
+        int accent = ctx.getColor(look.questAccent(q.optString("accent")));
+        views.setInt(QUEST_DOTS[i], "setColorFilter", accent);
+        // API 31+ can tint the bar's fill too, so it matches the dot (earlier: the look's accent).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            views.setColorStateList(QUEST_BARS[i], "setProgressTintList", ColorStateList.valueOf(accent));
+        }
         views.setTextViewText(QUEST_CODES[i], q.optString("code", ""));
         views.setProgressBar(QUEST_BARS[i], 100, Math.max(0, Math.min(100, q.optInt("pct", 0))), false);
         views.setTextViewText(QUEST_HOURS[i], StatsWidgetFit.formatHours(q.optLong("weekSeconds", 0), q.optDouble("targetHours", 0), met));

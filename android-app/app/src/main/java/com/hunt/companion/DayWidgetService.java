@@ -74,14 +74,19 @@ public class DayWidgetService extends RemoteViewsService {
 
             views.setTextViewText(R.id.widget_row_title, title);
             views.setInt(R.id.widget_row_bar, "setColorFilter", accent);
-            views.setInt(R.id.widget_row_ring, "setColorFilter", accent);
             views.setViewVisibility(R.id.widget_row_ring, focus ? View.GONE : View.VISIBLE);
             views.setViewVisibility(R.id.widget_row_focus_mark, focus ? View.VISIBLE : View.GONE);
+            // Rows are recycled: set both looks of the card and tag every time.
+            views.setInt(R.id.widget_row, "setBackgroundResource", focus ? look.focusRowBackground : look.rowBackground);
 
             int tag = focus ? R.string.day_widget_focus_tag
                     : row.optBoolean("habit", false) ? R.string.day_widget_habit_tag : 0;
             views.setViewVisibility(R.id.widget_row_tag, tag == 0 ? View.GONE : View.VISIBLE);
-            if (tag != 0) views.setTextViewText(R.id.widget_row_tag, ctx.getString(tag));
+            if (tag != 0) {
+                views.setTextViewText(R.id.widget_row_tag, ctx.getString(tag));
+                views.setTextColor(R.id.widget_row_tag, ctx.getColor(focus ? look.accent : look.muted));
+                views.setInt(R.id.widget_row_tag, "setBackgroundResource", focus ? look.focusTagBackground : look.tagBackground);
+            }
 
             views.setContentDescription(R.id.widget_row,
                     ctx.getString(focus ? R.string.day_widget_row_focus : R.string.day_widget_row_open, title));
@@ -96,7 +101,7 @@ public class DayWidgetService extends RemoteViewsService {
         }
 
         /**
-         * A row in its Undo window: "✓ Done · <title>" and a 48dp Undo target at the far end. Only
+         * A row in its Undo window: the Done mark, "Done · <title>" and a 48dp Undo target at the far end. Only
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {

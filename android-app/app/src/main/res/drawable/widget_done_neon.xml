@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Neon Done mark: a filled success disc with a dark tick, the app's checked .task-check-ring (22dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <path
+        android:fillColor="@color/widget_neon_success"
+        android:pathData="M11,0a11,11 0,1 0,0.001 0z" />
+    <path
+        android:pathData="M6.5,11.4l3,3l6,-6.4"
+        android:strokeWidth="2"
+        android:strokeColor="@color/widget_neon_deep"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

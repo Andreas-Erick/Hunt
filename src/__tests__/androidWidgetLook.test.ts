@@ -58,6 +58,13 @@ const ROLES: Record<string, Record<Look, Source>> = {
   ripple: { neon: { token: "c-accent", alpha: "33" }, dawn: { token: "c-accent", alpha: "33" } },
   // The widget's 1dp edge: Neon's cyan@25% ring stands in for its glow; Dawn has no glow, only a cream@7% hairline.
   outline: { neon: { token: "c-accent", alpha: "40" }, dawn: { token: "c-ink", alpha: "12" } },
+  // Card hairlines (--border ink@7%, --border-strong ink@14%), the Focus card's accent@28% edge
+  // (.spotlight-card), the open-Task ring (.task-check-ring, ink@42%) and progress tracks (ink@8%).
+  edge: { neon: { token: "c-ink", alpha: "12" }, dawn: { token: "c-ink", alpha: "12" } },
+  edge_strong: { neon: { token: "c-ink", alpha: "24" }, dawn: { token: "c-ink", alpha: "24" } },
+  accent_edge: { neon: { token: "c-accent", alpha: "47" }, dawn: { token: "c-accent", alpha: "47" } },
+  ring: { neon: { token: "c-ink", alpha: "6B" }, dawn: { token: "c-ink", alpha: "6B" } },
+  track: { neon: { token: "c-ink", alpha: "14" }, dawn: { token: "c-ink", alpha: "14" } },
   ...Object.fromEntries(
     QUEST_KEYS.map((k) => [`q_${k}`, { neon: { token: `q-${k}` }, dawn: { token: `q-${k}` } }]),
   ),
@@ -178,7 +185,7 @@ describe("the widgets draw the snapshot's look", () => {
   });
 
   it("WidgetLook has a Dawn resource for every Neon one, and Dawn only for the exact look name", () => {
-    const refs = new Set([...lookCode.matchAll(/R\.(?:layout|color)\.(widget_\w+)/g)].map((m) => m[1]));
+    const refs = new Set([...lookCode.matchAll(/R\.(?:layout|color|drawable)\.(widget_\w+)/g)].map((m) => m[1]));
     const neon = [...refs].filter((r) => /_neon\b|widget_neon_/.test(r));
     expect(neon).toEqual(
       expect.arrayContaining(["widget_day_neon", "widget_day_row_neon", "widget_day_message_neon", "widget_stats_neon"]),
@@ -196,6 +203,31 @@ describe("the widgets draw the snapshot's look", () => {
       const block = new RegExp(`${look.toUpperCase()}\\([\\s\\S]*?new int\\[\\]\\s*\\{([^}]*)\\}`).exec(lookCode)?.[1] ?? "";
       const colours = [...block.matchAll(/R\.color\.(\w+)/g)].map((m) => m[1]);
       expect(colours, look).toEqual(keys.map((k) => `widget_${look}_q_${k}`));
+    }
+  });
+
+  it("bundles only the fonts the looks draw, each with its OFL licence, and no layout asks a TextView for one", () => {
+    // A widget's TextView ignores android:fontFamily="@font/..." (the launcher inflates with a
+    // restricted context), so the display type is drawn by WidgetDisplayText through WidgetLook.
+    const fonts = fs.readdirSync(path.join(RES, "font")).map((f) => f.replace(/\.ttf$/, "")).sort();
+    const used = [...new Set([...lookCode.matchAll(/R\.font\.(\w+)/g)].map((m) => m[1]))].sort();
+    expect(used).toEqual(fonts);
+    const licences = fs.readdirSync(path.join(MAIN, "assets", "licenses"));
+    const families: Record<string, string> = {
+      space_grotesk: "OFL-SpaceGrotesk.txt",
+      hanken_grotesk: "OFL-HankenGrotesk.txt",
+      newsreader: "OFL-Newsreader.txt",
+    };
+    for (const font of fonts) {
+      const family = Object.keys(families).find((f) => font.startsWith(`${f}_`));
+      expect(family, `${font}: a known family`).toBeDefined();
+      expect(licences, font).toContain(families[family!]);
+      expect(read(MAIN, "assets", "licenses", families[family!])).toMatch(/SIL Open Font License, Version 1\.1/);
+    }
+    for (const dir of ["layout"]) {
+      for (const f of fs.readdirSync(path.join(RES, dir)).filter((n) => n.startsWith("widget_"))) {
+        expect(read(RES, dir, f), f).not.toMatch(/fontFamily="@font\//);
+      }
     }
   });
 

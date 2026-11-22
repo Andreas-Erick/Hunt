@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Stats Widget Quest progress, Dawn look: track in surface step 3, fill in gold (the only accent). The fill
-    cannot be tinted per Quest before API 31, so the row's dot carries the Quest's own accent.
+    Stats Widget Quest progress, Dawn look: a 4dp track in ink@8% (the app's hero bar) with the fill in
+    the accent. From API 31 StatsWidgetProvider tints the fill with the Quest's accent; before that the
+    row's dot alone carries it.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@android:id/background">
         <shape android:shape="rectangle">
-            <solid android:color="@color/widget_dawn_pressed" />
-            <corners android:radius="3dp" />
+            <solid android:color="@color/widget_dawn_track" />
+            <corners android:radius="2dp" />
         </shape>
     </item>
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">
                 <solid android:color="@color/widget_dawn_accent" />
-                <corners android:radius="3dp" />
+                <corners android:radius="2dp" />
             </shape>
         </clip>
     </item>

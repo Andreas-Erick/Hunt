@@ -106,7 +106,9 @@ public class DayWidgetProvider extends AppWidgetProvider {
         WidgetLook look = day.snapshot.look;
         if (!day.hasList()) return WidgetSupport.messageViews(ctx, day.snapshot, WidgetRequestCodes.DAY_OPEN_HUNT);
         RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayLayout);
-        views.setTextViewText(R.id.widget_header, DaySelection.headerLabel(day.offset, day.date));
+        String label = DaySelection.headerLabel(day.offset, day.date);
+        views.setImageViewBitmap(R.id.widget_header, WidgetDisplayText.dayTitle(ctx, look, label));
+        views.setContentDescription(R.id.widget_header, ctx.getString(R.string.day_widget_header_open, label));
         views.setOnClickPendingIntent(R.id.widget_header, WidgetSupport.openHunt(ctx, WidgetRequestCodes.DAY_OPEN_HUNT));
         views.setTextViewText(R.id.widget_empty,
                 ctx.getString(R.string.day_widget_nothing_left, DaySelection.inSentence(day.offset, day.date)));
@@ -130,7 +132,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
     private static void arrow(Context ctx, RemoteViews views, WidgetLook look, int viewId, int widgetId, int target,
             boolean enabled) {
         views.setBoolean(viewId, "setEnabled", enabled);
-        views.setTextColor(viewId, ctx.getColor(enabled ? look.text : look.dim));
+        views.setInt(viewId, "setColorFilter", ctx.getColor(enabled ? look.text : look.dim));
         if (enabled) views.setOnClickPendingIntent(viewId, navIntent(ctx, widgetId, target));
     }
 
