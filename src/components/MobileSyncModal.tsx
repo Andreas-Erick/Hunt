@@ -15,10 +15,8 @@ import {
   ServerOff,
 } from "lucide-react";
 import { useCommandStore } from "@/store/useCommandStore";
-import {
-  buildLocalSyncPayload,
-  getClientSyncToken,
-} from "@/lib/syncEngine";
+import { buildLocalSyncPayload } from "@/lib/applySnapshot";
+import { getClientSyncToken } from "@/lib/syncToken";
 import { hudAudio } from "@/lib/hudAudio";
 import { toLocalDateKey } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
