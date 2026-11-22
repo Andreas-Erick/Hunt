@@ -17,7 +17,7 @@ export interface WidgetQuestStat {
   targetHours: number;
   /** Progress toward the target, 0–100, exactly as the app's Quest progress. */
   pct: number;
-  /** The week's hours reach a positive target (drawn with ✓ in the success colour). */
+  /** The app's Quest progress calls the target met (drawn with ✓ in the success colour). */
   met: boolean;
 }
 
@@ -66,7 +66,7 @@ function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
           weekSeconds: p.weekSeconds,
           targetHours: p.targetHours,
           pct: p.pct,
-          met: p.targetHours > 0 && p.weekSeconds >= p.targetHours * 3600,
+          met: p.met,
         };
       }),
     streaks: (state.habits ?? [])

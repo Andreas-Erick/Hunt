@@ -26,6 +26,8 @@ export interface QuestWeekStats {
   targetHours: number;
   /** Week progress toward the target, 0–100 (0 when the target is not positive). */
   pct: number;
+  /** The week's seconds reach a positive target (pct can round up to 100 first). */
+  met: boolean;
 }
 
 export interface QuestWeekProgress {
@@ -46,6 +48,10 @@ function safeSeconds(value: unknown): number {
 function safeTarget(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function isTargetMet(seconds: number, targetHours: number): boolean {
+  return targetHours > 0 && seconds >= targetHours * 3600;
 }
 
 function percentOf(seconds: number, targetHours: number): number {
@@ -100,6 +106,7 @@ export function computeQuestWeekProgress(params: {
         weekSeconds,
         targetHours,
         pct: percentOf(weekSeconds, targetHours),
+        met: isTargetMet(weekSeconds, targetHours),
       };
     },
     total: {
@@ -107,6 +114,7 @@ export function computeQuestWeekProgress(params: {
       weekSeconds: totalWeek,
       targetHours: totalTarget,
       pct: percentOf(totalWeek, totalTarget),
+      met: isTargetMet(totalWeek, totalTarget),
     },
   };
 }
