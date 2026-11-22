@@ -20,12 +20,15 @@ import java.io.File;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Set;
 
 /**
  * Day Widget (GLOSSARY.md): draws today's open Tasks from the Widget Snapshot the phone page
- * hands to the shell after every save (ADR-0006). It only reads: it never writes the state file
- * or any other file, and holds no Hunt rule; which Tasks show, their order and the Focus flag all
- * come from HuntCore's buildWidgetSnapshot.
+ * hands to the shell after every save (ADR-0006), and lets the user tick a Task done. A tick is
+ * only appended to the Pending Tick queue ({@link PendingTicks}) and the Task hidden; Hunt applies
+ * it through HuntCore on its next start. The widget never writes the state file or the snapshot,
+ * and holds no Hunt rule: which Tasks show, their order and whether they can be ticked all come
+ * from HuntCore's buildWidgetSnapshot.
  *
  * The class name is part of every placed widget: never rename it, or users lose their widgets
  * on update.
@@ -38,6 +41,14 @@ public class DayWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "HuntDayWidget";
     /** Explicit broadcast from the midnight alarm (never exported). */
     static final String ACTION_MIDNIGHT = "com.hunt.companion.action.DAY_WIDGET_MIDNIGHT";
+    /** Explicit broadcast from a row tap; the row's fill-in says what was tapped. */
+    static final String ACTION_ROW = "com.hunt.companion.action.DAY_WIDGET_ROW";
+    /** Fill-in extras of a row tap: {@link #ROW_TICK} or {@link #ROW_OPEN}, plus the Task and day. */
+    static final String EXTRA_ROW_ACTION = "rowAction";
+    static final String EXTRA_TASK_ID = "taskId";
+    static final String EXTRA_DATE_KEY = "dateKey";
+    static final String ROW_TICK = "tick";
+    static final String ROW_OPEN = "open";
     /** Minutes after local midnight the redraw is aimed at (clear of clock skew around 00:00). */
     private static final int MIDNIGHT_SLACK_MINUTES = 1;
 
@@ -49,7 +60,9 @@ public class DayWidgetProvider extends AppWidgetProvider {
         boolean noData = true;
         /** The snapshot is from an earlier day than today: "Open Hunt to refresh". */
         boolean stale;
-        /** Today's rows, ready to draw (id, title, accent, tickable, focus, habit). */
+        /** The snapshot day these rows belong to (a tick names it). */
+        String dateKey = "";
+        /** Today's rows, ready to draw (id, title, accent, tickable, focus, habit), queued ticks left out. */
         JSONArray rows = new JSONArray();
     }
 
@@ -63,6 +76,10 @@ public class DayWidgetProvider extends AppWidgetProvider {
     public void onReceive(Context ctx, Intent intent) {
         super.onReceive(ctx, intent);
         String action = intent == null ? null : intent.getAction();
+        if (ACTION_ROW.equals(action)) {
+            onRowTap(ctx, intent);
+            return;
+        }
         if (ACTION_MIDNIGHT.equals(action)
                 || Intent.ACTION_TIME_CHANGED.equals(action)
                 || Intent.ACTION_TIMEZONE_CHANGED.equals(action)
@@ -70,6 +87,41 @@ public class DayWidgetProvider extends AppWidgetProvider {
             refreshAll(ctx);
             armMidnightAlarm(ctx);
         }
+    }
+
+    /** A row was tapped: tick the Task (queue it and redraw without it) or open Hunt. */
+    private static void onRowTap(Context ctx, Intent intent) {
+        if (ROW_TICK.equals(intent.getStringExtra(EXTRA_ROW_ACTION))) {
+            tick(ctx, intent.getStringExtra(EXTRA_TASK_ID), intent.getStringExtra(EXTRA_DATE_KEY),
+                    System.currentTimeMillis());
+            return;
+        }
+        try {
+            ctx.startActivity(launchIntent(ctx));
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Opening Hunt from the Day Widget failed", e);
+        }
+    }
+
+    /**
+     * Ticks a Task done at {@code tickedAt}: appends a Pending Tick and redraws, which hides it.
+     * Only a row the snapshot marks tickable can be ticked (never the Focus Task). The single entry
+     * point for a tick, so an Undo window can wrap it.
+     */
+    static void tick(Context ctx, String taskId, String dateKey, long tickedAt) {
+        if (taskId != null && dateKey != null && isTickable(readToday(ctx), taskId, dateKey)) {
+            PendingTicks.append(ctx.getFilesDir(), taskId, dateKey, tickedAt);
+        }
+        refreshAll(ctx); // hides the queued Task, or redraws a stale list the tap came from
+    }
+
+    private static boolean isTickable(Today today, String taskId, String dateKey) {
+        if (today.noData || today.stale || !dateKey.equals(today.dateKey)) return false;
+        for (int i = 0; i < today.rows.length(); i++) {
+            JSONObject row = today.rows.optJSONObject(i);
+            if (row != null && taskId.equals(row.optString("id"))) return row.optBoolean("tickable", false);
+        }
+        return false;
     }
 
     @Override
@@ -117,7 +169,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
         service.setData(Uri.parse(service.toUri(Intent.URI_INTENT_SCHEME)));
         views.setRemoteAdapter(R.id.widget_list, service);
         views.setEmptyView(R.id.widget_list, R.id.widget_empty);
-        views.setPendingIntentTemplate(R.id.widget_list, openHuntTemplate(ctx));
+        views.setPendingIntentTemplate(R.id.widget_list, rowTemplate(ctx));
         return views;
     }
 
@@ -128,13 +180,14 @@ public class DayWidgetProvider extends AppWidgetProvider {
     }
 
     /**
-     * Template for row taps; rows add an empty fill-in, so it must be mutable, and from targetSdk
-     * 34 a mutable PendingIntent must wrap an explicit intent (it does: MainActivity).
+     * Template for row taps, an explicit broadcast back to this provider; each row's fill-in adds
+     * what was tapped (tick or open, Task, day), so it must be mutable, and from targetSdk 34 a
+     * mutable PendingIntent must wrap an explicit intent (it does).
      */
-    private static PendingIntent openHuntTemplate(Context ctx) {
+    private static PendingIntent rowTemplate(Context ctx) {
         int mutable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0;
-        return PendingIntent.getActivity(ctx, 1, launchIntent(ctx),
-                PendingIntent.FLAG_UPDATE_CURRENT | mutable);
+        Intent intent = new Intent(ctx, DayWidgetProvider.class).setAction(ACTION_ROW);
+        return PendingIntent.getBroadcast(ctx, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT | mutable);
     }
 
     private static Intent launchIntent(Context ctx) {
@@ -164,7 +217,10 @@ public class DayWidgetProvider extends AppWidgetProvider {
         return LocalDate.now().toString();
     }
 
-    /** Reads the snapshot file and picks what to show for the current local date. Any thread. */
+    /**
+     * Reads the snapshot file and picks what to show for the current local date, leaving out Tasks
+     * waiting in the Pending Tick queue. Any thread.
+     */
     static Today readToday(Context ctx) {
         Today today = new Today();
         String text;
@@ -182,8 +238,8 @@ public class DayWidgetProvider extends AppWidgetProvider {
             for (int i = 0; days != null && i < days.length(); i++) {
                 JSONObject day = days.optJSONObject(i);
                 if (day != null && key.equals(day.optString("dateKey"))) {
-                    JSONArray rows = day.optJSONArray("today");
-                    today.rows = rows == null ? new JSONArray() : rows;
+                    today.dateKey = key;
+                    today.rows = withoutQueued(day.optJSONArray("today"), PendingTicks.queuedTaskIds(ctx.getFilesDir()));
                     today.stale = false;
                     break;
                 }
@@ -193,5 +249,15 @@ public class DayWidgetProvider extends AppWidgetProvider {
             today.noData = true;
         }
         return today;
+    }
+
+    /** The rows whose Task is not waiting in the Pending Tick queue. */
+    private static JSONArray withoutQueued(JSONArray rows, Set<String> queued) {
+        JSONArray kept = new JSONArray();
+        for (int i = 0; rows != null && i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null && !queued.contains(row.optString("id"))) kept.put(row);
+        }
+        return kept;
     }
 }

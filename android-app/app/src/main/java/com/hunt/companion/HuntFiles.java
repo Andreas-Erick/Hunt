@@ -23,6 +23,9 @@ final class HuntFiles {
     /** The Widget Snapshot (ADR-0006): written only by the bridge, read by the widgets. */
     static final String WIDGET_SNAPSHOT_FILE = "hunt-widget-snapshot.json";
 
+    /** The Pending Tick queue (ADR-0006): appended by the widget, drained by the page. See PendingTicks. */
+    static final String PENDING_TICKS_FILE = "hunt-pending-ticks.json";
+
     private HuntFiles() {
     }
 

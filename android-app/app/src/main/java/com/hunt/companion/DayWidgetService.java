@@ -10,8 +10,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Rows of the Day Widget's list, drawn from the Widget Snapshot (ADR-0006). Read-only: it reads
- * the snapshot file and never writes anything. The class name is part of the manifest contract.
+ * Rows of the Day Widget's list, drawn from the Widget Snapshot (ADR-0006). It reads the snapshot
+ * (and the Pending Tick queue, to hide queued Tasks) and never writes anything; a tick is handled
+ * by DayWidgetProvider. The class name is part of the manifest contract.
  */
 public class DayWidgetService extends RemoteViewsService {
     @Override
@@ -22,6 +23,7 @@ public class DayWidgetService extends RemoteViewsService {
     private static final class Rows implements RemoteViewsFactory {
         private final Context ctx;
         private JSONArray rows = new JSONArray();
+        private String dateKey = "";
 
         Rows(Context ctx) {
             this.ctx = ctx;
@@ -36,6 +38,7 @@ public class DayWidgetService extends RemoteViewsService {
         public void onDataSetChanged() {
             DayWidgetProvider.Today today = DayWidgetProvider.readToday(ctx);
             rows = today.noData || today.stale ? new JSONArray() : today.rows;
+            dateKey = today.dateKey;
         }
 
         @Override
@@ -55,6 +58,7 @@ public class DayWidgetService extends RemoteViewsService {
             if (row == null) return views;
             String title = row.optString("title", "");
             boolean focus = row.optBoolean("focus", false);
+            boolean tickable = row.optBoolean("tickable", false) && !focus;
             int accent = ctx.getColor(accentColor(row.optString("accent", "slate")));
 
             views.setTextViewText(R.id.widget_row_title, title);
@@ -70,9 +74,21 @@ public class DayWidgetService extends RemoteViewsService {
 
             views.setContentDescription(R.id.widget_row,
                     ctx.getString(focus ? R.string.day_widget_row_focus : R.string.day_widget_row_open, title));
-            // Read-only widget: every row opens Hunt (the template on the list carries the intent).
-            views.setOnClickFillInIntent(R.id.widget_row, new Intent());
+            // The row opens Hunt; a tickable row's 48dp marker box ticks it (the list's template
+            // sends both to DayWidgetProvider). The Focus Task has no tick target.
+            views.setOnClickFillInIntent(R.id.widget_row, rowTap(DayWidgetProvider.ROW_OPEN, row));
+            if (tickable) {
+                views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetProvider.ROW_TICK, row));
+                views.setContentDescription(R.id.widget_row_tick, ctx.getString(R.string.day_widget_row_tick, title));
+            }
             return views;
+        }
+
+        private Intent rowTap(String action, JSONObject row) {
+            return new Intent()
+                    .putExtra(DayWidgetProvider.EXTRA_ROW_ACTION, action)
+                    .putExtra(DayWidgetProvider.EXTRA_TASK_ID, row.optString("id", ""))
+                    .putExtra(DayWidgetProvider.EXTRA_DATE_KEY, dateKey);
         }
 
         @Override

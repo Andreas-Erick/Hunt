@@ -254,6 +254,8 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
       vibrateClick: "void",
       getAppVersion: "String",
       saveWidgetSnapshot: "void",
+      readPendingTicks: "String",
+      ackPendingTicks: "void",
     });
     // Nothing outside the bridge class is exposed to JS.
     expect(javaCode.match(/@JavascriptInterface/g)).toHaveLength(bridgeMethods().size);
@@ -448,14 +450,42 @@ describe("Day Widget (ADR-0006)", () => {
     expect(fs.existsSync(path.join(RES, "xml", "day_widget_info.xml"))).toBe(true);
   });
 
-  it("the widget code never writes a file: only the bridge saves the snapshot", () => {
+  it("the widget code never writes a file except appending a Pending Tick; only the bridge saves the snapshot", () => {
     expect(widgetSources.map((f) => f.name).sort()).toEqual(["DayWidgetProvider.java", "DayWidgetService.java"]);
     for (const { name, code } of widgetSources) {
       expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE/);
       expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite/);
+      // The only queue operation a widget may use is appending; reading back is for hiding queued Tasks.
+      const queueCalls = firstCaptures(code, /PendingTicks\.(\w+)\s*\(/g);
+      for (const call of queueCalls) expect(["append", "queuedTaskIds"], `${name}: PendingTicks.${call}`).toContain(call);
     }
+    expect(widgetSources.some(({ code }) => /PendingTicks\.append\s*\(/.test(code))).toBe(true);
     const save = blockAfter(javaCode, /public\s+void\s+saveWidgetSnapshot\(String\s+json\)\s*\{/);
     expect(save).toContain("saveWidgetSnapshotInternal(json)");
+  });
+
+  it("the Pending Tick queue only ever writes its own file, and only the bridge acknowledges", () => {
+    const queue = widgetJava.find((f) => f.name === "PendingTicks.java")?.code ?? "";
+    expect(queue, "PendingTicks.java").not.toBe("");
+    expect(queue).not.toMatch(/hunt-mobile-state\.json|STATE_FILE|WIDGET_SNAPSHOT_FILE/);
+    const writes = firstCaptures(queue, /HuntFiles\.writeText\(\s*([^,]+),/g);
+    expect(writes.length).toBeGreaterThan(0);
+    for (const target of writes) expect(target.trim()).toBe("queueFile(dir)");
+    expect(blockAfter(queue, /static\s+File\s+queueFile\(File\s+dir\)\s*\{/)).toContain("HuntFiles.PENDING_TICKS_FILE");
+    expect(read(path.join(JAVA_DIR, "HuntFiles.java"))).toMatch(/PENDING_TICKS_FILE\s*=\s*"hunt-pending-ticks\.json"/);
+    // Acknowledging (which removes entries) happens only through the bridge, on the write thread.
+    for (const { name, code } of widgetJava.filter((f) => f.name !== "PendingTicks.java")) {
+      expect(code, name).not.toMatch(/PendingTicks\.ack\s*\(/);
+    }
+    expect(javaCode).toMatch(/PendingTicks\.ack\s*\(/);
+    const ack = blockAfter(javaCode, /public\s+void\s+ackPendingTicks\(String\s+json\)\s*\{/);
+    expect(ack).toContain("ackPendingTicksInternal(json)");
+  });
+
+  it("a tickable row has its own tick target, separate from the open-Hunt row", () => {
+    const service = widgetSources.find((f) => f.name === "DayWidgetService.java")?.code ?? "";
+    expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row_tick\b/);
+    expect(service).toMatch(/setOnClickFillInIntent\(\s*R\.id\.widget_row\b/);
   });
 
   it("every widget control is a touch target of at least 48dp", () => {

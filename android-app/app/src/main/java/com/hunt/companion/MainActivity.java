@@ -1059,6 +1059,25 @@ public class MainActivity extends Activity {
         DayWidgetProvider.refreshAll(appContext);
     }
 
+    /** JavaBridge thread: the Pending Tick queue as JSON array text ("[]" when empty). A small file. */
+    private String readPendingTicksInternal() {
+        File dir = filesDir;
+        return dir == null ? "[]" : PendingTicks.read(dir);
+    }
+
+    /**
+     * JavaBridge thread: schedules removal of the acknowledged ticks on ioExec. ioExec is FIFO, so
+     * the state the page saved just before (with the ticks applied) is written first: a crash in
+     * between leaves the ticks queued, and HuntCore skips them as already done next time.
+     */
+    private void ackPendingTicksInternal(final String json) {
+        final File dir = filesDir;
+        if (dir == null || json == null) return;
+        executeQuietly(ioExec, () -> {
+            if (PendingTicks.ack(dir, json) > 0) DayWidgetProvider.refreshAll(appContext);
+        });
+    }
+
     /** UI thread (onStop): runs a flush on ioExec (after any queued writes) and waits up to timeoutMs. */
     private void flushStateBlocking(long timeoutMs) {
         try {
@@ -1992,6 +2011,33 @@ public class MainActivity extends Activity {
                 saveWidgetSnapshotInternal(json);
             } catch (RuntimeException e) {
                 Log.w(TAG, "saveWidgetSnapshot failed", e);
+            }
+        }
+
+        /**
+         * Pending Ticks (ADR-0006): the Day Widget's queued ticks as a JSON array of
+         * {taskId, dateKey, tickedAt}; "[]" when there are none.
+         */
+        @JavascriptInterface
+        public String readPendingTicks() {
+            try {
+                return readPendingTicksInternal();
+            } catch (RuntimeException e) {
+                Log.w(TAG, "readPendingTicks failed", e);
+                return "[]";
+            }
+        }
+
+        /**
+         * Removes exactly the given ticks (a JSON array as read) from the queue, after the page has
+         * applied and saved them; ticks queued since stay.
+         */
+        @JavascriptInterface
+        public void ackPendingTicks(String json) {
+            try {
+                ackPendingTicksInternal(json);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "ackPendingTicks failed", e);
             }
         }
 
