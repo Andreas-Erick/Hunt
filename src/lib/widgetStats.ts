@@ -8,7 +8,10 @@ import type { SyncPayload } from "./syncTypes";
 
 /** One active Quest's rolling-week progress, as the Stats Widget draws it. */
 export interface WidgetQuestStat {
+  /** The Quest's short code (kept for older widget builds, which draw it). */
   code: string;
+  /** The Quest's full title, as the app names it; the widget ellipsizes it to one line. */
+  title: string;
   /** Quest accent key; "slate" for an unknown key. Java maps it to the look's colour. */
   accent: QuestAccent | "slate";
   /** Logged seconds over the rolling 7 days ending on the entry's date. */
@@ -62,6 +65,7 @@ function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
         const p = progress.forQuest(q);
         return {
           code: q.code,
+          title: q.title,
           accent: widgetAccent(q.accentColor),
           weekSeconds: p.weekSeconds,
           targetHours: p.targetHours,
