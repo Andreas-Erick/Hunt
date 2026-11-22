@@ -104,7 +104,7 @@ describe("Database & Formatting Utilities (db.ts)", () => {
       vi.unstubAllGlobals();
     });
 
-    // Spec (P07-01): a starter template, not fabricated history. Review and the
+    // Spec: a starter template, not fabricated history. Review and the
     // heatmap must start empty, and nothing fake may sync to the phone.
     it("seeds 3 quests and queued starter tasks, with no history, on an empty database", async () => {
       await seedInitialDataIfNeeded();

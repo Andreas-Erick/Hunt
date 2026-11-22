@@ -127,7 +127,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("R6 (DDL-05): a local write is stamped after the row it replaces", () => {
+describe("R6: a local write is stamped after the row it replaces", () => {
   interface StampCase {
     name: string;
     /** Seeds rows; the row under test is stamped `future`. */
@@ -315,7 +315,7 @@ describe("R6 (DDL-05): a local write is stamped after the row it replaces", () =
   });
 });
 
-describe("DDL-03: titles are clamped to the sync limits", () => {
+describe("titles are clamped to the sync limits", () => {
   const FAMILY = "👨‍👩‍👧‍👦"; // 11 UTF-16 units: 4 surrogate pairs + 3 ZWJ
   const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
@@ -513,7 +513,7 @@ describe("DIX-V01 store defence: completeActiveTask is single-flight", () => {
   });
 });
 
-describe("DDL-06: persisted focus state is validated on rehydrate", () => {
+describe("persisted focus state is validated on rehydrate", () => {
   async function rehydrateFrom(raw: string): Promise<void> {
     window.localStorage.setItem(STORE_KEY, raw);
     await useCommandStore.persist.rehydrate();
@@ -665,7 +665,7 @@ describe("DDL-06: persisted focus state is validated on rehydrate", () => {
   );
 });
 
-describe("DIX-11: a failed local write resolves and is surfaced as actionError", () => {
+describe("a failed local write resolves and is surfaced as actionError", () => {
   const LOCAL_DB_TEXT = describeSyncError("local_db");
 
   /** Fails if anything rejected without a handler while `run` and a few turns after it ran. */
@@ -790,7 +790,7 @@ describe("DIX-11: a failed local write resolves and is surfaced as actionError",
   });
 });
 
-describe("DDL-07: auto-sync backs off (transient) or pauses (deterministic) after a failure", () => {
+describe("auto-sync backs off (transient) or pauses (deterministic) after a failure", () => {
   const SEED = 20_261_118;
   let respond: () => Promise<Response>;
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -955,7 +955,7 @@ describe("DDL-07: auto-sync backs off (transient) or pauses (deterministic) afte
   });
 });
 
-describe("ARC-11: pickNextFocusTask", () => {
+describe("pickNextFocusTask", () => {
   const today = "2026-11-18";
 
   it("returns null for an empty list and when nothing is queued", () => {

@@ -18,7 +18,7 @@ import {
   type SyncPayload,
 } from "@/lib/syncTypes";
 
-// Boundary validation of sync payloads (SRV-03): structural problems reject
+// Boundary validation of sync payloads: structural problems reject
 // the payload; row-level problems drop the row or coerce the field.
 
 type Row = Record<string, unknown>;

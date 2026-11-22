@@ -1,9 +1,8 @@
 // @vitest-environment node
-// Phone page audit fixes (group "mobile"): weekly-target validation (P09-02), sheet focus in/out
-// (P10-02), the Focus notes field (P10-04, P17-3), honest Guide segmented control (P10-05), plain
-// sync error copy (P11-01), complete-ring contrast (P13-01), reduced-motion transitions (P14-02),
-// the native-IME field reveal (P17-1), heatmap scrubbing (P17-2), single-pass Quests grouping
-// (P19-03), English sync timestamps (P29-03) and the removed dead audio code (P31-03).
+// Phone page details: weekly-target validation, sheet focus in/out, the Focus notes field, the Guide
+// segmented control, plain sync error copy, complete-ring contrast, reduced-motion transitions, the
+// native-IME field reveal, heatmap scrubbing, single-pass Quests grouping, English sync timestamps,
+// and no dead audio code.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { click, loadMobile, mobileHtml, pageErrors, readState, type MobileWindow } from "./helpers/loadMobile";
 
@@ -102,7 +101,7 @@ function contrast(a: Rgb, b: Rgb): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-describe("weekly target validation (P09-02)", () => {
+describe("weekly target validation", () => {
   it("Edit Quest: a cleared or invalid target keeps the saved value; an out-of-range one is clamped to 1-100", () => {
     const p = load({ seedState: baseState({ quests: [quest("quest-1", "Launch", { targetWeeklyHours: 25 })] }) });
     const saveWith = (value: string) => {
@@ -136,7 +135,7 @@ describe("weekly target validation (P09-02)", () => {
   });
 });
 
-describe("sheet focus (P10-02)", () => {
+describe("sheet focus", () => {
   it("a sheet without a form focuses its close button; closing returns focus to the opener", () => {
     const p = load({ seedState: baseState() });
     p.switchView("quests");
@@ -184,7 +183,7 @@ describe("sheet focus (P10-02)", () => {
   });
 });
 
-describe("Focus-view session notes (P10-04, P17-3)", () => {
+describe("Focus-view session notes", () => {
   it("uses a class with a 16 px font and a cyan focus border instead of an inline outline:none", () => {
     const p = load({ seedState: baseState() });
     p.initializeFocus("tsk-1");
@@ -198,7 +197,7 @@ describe("Focus-view session notes (P10-04, P17-3)", () => {
   });
 });
 
-describe("Guide sections keep focus after re-render (P10-05)", () => {
+describe("Guide sections keep focus after re-render", () => {
   it("the chosen section's button is focused again after renderApp rebuilds the view", () => {
     const p = load({ seedState: baseState() });
     p.eval("openGuideView('quests')");
@@ -217,7 +216,7 @@ describe("Guide sections keep focus after re-render (P10-05)", () => {
   });
 });
 
-describe("sync error copy (P11-01)", () => {
+describe("sync error copy", () => {
   it("an unusual laptop HTTP status gives a recovery step, with the code only as a trailing detail", () => {
     const p = load();
     const info: unknown = JSON.parse(String(p.eval('JSON.stringify(syncReasonInfo("http_418"))')));
@@ -229,7 +228,7 @@ describe("sync error copy (P11-01)", () => {
   });
 });
 
-describe("complete-ring contrast (P13-01)", () => {
+describe("complete-ring contrast", () => {
   it("the resting ring keeps >= 3:1 against the card surface", () => {
     const p = load({ seedState: baseState() });
     const css = cssText(p);
@@ -246,7 +245,7 @@ describe("complete-ring contrast (P13-01)", () => {
   });
 });
 
-describe("reduced motion (P14-02)", () => {
+describe("reduced motion", () => {
   it("the reduced-motion block also cuts CSS transitions (the FAB's 48 px slide), like desktop", () => {
     const p = load();
     const reduced = block(cssText(p), "@media (prefers-reduced-motion: reduce)");
@@ -255,7 +254,7 @@ describe("reduced motion (P14-02)", () => {
   });
 });
 
-describe("native IME: the focused page field is scrolled above the keyboard (P17-1)", () => {
+describe("native IME: the focused page field is scrolled above the keyboard", () => {
   function setup() {
     const p = load({ seedState: baseState() });
     const scrolls: unknown[] = [];
@@ -301,7 +300,7 @@ describe("native IME: the focused page field is scrolled above the keyboard (P17
   });
 });
 
-describe("heatmap scrub-to-select (P17-2)", () => {
+describe("heatmap scrub-to-select", () => {
   const COLS_BOX = rect(40, 400, 320, 140); // 16 columns x 7 rows -> 20 x 20 px per day slot
 
   /** A pointer event on the grid at day slot (col, row), dispatched on whatever is under it. */
@@ -359,7 +358,7 @@ describe("heatmap scrub-to-select (P17-2)", () => {
   });
 });
 
-describe("Quests view groups tasks in one pass (P19-03)", () => {
+describe("Quests view groups tasks in one pass", () => {
   it("each quest card lists its open steps by rank and at most 3 tasks finished today, newest first", () => {
     const yesterday = NOW - DAY;
     const p = load({
@@ -405,7 +404,7 @@ describe("Quests view groups tasks in one pass (P19-03)", () => {
   });
 });
 
-describe("sync timestamps in English, 24 h (P29-03)", () => {
+describe("sync timestamps in English, 24 h", () => {
   it("absoluteTime never uses the device locale", () => {
     const p = load({
       beforeBoot(win) {
@@ -427,7 +426,7 @@ describe("sync timestamps in English, 24 h (P29-03)", () => {
   });
 });
 
-describe("dead audio code removed (P31-03)", () => {
+describe("dead audio code removed", () => {
   it("no mute state, mute icon or deferred prewarm timer remain; the silent tap stubs stay", () => {
     const html = mobileHtml();
     for (const gone of ["audioMuted", "audioCtx", "playTone", "updateMuteIcon", "toggleAudioMute", "prewarmAudio", "muteBtn", "SVG_VOL_"]) {

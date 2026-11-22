@@ -207,7 +207,7 @@ describe("MainActivity.java: secret hygiene and token storage", () => {
   });
 });
 
-describe("MainActivity.java: WebView isolation (AND-01, AND-06)", () => {
+describe("MainActivity.java: WebView isolation", () => {
   it("overrides shouldOverrideUrlLoading and shouldInterceptRequest with the request-based signatures", () => {
     const client = blockAfter(javaCode, /private\s+final\s+class\s+HuntWebViewClient\s+extends\s+WebViewClient\s*\{/);
     expect(client).toMatch(/@Override\s+public\s+boolean\s+shouldOverrideUrlLoading\(WebView\s+\w+,\s*WebResourceRequest\s+\w+\)/);
@@ -273,7 +273,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
     for (const name of called) expect(exposed.has(name), `page calls AndroidBridge.${name}`).toBe(true);
   });
 
-  it("saveState ignores input that is not shaped like a JSON object (AND-04)", () => {
+  it("saveState ignores input that is not shaped like a JSON object", () => {
     const save = blockAfter(javaCode, /private\s+void\s+saveStateInternal\(String\s+json\)\s*\{/);
     expect(save).toMatch(/^\{\s*if\s*\(\s*!looksLikeJsonObject\(json\)\s*\)\s*\{[^}]*return;\s*\}/);
     const guard = blockAfter(javaCode, /private\s+static\s+boolean\s+looksLikeJsonObject\(String\s+s\)\s*\{/);
@@ -282,7 +282,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
     expect(guard).toMatch(/charAt\(end\)\s*==\s*'\}'/);
   });
 
-  it("saveLaptopUrl ignores non-empty values that are not http(s) URLs (AND-04)", () => {
+  it("saveLaptopUrl ignores non-empty values that are not http(s) URLs", () => {
     const save = blockAfter(javaCode, /private\s+void\s+saveLaptopUrlInternal\(String\s+url\)\s*\{/);
     const guardAt = save.search(/if\s*\(\s*!clean\.isEmpty\(\)\s*&&\s*!isHttpUrl\(clean\)\s*\)\s*\{[^}]*return;/);
     expect(guardAt).toBeGreaterThan(-1);
@@ -291,7 +291,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
 });
 
 describe("AndroidManifest.xml and backup rules", () => {
-  it("requests exactly INTERNET, ACCESS_NETWORK_STATE and VIBRATE (AND-05)", () => {
+  it("requests exactly INTERNET, ACCESS_NETWORK_STATE and VIBRATE", () => {
     const permissions = firstCaptures(manifest, /<uses-permission\s+android:name="([^"]+)"/g).sort();
     expect(permissions).toEqual([
       "android.permission.ACCESS_NETWORK_STATE",
@@ -361,7 +361,7 @@ describe("AndroidManifest.xml and backup rules", () => {
   });
 });
 
-describe("build hygiene (ARC-12, AND-09, SRV-09)", () => {
+describe("build hygiene", () => {
   it("has no *.kt or *.gradle.kts file anywhere under android-app", () => {
     const stale = walkFiles(APP).filter((f) => f.endsWith(".kt") || f.endsWith(".gradle.kts"));
     expect(stale).toEqual([]);
@@ -453,7 +453,7 @@ interface ScanCase {
   says: string;
 }
 
-describe.skipIf(!bashUsable)("build-apk.sh secret scan (AND-09), run in bash", () => {
+describe.skipIf(!bashUsable)("build-apk.sh secret scan, run in bash", () => {
   const cases: ScanCase[] = [
     { name: "key without a final newline (as the server writes it) in the page", keyFile: FAKE_KEY,
       html: `<script>const k="${FAKE_KEY}"</script>`, dex: "dex", status: 1, says: "embedded in packaged-hunt-mobile.html" },
@@ -632,7 +632,7 @@ const JAVA_CASES: Array<[JavaProbe, string | null, boolean]> = [
   ["isAllowedSyncRouteUrl", "ftp://192.168.1.5:3000", false],
 ];
 
-describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK (AND-01, AND-02, AND-04)", () => {
+describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK", () => {
   it("the allowlist, token rule and saveState guard decide every case as the contract says", () => {
     const file = path.join(tmpRoot, "ShellHelpersProbe.java");
     fs.writeFileSync(file, javaProbeSource(), "utf8");
@@ -646,10 +646,10 @@ describe.skipIf(!javaExe)("MainActivity.java helpers, run on the JDK (AND-01, AN
   }, 60_000);
 });
 
-// P23-01: MainActivity is exported with a BROWSABLE hunt://pair filter, so any web page or app can
+// MainActivity is exported with a BROWSABLE hunt://pair filter, so any web page or app can
 // fire a pairing link. The first pairing stays one tap; replacing an existing pairing (another key
 // or another laptop) must save nothing until the user taps Pair in a native dialog.
-describe("pairing deep link cannot silently replace an existing pairing (P23-01)", () => {
+describe("pairing deep link cannot silently replace an existing pairing", () => {
   it("handlePairingIntent only validates and decides; the save happens in applyPairing, behind the dialog", () => {
     const handler = blockAfter(javaCode, /private\s+void\s+handlePairingIntent\s*\(/);
     expect(handler).not.toMatch(/saveSyncTokenInternal|saveLaptopUrlInternal|notifyPagePaired|pendingPairedToastUrl/);
@@ -702,7 +702,7 @@ function pairingProbeSource(): string {
   ].join("\n");
 }
 
-describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK (P23-01)", () => {
+describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK", () => {
   const key = "k".repeat(40);
   const other = "z".repeat(40);
   const lan = "http://192.168.1.5:3000";
@@ -729,8 +729,8 @@ describe.skipIf(!javaExe)("needsPairingConfirmation, run on the JDK (P23-01)", (
   }, 60_000);
 });
 
-// P33-01 / P33-03: the build script's final hand-off and its help text.
-describe("build-apk.sh output and help (P33-01, P33-03)", () => {
+// the build script's final hand-off and its help text.
+describe("build-apk.sh output and help", () => {
   it("writes the APK atomically: a temp file next to the output (git-ignored *.apk), renamed over it", () => {
     const script = read(BUILD_SCRIPT_FILE);
     expect(script).toContain('OUT_TMP="$(dirname "$OUT_APK")/.$(basename "$OUT_APK" .apk).partial-$$.apk"');

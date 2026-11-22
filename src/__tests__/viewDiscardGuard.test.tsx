@@ -82,9 +82,9 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// P09-01: leaving a view with unsaved form edits asks first (same prompt as Cancel)
+// leaving a view with unsaved form edits asks first (same prompt as Cancel)
 // ---------------------------------------------------------------------------
-describe("view switch discard guard (P09-01)", () => {
+describe("view switch discard guard", () => {
   it("a dirty quest edit drawer asks before a nav tab switches views; declining keeps every edit", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await renderShellOn("quests");

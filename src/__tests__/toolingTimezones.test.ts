@@ -1,6 +1,6 @@
 // @vitest-environment node
-// Tooling audit coverage: the winctl compile-failure cooldown (P18-01) and the
-// date-key / midnight / horizon math under UTC-8 (with US DST), UTC+0 and UTC+9 (P29-05).
+// Tooling: the winctl compile-failure cooldown and the
+// date-key / midnight / horizon math under UTC-8 (with US DST), UTC+0 and UTC+9.
 import fs from "fs";
 import os from "os";
 import path from "path";

@@ -80,7 +80,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("P01-01: the seed's 'data exists elsewhere' check lives in syncEngine", () => {
+describe("the seed's 'data exists elsewhere' check lives in syncEngine", () => {
   const emptyServer = () =>
     vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () =>
       jsonResponse({ payload: createEmptySyncPayload() })
@@ -131,7 +131,7 @@ describe("P01-01: the seed's 'data exists elsewhere' check lives in syncEngine",
   });
 });
 
-describe("P28-1: a deletion whose tombstone cannot be saved is not performed", () => {
+describe("a deletion whose tombstone cannot be saved is not performed", () => {
   function blockStorageWrites() {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
@@ -199,7 +199,7 @@ describe("P28-1: a deletion whose tombstone cannot be saved is not performed", (
   });
 });
 
-describe("P28-3: desktop apply uses the server's per-kind R1 stamp", () => {
+describe("desktop apply uses the server's per-kind R1 stamp", () => {
   it("stamps quests and habits without completedAt, tasks with it", () => {
     expect(questOrHabitRowStamp({ createdAt: 1, completedAt: 9 })).toBe(1);
     expect(taskRowStamp({ createdAt: 1, completedAt: 9 })).toBe(9);
@@ -240,7 +240,7 @@ describe("P28-3: desktop apply uses the server's per-kind R1 stamp", () => {
   });
 });
 
-describe("P04-03: the desktop tells the two 507 causes apart", () => {
+describe("the desktop tells the two 507 causes apart", () => {
   it("merged data over the server limits is reported as too_large", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.stubGlobal(
@@ -267,7 +267,7 @@ describe("P04-03: the desktop tells the two 507 causes apart", () => {
   });
 });
 
-describe("P05-01: more than 5000 tasks still sync", () => {
+describe("more than 5000 tasks still sync", () => {
   it("builds and accepts a local payload of 5001 tasks", async () => {
     await db.tasks.bulkPut(Array.from({ length: 5001 }, (_, i) => task(`tsk-${i}`, { rank: i })));
     const local = await buildLocalSyncPayload(NO_FOCUS);
@@ -278,7 +278,7 @@ describe("P05-01: more than 5000 tasks still sync", () => {
   });
 });
 
-describe("P20-4: a failed habit materialization after an import is in the breadcrumb ring", () => {
+describe("a failed habit materialization after an import is in the breadcrumb ring", () => {
   it("records action_failed (materializeDailyHabits) and keeps the legacy console tag", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const failure = new Error("IDB closed");

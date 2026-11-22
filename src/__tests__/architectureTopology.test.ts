@@ -162,7 +162,7 @@ function makeHabit(id: string, overrides: Partial<Habit> = {}): Habit {
   };
 }
 
-describe("Macro Architecture & State Topology Invariants (Prompts 00 & 01)", () => {
+describe("Macro Architecture & State Topology Invariants", () => {
   describe("Module DAG & Strict Dependency Direction", () => {
     const graph = buildModuleGraph();
 
