@@ -28,11 +28,11 @@ Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
 ```
 /
 ├── GLOSSARY-MAP.md
-├── docs/adr/                          ← system-wide decisions
+├── docs/adr/        ← system-wide decisions
 └── src/
     ├── ordering/
     │   ├── GLOSSARY.md
-    │   └── docs/adr/                  ← context-specific decisions
+    │   └── docs/adr/  ← context-specific decisions
     └── billing/
         ├── GLOSSARY.md
         └── docs/adr/
