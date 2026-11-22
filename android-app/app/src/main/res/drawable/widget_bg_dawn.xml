@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dawn widget ground: flat blue-hour fill and a 1dp cream@7% hairline; Dawn has no glow. -->
+<!--
+    Dawn widget ground: a top-lit fill (ground at the top easing to the deep surface at the
+    bottom, the app's raised-card light) and the 1dp edge (a cream@7% hairline; Dawn has no glow).
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/widget_dawn_ground" />
+    <gradient
+        android:angle="270"
+        android:endColor="@color/widget_dawn_deep"
+        android:startColor="@color/widget_dawn_ground"
+        android:type="linear" />
     <stroke android:width="1dp" android:color="@color/widget_dawn_outline" />
     <corners android:radius="@dimen/widget_radius" />
 </shape>

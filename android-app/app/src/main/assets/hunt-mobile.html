@@ -2792,7 +2792,7 @@
         </svg>
         <span class="brand-word">Hunt</span>
       </button>
-      <span id="headerVersionBadge" class="brand-version-badge">v1.12.1</span>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.13.0</span>
     </div>
 
     <div class="app-bar-actions">
@@ -3504,6 +3504,7 @@ var HuntCore = (() => {
         const p = progress.forQuest(q);
         return {
           code: q.code,
+          title: q.title,
           accent: widgetAccent(q.accentColor),
           weekSeconds: p.weekSeconds,
           targetHours: p.targetHours,
@@ -3631,7 +3632,7 @@ var HuntCore = (() => {
       }
     } catch (e) {}
 
-    const APP_VERSION = "1.12.1";
+    const APP_VERSION = "1.13.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:

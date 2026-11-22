@@ -304,10 +304,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 21 (1.12.1) so it installs over the shipped 1.12.0 (20)", () => {
+  it("is versionCode >= 22 (1.13.0) so it installs over the shipped 1.12.1 (21)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(21);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.12.1");
+    expect(code).toBeGreaterThanOrEqual(22);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.13.0");
   });
 
   it("declares tablet screen support and multi-window resizeability", () => {
@@ -462,6 +462,7 @@ describe("Day Widget (ADR-0006)", () => {
       "DayWidgetUndo.java",
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
+      "WidgetDisplayText.java",
       "WidgetLook.java",
       "WidgetRequestCodes.java",
       "WidgetSupport.java",
@@ -894,6 +895,18 @@ describe("Day Widget ‹ › navigation", () => {
     const label = tagOf("widget_header");
     expect(dp(label, "layout_marginStart")).toBeGreaterThanOrEqual(8);
     expect(dp(label, "layout_marginEnd")).toBeGreaterThanOrEqual(8);
+  });
+
+  it("the header and the rows arrive in one update, at once, after an arrow tap", () => {
+    // API 31+: an Intent-served list makes the system send only "update deferred", so the
+    // launcher redrew the header late; the rows ride inline as RemoteCollectionItems instead.
+    expect(dayProviderCode).toMatch(
+      /if\s*\(Build\.VERSION\.SDK_INT\s*>=\s*Build\.VERSION_CODES\.S\)\s*\{\s*views\.setRemoteAdapter\(R\.id\.widget_list,\s*DayWidgetService\.items\(ctx,\s*widgetId,\s*day\)\);/,
+    );
+    // The tap's broadcast is foreground, so a cached app does not queue it behind background work.
+    expect(blockAfter(dayProviderCode, /static\s+PendingIntent\s+navIntent\s*\([^)]*\)\s*\{/)).toContain(
+      "Intent.FLAG_RECEIVER_FOREGROUND",
+    );
   });
 
   it("the arrows are explicit, immutable broadcasts to the non-exported provider", () => {

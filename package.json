@@ -1,6 +1,6 @@
 {
   "name": "hunt",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -14,6 +14,7 @@
     "lint": "eslint --max-warnings 0 src e2e scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:quiet": "vitest run --reporter=dot --silent",
     "test:geometry": "playwright test",
     "screenshots": "playwright test -c playwright.screenshots.config.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",

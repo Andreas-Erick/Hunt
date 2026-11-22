@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dawn row: surface step 2 with a gold ripple as the pressed feedback (no theme attributes). -->
+<!-- Dawn Day Widget row: a card like the app's queue cards (surface step 2, 1dp ink@7% hairline), pressed: the accent ripple. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="@color/widget_dawn_ripple">
     <item>
         <shape android:shape="rectangle">
             <solid android:color="@color/widget_dawn_row" />
+            <stroke android:width="1dp" android:color="@color/widget_dawn_edge" />
             <corners android:radius="@dimen/widget_inner_radius" />
         </shape>
     </item>

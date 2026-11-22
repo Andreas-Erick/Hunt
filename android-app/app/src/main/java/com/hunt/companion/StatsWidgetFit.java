@@ -16,12 +16,13 @@ final class StatsWidgetFit {
     /** The met-target glyph (U+2713), as a code point so the source stays ASCII. */
     private static final char CHECK_MARK = (char) 0x2713;
 
-    private static final int PADDING_DP = 16;
-    private static final int HEADER_DP = 36;
-    private static final int QUEST_ROW_DP = 24;
+    private static final int PADDING_DP = 24;
+    private static final int HEADER_DP = 40;
+    private static final int QUEST_ROW_DP = 32;
     private static final int QUESTS_MORE_DP = 18;
-    private static final int STREAKS_HEADER_DP = 24;
-    private static final int STREAK_ROW_DP = 20;
+    /** The streaks label row (22dp) and its 8dp top margin. */
+    private static final int STREAKS_HEADER_DP = 30;
+    private static final int STREAK_ROW_DP = 24;
 
     /** Quest rows shown, Quests behind "+N more", streak rows shown, streaks behind "+N more". */
     int questRows;
@@ -46,17 +47,20 @@ final class StatsWidgetFit {
     /**
      * Rows that fit a widget `heightDp` tall: Quest rows first (at least one, with a "+N more"
      * line for the rest), then streak rows under their label, whose right end carries the
-     * streaks' "+N more". With no Quests, the "Set up a Quest in Hunt" line takes one row.
+     * streaks' "+N more". Quests leave room for the label and one streak row, so a widget with
+     * streaks shows at least one whenever it can. With no Quests, the "Set up a Quest in Hunt"
+     * line takes one row.
      */
     static StatsWidgetFit fit(int heightDp, int quests, int streaks) {
         StatsWidgetFit fit = new StatsWidgetFit();
         int left = heightDp - PADDING_DP - HEADER_DP;
         int streaksHeader = streaks > 0 ? STREAKS_HEADER_DP : 0;
+        int streaksReserve = streaks > 0 ? STREAKS_HEADER_DP + STREAK_ROW_DP : 0;
         if (quests <= 0) {
             left -= QUEST_ROW_DP;
         } else {
-            int rows = (left - streaksHeader) / QUEST_ROW_DP;
-            if (rows < quests) rows = (left - streaksHeader - QUESTS_MORE_DP) / QUEST_ROW_DP;
+            int rows = (left - streaksReserve) / QUEST_ROW_DP;
+            if (rows < quests) rows = (left - streaksReserve - QUESTS_MORE_DP) / QUEST_ROW_DP;
             fit.questRows = Math.max(1, Math.min(Math.min(quests, MAX_QUEST_ROWS), rows));
             fit.questsMore = quests - fit.questRows;
             left -= fit.questRows * QUEST_ROW_DP + (fit.questsMore > 0 ? QUESTS_MORE_DP : 0);
