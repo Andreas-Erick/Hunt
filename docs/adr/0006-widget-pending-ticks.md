@@ -93,3 +93,11 @@ or at once if it is already running.
   also drains on resume, for a signal that found no page.
   Ticks it acknowledged stay out of later drains until
   the shell has removed them.
+- From API 31 the Day Widget's rows ride inside its own
+  RemoteViews (`RemoteCollectionItems`), not through
+  `DayWidgetService`. For a list served by an Intent the
+  system sends the launcher only "update deferred", which
+  it may apply late, so the day title lagged the rows
+  after ‹ › or a look change. Before API 31 the service
+  still serves the rows. The arrows' broadcast is
+  foreground, so a cached app gets it at once.

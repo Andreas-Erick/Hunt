@@ -44,6 +44,12 @@ font faces are tokens too. Dawn sets the glows to `none`.
   view ids. The widget snapshot carries the look name and
   `WidgetLook.java` picks the set. A test keeps the colours
   equal to both CSS token blocks and the twins in step.
+  Font faces: a widget's `TextView` cannot load
+  `res/font` (the launcher inflates it with a restricted
+  context), so the display type (the day title, the
+  Stats figure) is drawn into a bitmap in the look's
+  bundled face (`WidgetDisplayText`, OFL licences in
+  `assets/licenses/`); body text uses the system sans.
 - Roles (`accent`, `success`, `warning`, `danger`, `now`)
   are separate from quest colours (`q-cyan` … `q-lime`).
   In Neon they share values; in Dawn they do not.

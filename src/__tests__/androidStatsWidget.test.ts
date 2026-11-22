@@ -93,9 +93,15 @@ describe("Stats Widget (ADR-0006)", () => {
     const bars = layout.match(/<ProgressBar\b[^>]*>/g) ?? [];
     expect(bars.length).toBeGreaterThanOrEqual(3);
     for (const bar of bars) expect(bar).toMatch(/android:progressDrawable="@drawable\/widget_progress_neon"/);
-    const numberIds = [...layout.matchAll(/android:id="@\+id\/(widget_stats_(?:focus|q\d_hours|s\d_days))"/g)].map((m) => m[1]);
-    expect(numberIds).toContain("widget_stats_focus");
-    for (const id of numberIds) expect(attr(tagOf(layout, id), "fontFamily"), id).toBe("monospace");
+    // Row figures line up in tabular figures; the hero figure is drawn in the look's display face,
+    // also tabular (a widget's TextView cannot load res/font: WidgetDisplayText).
+    const numberIds = [...layout.matchAll(/android:id="@\+id\/(widget_stats_(?:q\d_hours|s\d_days))"/g)].map((m) => m[1]);
+    expect(numberIds.length).toBeGreaterThanOrEqual(11);
+    for (const id of numberIds) expect(attr(tagOf(layout, id), "fontFeatureSettings"), id).toBe("tnum");
+    expect(tagOf(layout, "widget_stats_focus")).toMatch(/^<ImageView\b/);
+    expect(provider).toMatch(/setImageViewBitmap\(R\.id\.widget_stats_focus,\s*WidgetDisplayText\.hero\(/);
+    expect(code("WidgetDisplayText.java")).toMatch(/if \(runs\[i\]\.tabular\) p\.setFontFeatureSettings\("tnum"\)/);
+    expect(code("WidgetDisplayText.java")).toMatch(/new Run\(figure,[^;]*,\s*true\)/);
     const names = [...layout.matchAll(/android:id="@\+id\/(widget_stats_(?:q\d_code|s\d_title))"/g)].map((m) => m[1]);
     expect(names.length).toBeGreaterThanOrEqual(6);
     for (const id of names) {
@@ -129,13 +135,14 @@ describe.skipIf(!hasJdk)("StatsWidgetFit, run on the JDK", () => {
     // [height dp, quests, streaks] -> "questRows questsMore streakRows streaksMore"
     const cases: Array<[number, number, number, string]> = [
       [110, 3, 5, "1 2 0 5"], // 2x2 minimum: one Quest row, every streak behind "+5 more"
-      [180, 3, 5, "3 0 1 4"],
-      [280, 3, 5, "3 0 5 0"], // tall: every streak fits
-      [280, 3, 12, "3 0 6 6"],
+      [180, 3, 5, "1 2 1 4"], // Quests leave room for the streaks label and one streak
+      [202, 3, 5, "2 1 1 4"], // a 3x2 widget on a Pixel 7
+      [340, 3, 5, "3 0 5 0"], // tall: every streak fits
+      [360, 3, 12, "3 0 7 5"],
       [600, 3, 12, "3 0 8 4"], // never more rows than the layout holds
       [600, 5, 0, "3 2 0 0"], // more Quests than rows: "+2 more" under them
-      [180, 0, 6, "0 0 4 2"], // no Quests: the "Set up a Quest" line takes one row
-      [180, 2, 0, "2 0 0 0"],
+      [180, 0, 6, "0 0 2 4"], // no Quests: the "Set up a Quest" line takes one row
+      [180, 2, 0, "2 0 0 0"], // no streaks: nothing held back for them
     ];
     const main = cases
       .map(
@@ -161,8 +168,8 @@ describe.skipIf(!hasJdk)("StatsWidgetFit, run on the JDK", () => {
       .map(([min, max, portrait]) => `System.out.println(StatsWidgetFit.heightDp(${min}, ${max}, ${portrait}, 110));`)
       .join("\n");
     expect(runFit(main)).toEqual(cases.map((c) => c[3]));
-    // A portrait widget 250dp tall shows all 5 streaks; sized by its landscape height it showed none.
-    expect(runFit("{ StatsWidgetFit f = StatsWidgetFit.fit(StatsWidgetFit.heightDp(110, 250, true, 110), 3, 5); System.out.println(f.streakRows + \" \" + f.streaksMore); }")).toEqual(["5 0"]);
+    // A portrait widget 250dp tall shows 2 of 5 streaks; sized by its landscape height it showed none.
+    expect(runFit("{ StatsWidgetFit f = StatsWidgetFit.fit(StatsWidgetFit.heightDp(110, 250, true, 110), 3, 5); System.out.println(f.streakRows + \" \" + f.streaksMore); }")).toEqual(["2 3"]);
   }, 60_000);
 
   it("formats focus time and Quest hours in fixed-width figures", () => {

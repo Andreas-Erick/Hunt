@@ -462,6 +462,7 @@ describe("Day Widget (ADR-0006)", () => {
       "DayWidgetUndo.java",
       "StatsWidgetFit.java",
       "StatsWidgetProvider.java",
+      "WidgetDisplayText.java",
       "WidgetLook.java",
       "WidgetRequestCodes.java",
       "WidgetSupport.java",
@@ -894,6 +895,18 @@ describe("Day Widget ‹ › navigation", () => {
     const label = tagOf("widget_header");
     expect(dp(label, "layout_marginStart")).toBeGreaterThanOrEqual(8);
     expect(dp(label, "layout_marginEnd")).toBeGreaterThanOrEqual(8);
+  });
+
+  it("the header and the rows arrive in one update, at once, after an arrow tap", () => {
+    // API 31+: an Intent-served list makes the system send only "update deferred", so the
+    // launcher redrew the header late; the rows ride inline as RemoteCollectionItems instead.
+    expect(dayProviderCode).toMatch(
+      /if\s*\(Build\.VERSION\.SDK_INT\s*>=\s*Build\.VERSION_CODES\.S\)\s*\{\s*views\.setRemoteAdapter\(R\.id\.widget_list,\s*DayWidgetService\.items\(ctx,\s*widgetId,\s*day\)\);/,
+    );
+    // The tap's broadcast is foreground, so a cached app does not queue it behind background work.
+    expect(blockAfter(dayProviderCode, /static\s+PendingIntent\s+navIntent\s*\([^)]*\)\s*\{/)).toContain(
+      "Intent.FLAG_RECEIVER_FOREGROUND",
+    );
   });
 
   it("the arrows are explicit, immutable broadcasts to the non-exported provider", () => {

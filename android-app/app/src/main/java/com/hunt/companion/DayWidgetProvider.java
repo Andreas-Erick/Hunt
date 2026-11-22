@@ -69,7 +69,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
             int offset = DayNav.select(ctx, id, intent.getIntExtra(EXTRA_DAY_OFFSET, 0));
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             mgr.updateAppWidget(id, draw(ctx, id, SelectedDay.read(ctx, offset)));
-            mgr.notifyAppWidgetViewDataChanged(id, R.id.widget_list);
+            refreshServedList(mgr, new int[] {id});
         }
     }
 
@@ -99,25 +99,38 @@ public class DayWidgetProvider extends AppWidgetProvider {
 
     private static void drawAll(Context ctx, AppWidgetManager mgr, int[] ids) {
         for (int id : ids) mgr.updateAppWidget(id, draw(ctx, id, SelectedDay.read(ctx, DayNav.savedOffset(ctx, id))));
-        mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list);
+        refreshServedList(mgr, ids);
+    }
+
+    /** Before API 31 the rows come from DayWidgetService, which re-reads them on this call; from 31 they ride in the update. */
+    private static void refreshServedList(AppWidgetManager mgr, int[] ids) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list);
     }
 
     private static RemoteViews draw(Context ctx, int widgetId, SelectedDay day) {
         WidgetLook look = day.snapshot.look;
         if (!day.hasList()) return WidgetSupport.messageViews(ctx, day.snapshot, WidgetRequestCodes.DAY_OPEN_HUNT);
         RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayLayout);
-        views.setTextViewText(R.id.widget_header, DaySelection.headerLabel(day.offset, day.date));
+        String label = DaySelection.headerLabel(day.offset, day.date);
+        views.setImageViewBitmap(R.id.widget_header, WidgetDisplayText.dayTitle(ctx, look, label));
+        views.setContentDescription(R.id.widget_header, ctx.getString(R.string.day_widget_header_open, label));
         views.setOnClickPendingIntent(R.id.widget_header, WidgetSupport.openHunt(ctx, WidgetRequestCodes.DAY_OPEN_HUNT));
         views.setTextViewText(R.id.widget_empty,
                 ctx.getString(R.string.day_widget_nothing_left, DaySelection.inSentence(day.offset, day.date)));
         arrow(ctx, views, look, R.id.widget_prev, widgetId, day.offset - 1, day.offset > 0);
         arrow(ctx, views, look, R.id.widget_next, widgetId, day.offset + 1, day.offset < day.lastOffset);
 
-        Intent service = new Intent(ctx, DayWidgetService.class)
-                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
-        // A distinct data URI per widget, so each gets its own list factory.
-        service.setData(Uri.parse(service.toUri(Intent.URI_INTENT_SCHEME)));
-        views.setRemoteAdapter(R.id.widget_list, service);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // The rows ride in this same update, so the header never lags the list
+            // (DayWidgetService.items explains the deferred-update path this avoids).
+            views.setRemoteAdapter(R.id.widget_list, DayWidgetService.items(ctx, widgetId, day));
+        } else {
+            Intent service = new Intent(ctx, DayWidgetService.class)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
+            // A distinct data URI per widget, so each gets its own list factory.
+            service.setData(Uri.parse(service.toUri(Intent.URI_INTENT_SCHEME)));
+            views.setRemoteAdapter(R.id.widget_list, service);
+        }
         views.setEmptyView(R.id.widget_list, R.id.widget_empty);
         views.setPendingIntentTemplate(R.id.widget_list, rowTemplate(ctx));
         return views;
@@ -130,7 +143,7 @@ public class DayWidgetProvider extends AppWidgetProvider {
     private static void arrow(Context ctx, RemoteViews views, WidgetLook look, int viewId, int widgetId, int target,
             boolean enabled) {
         views.setBoolean(viewId, "setEnabled", enabled);
-        views.setTextColor(viewId, ctx.getColor(enabled ? look.text : look.dim));
+        views.setInt(viewId, "setColorFilter", ctx.getColor(enabled ? look.text : look.dim));
         if (enabled) views.setOnClickPendingIntent(viewId, navIntent(ctx, widgetId, target));
     }
 
@@ -141,7 +154,11 @@ public class DayWidgetProvider extends AppWidgetProvider {
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
                 .putExtra(EXTRA_DAY_OFFSET, offset)
                 // A distinct URI per widget and target, so each arrow keeps its own PendingIntent.
-                .setData(Uri.parse("hunt-widget://day/" + widgetId + "/" + offset));
+                .setData(Uri.parse("hunt-widget://day/" + widgetId + "/" + offset))
+                // A tap the user is watching: deliver it now. Without this, Android 14+ queues a
+                // broadcast to a cached (frozen) app behind its background work, and the header
+                // redraw arrives seconds later or only when the app next runs.
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         return PendingIntent.getBroadcast(ctx, WidgetRequestCodes.DAY_NAV, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }

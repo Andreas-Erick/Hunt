@@ -24,6 +24,24 @@ public class DayWidgetService extends RemoteViewsService {
                 intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID));
     }
 
+    /**
+     * API 31+: the selected day's rows as items carried inside the widget's own RemoteViews. A
+     * list served through this service (setRemoteAdapter with an Intent) makes the system send the
+     * launcher only "update deferred" for the whole widget, which the launcher may apply late, so
+     * the header lagged behind the list; with the items inline the header and the rows arrive in
+     * one update.
+     */
+    @android.annotation.TargetApi(31)
+    static RemoteViews.RemoteCollectionItems items(Context ctx, int widgetId, SelectedDay day) {
+        Rows rows = new Rows(ctx, widgetId);
+        rows.load(day);
+        RemoteViews.RemoteCollectionItems.Builder items = new RemoteViews.RemoteCollectionItems.Builder()
+                .setHasStableIds(rows.hasStableIds())
+                .setViewTypeCount(rows.getViewTypeCount());
+        for (int i = 0; i < rows.getCount(); i++) items.addItem(rows.getItemId(i), rows.getViewAt(i));
+        return items.build();
+    }
+
     private static final class Rows implements RemoteViewsFactory {
         /** Row layouts per look: the task row and the Undo row. */
         private static final int ROW_KINDS = 2;
@@ -46,7 +64,12 @@ public class DayWidgetService extends RemoteViewsService {
         /** Binder thread: after notifyAppWidgetViewDataChanged, re-reads the snapshot and the day. */
         @Override
         public void onDataSetChanged() {
-            day = SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId));
+            load(SelectedDay.read(ctx, DayNav.savedOffset(ctx, widgetId)));
+        }
+
+        /** Takes the selected day's rows (the service's re-read, or the provider's own read on API 31+). */
+        void load(SelectedDay selected) {
+            day = selected;
             dateKey = day.date.toString();
             rows = day.hasList() ? day.rows : new JSONArray();
         }
@@ -74,14 +97,19 @@ public class DayWidgetService extends RemoteViewsService {
 
             views.setTextViewText(R.id.widget_row_title, title);
             views.setInt(R.id.widget_row_bar, "setColorFilter", accent);
-            views.setInt(R.id.widget_row_ring, "setColorFilter", accent);
             views.setViewVisibility(R.id.widget_row_ring, focus ? View.GONE : View.VISIBLE);
             views.setViewVisibility(R.id.widget_row_focus_mark, focus ? View.VISIBLE : View.GONE);
+            // Rows are recycled: set both looks of the card and tag every time.
+            views.setInt(R.id.widget_row, "setBackgroundResource", focus ? look.focusRowBackground : look.rowBackground);
 
             int tag = focus ? R.string.day_widget_focus_tag
                     : row.optBoolean("habit", false) ? R.string.day_widget_habit_tag : 0;
             views.setViewVisibility(R.id.widget_row_tag, tag == 0 ? View.GONE : View.VISIBLE);
-            if (tag != 0) views.setTextViewText(R.id.widget_row_tag, ctx.getString(tag));
+            if (tag != 0) {
+                views.setTextViewText(R.id.widget_row_tag, ctx.getString(tag));
+                views.setTextColor(R.id.widget_row_tag, ctx.getColor(focus ? look.accent : look.muted));
+                views.setInt(R.id.widget_row_tag, "setBackgroundResource", focus ? look.focusTagBackground : look.tagBackground);
+            }
 
             views.setContentDescription(R.id.widget_row,
                     ctx.getString(focus ? R.string.day_widget_row_focus : R.string.day_widget_row_open, title));
@@ -96,7 +124,7 @@ public class DayWidgetService extends RemoteViewsService {
         }
 
         /**
-         * A row in its Undo window: "✓ Done · <title>" and a 48dp Undo target at the far end. Only
+         * A row in its Undo window: the Done mark, "Done · <title>" and a 48dp Undo target at the far end. Only
          * Undo is a target here, so a stray tap beside it neither opens Hunt nor ticks again.
          */
         private RemoteViews undoRow(JSONObject row) {

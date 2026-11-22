@@ -22,3 +22,6 @@
 package-lock.json linguist-generated=true
 # Byte-for-byte mirror of public/hunt-mobile.html (enforced by mobileMirror.test.ts).
 android-app/app/src/main/assets/hunt-mobile.html linguist-generated=true
+
+# Bundled widget fonts (android-app res/font): binary, never normalised.
+*.ttf binary
