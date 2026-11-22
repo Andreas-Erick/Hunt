@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { db, type Quest, type Task, type TimeLog } from "@/lib/db";
+import { db } from "@/lib/db";
+import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   createEmptySyncPayload,
   validateSyncPayload,

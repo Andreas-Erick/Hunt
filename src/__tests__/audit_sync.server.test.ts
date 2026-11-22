@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
-import type { Task } from "@/lib/db";
+import type { Task } from "@/lib/domainTypes";
 
 type Route = typeof import("@/app/api/sync/route");
 

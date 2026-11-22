@@ -11,7 +11,7 @@ import {
   Smartphone,
   TriangleAlert,
 } from "lucide-react";
-import { formatChronoMMSS } from "@/lib/db";
+import { formatChronoMMSS } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";

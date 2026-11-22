@@ -10,7 +10,7 @@ import {
   pickLogWinner,
   type SyncPayload,
 } from "@/lib/syncTypes";
-import type { TimeLog } from "@/lib/db";
+import type { TimeLog } from "@/lib/domainTypes";
 import {
   buildLocalSyncPayload,
   importAndMergeSnapshotJson,

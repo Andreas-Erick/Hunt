@@ -9,7 +9,7 @@ import {
   recordDeletedLogTombstone,
   recordDeletedQuestTombstone,
   recordDeletedTaskTombstone,
-} from "./syncEngine";
+} from "./syncTombstones";
 import {
   compareRank,
   MAX_HABIT_TITLE_LENGTH,

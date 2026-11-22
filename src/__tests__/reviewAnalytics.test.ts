@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { dateFromKey, type Quest, type Task, type TimeLog } from "@/lib/db";
+import { dateFromKey } from "@/lib/dateUtils";
+import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   buildHorizonWindow,
   computeActivityHeatmap,

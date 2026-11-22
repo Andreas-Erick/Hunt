@@ -8,11 +8,11 @@ import { transitionFocus, type FocusEvent } from "@/lib/focusSession";
 import { buildBurstLog } from "@/lib/taskQueue";
 import { loadMobile, readState, type MobileWindow } from "./helpers/loadMobile";
 
-interface FocusPage extends MobileWindow {
+type FocusPage = MobileWindow & {
   initializeFocus(taskId?: string): void;
   toggleTimerPause(): void;
   returnToQueueFromFocus(): void;
-}
+};
 
 let w: FocusPage | null = null;
 beforeEach(() => {

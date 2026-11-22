@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createEmptySyncPayload, type SyncPayload } from "@/lib/syncTypes";
-import type { Task } from "@/lib/db";
+import type { Task } from "@/lib/domainTypes";
 
 // The route resolves its data directory at import time; point it at a
 // throwaway directory so the real data/hunt-sync.json is never touched. Each

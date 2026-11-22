@@ -11,7 +11,7 @@ import {
   Repeat,
   X,
 } from "lucide-react";
-import { accentStyle } from "@/lib/db";
+import { accentStyle } from "@/lib/questAccents";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import {

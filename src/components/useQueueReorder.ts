@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useRef, useState } from "react";
-import type { Task } from "@/lib/db";
+import type { Task } from "@/lib/domainTypes";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { orderAfterDrop, useCommandStore } from "@/store/useCommandStore";

@@ -1,17 +1,15 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, act, within } from "@testing-library/react";
+import { db } from "@/lib/db";
 import {
-  db,
   dateKeyFromOffset,
   habitTaskId,
   isMissedHabitTask,
   isOpenTask,
   toLocalDateKey,
-  type Habit,
-  type Quest,
-  type Task,
-} from "@/lib/db";
+} from "@/lib/dateUtils";
+import type { Habit, Quest, Task } from "@/lib/domainTypes";
 import { auditWorkspace } from "@/lib/questScience";
 import { pickNextFocusTask, useCommandStore } from "@/store/useCommandStore";
 import { QuestMatrixPanel } from "@/components/QuestMatrixPanel";

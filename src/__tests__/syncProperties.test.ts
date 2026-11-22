@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/db";
+import type { Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   mergeSyncPayloads,
