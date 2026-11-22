@@ -245,6 +245,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
     expect(Object.fromEntries(bridgeMethods())).toEqual({
       loadState: "String",
       saveState: "void",
+      saveCorruptState: "boolean",
       getLaptopUrl: "String",
       saveLaptopUrl: "void",
       saveSyncToken: "boolean",
