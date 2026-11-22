@@ -1,5 +1,5 @@
 {
-  "name": "hunt-command-hud",
+  "name": "hunt",
   "version": "1.11.0",
   "private": true,
   "engines": {
@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:geometry": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "hunt": "Start-Hunt.bat"
   },
   "dependencies": {
