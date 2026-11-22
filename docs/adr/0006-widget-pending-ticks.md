@@ -46,3 +46,10 @@ on its next start, or at once if it is already running.
   cannot save, it acknowledges nothing.
 - A stale tick (Task gone, already done, archived, or in
   Focus) is skipped and logged, never forced through.
+- While Hunt is running, the queue announces each newly
+  appended tick to the live Activity, which calls
+  `window.__huntPendingTicksArrived` once the page has
+  loaded. The page runs the same drain, then repaints. It
+  also drains on resume, for a signal that found no page.
+  Ticks it acknowledged stay out of later drains until
+  the shell has removed them.
