@@ -67,7 +67,7 @@ afterEach(() => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("P04-03: every error envelope carries a stable code", () => {
+describe("every error envelope carries a stable code", () => {
   it("401 unauthorized, 400 invalid_payload", async () => {
     const denied = await route.POST(post(body({}), { "X-Hunt-Token": "wrong" }));
     expect(denied.status).toBe(401);
@@ -97,7 +97,7 @@ describe("P04-03: every error envelope carries a stable code", () => {
   });
 });
 
-describe("P05-01: the task count cap is no longer the binding limit", () => {
+describe("the task count cap is no longer the binding limit", () => {
   it("stores and returns 5001 tasks", async () => {
     const tasks = Array.from({ length: 5001 }, (_, i) => task(`tsk-${i}`, { rank: i }));
     const res = await route.POST(post(body({ tasks })));
@@ -109,7 +109,7 @@ describe("P05-01: the task count cap is no longer the binding limit", () => {
   });
 });
 
-describe("P05-02: the temp file is flushed to disk before the rename", () => {
+describe("the temp file is flushed to disk before the rename", () => {
   it("fsyncs the temp file, then renames it over hunt-sync.json", async () => {
     const order: string[] = [];
     const realFsync = fs.fsyncSync;
@@ -132,7 +132,7 @@ describe("P05-02: the temp file is flushed to disk before the rename", () => {
   });
 });
 
-describe("P20-1 / P20-3: server log lines carry the correlation id and the stack", () => {
+describe("server log lines carry the correlation id and the stack", () => {
   it("write_failed and backup_failed name the request's correlation id", async () => {
     expect((await route.POST(post(body({ tasks: [task("t1")] })))).status).toBe(200);
     const errors = silenceConsoleError();

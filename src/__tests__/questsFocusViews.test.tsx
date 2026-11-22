@@ -184,7 +184,7 @@ function watchForText(texts: readonly string[]) {
 }
 
 /**
- * DIX-04 class contract: a hover-only (opacity-0) control is revealed on
+ * Class contract: a hover-only (opacity-0) control is revealed on
  * keyboard focus, and a field without an outline shows focus another way.
  */
 function expectVisibleFocus(root: HTMLElement) {

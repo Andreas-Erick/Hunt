@@ -663,7 +663,7 @@ describe("guarded deletes", () => {
       "group-hover:opacity-100",
       "focus-visible:opacity-100",
       "data-[state=armed]:opacity-100",
-      // UI-03: never hover-only; touch (no hover) always sees it, muted.
+      // never hover-only; touch (no hover) always sees it, muted.
       "hoverless:opacity-60"
     );
 

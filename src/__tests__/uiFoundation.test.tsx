@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// accentStyle (DUI-02)
+// accentStyle
 // ---------------------------------------------------------------------------
 describe("accentStyle()", () => {
   it.each([...QUEST_ACCENT_KEYS, "slate"] as const)("maps %s to its own style", (key) => {
@@ -188,7 +188,7 @@ describe("dateFromKey() / dateKeyFromOffset() in Europe/Berlin", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Formatter guards (ARC-10)
+// Formatter guards
 // ---------------------------------------------------------------------------
 describe("formatChronoMMSS() / formatTacticalDuration() boundary matrix", () => {
   const BAD_TEXT = /NaN|Infinity|undefined/;
@@ -245,7 +245,7 @@ describe("formatChronoMMSS() / formatTacticalDuration() boundary matrix", () => 
 });
 
 // ---------------------------------------------------------------------------
-// ConfirmDeleteButton (DIX-01)
+// ConfirmDeleteButton
 // ---------------------------------------------------------------------------
 describe("ConfirmDeleteButton", () => {
   function renderButton(props: Partial<ConfirmDeleteButtonProps> = {}) {
@@ -542,7 +542,7 @@ describe("ConfirmDeleteButton", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tailwind config: content globs (DUI-V01) and the muted token (DIX-08)
+// Tailwind config: content globs (DUI-V01) and the muted token
 // ---------------------------------------------------------------------------
 describe("tailwind.config.ts", () => {
   function hexChannelToLinear(hex: string, offset: number): number {

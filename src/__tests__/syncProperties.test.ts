@@ -10,12 +10,12 @@ import {
   type SyncPayload,
 } from "@/lib/syncTypes";
 
-// Seeded property tests of the shared merge (R1–R6, ARC-05). Every failure
+// Seeded property tests of the shared merge (R1–R6). Every failure
 // message carries its seed; rerun one case by setting BASE_SEED to it with
 // ITERATIONS = 1.
 //
 // Known exceptions, deliberately NOT asserted:
-// - activeFocus with EQUAL focus stamps (the `>=` tie keeps `incoming`; SRV-10,
+// - activeFocus with EQUAL focus stamps (the `>=` tie keeps `incoming`;
 //   deferred), and activeFocus associativity in general (a focus reset in an
 //   intermediate merge mints a new stamp that depends on the grouping).
 // - accumulatedSeconds associativity: the counter is max()ed and raised to the

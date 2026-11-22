@@ -162,7 +162,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     setUrl("/");
   });
 
-  describe("pairing key (DDL-01)", () => {
+  describe("pairing key", () => {
     it("is '' with nothing stored, and the request then carries no X-Hunt-Token header", async () => {
       expect(getClientSyncToken()).toBe("");
       const fetchMock = stubFetch(async () => jsonResponse(okBody()));
@@ -315,7 +315,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     });
   });
 
-  describe("server response validation (DDL-02)", () => {
+  describe("server response validation", () => {
     it.each([
       ["payload {}", { payload: {} }],
       ["payload {quests:{}}", { payload: { quests: {} } }],
@@ -421,7 +421,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     });
   });
 
-  describe("snapshot import (DDL-02)", () => {
+  describe("snapshot import", () => {
     it.each(["{", "null", "[]", "{}", '{"quests":{}}', "", "   ", "x".repeat(10_000), '{"quests":[],"tasks":[]}'])(
       "rejects %j with SnapshotFormatError and leaves IndexedDB unchanged",
       async (text) => {
@@ -551,7 +551,7 @@ describe("desktop sync client (syncEngine.ts)", () => {
     });
   });
 
-  describe("failure diagnostics (DDL-08)", () => {
+  describe("failure diagnostics", () => {
     it("a rejected apply transaction yields local_db and three identical failures log once", async () => {
       window.localStorage.setItem(TOKEN_KEY, KEY64);
       const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
