@@ -304,10 +304,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 23 (1.14.0) so it installs over the shipped 1.13.0 (22)", () => {
+  it("is versionCode >= 24 (1.14.1) so it installs over the shipped 1.14.0 (23)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(23);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.14.0");
+    expect(code).toBeGreaterThanOrEqual(24);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.14.1");
   });
 
   it("declares tablet screen support and multi-window resizeability", () => {
