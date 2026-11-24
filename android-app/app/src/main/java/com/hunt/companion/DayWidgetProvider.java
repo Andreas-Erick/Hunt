@@ -112,8 +112,11 @@ public class DayWidgetProvider extends AppWidgetProvider {
         if (!day.hasList()) return WidgetSupport.messageViews(ctx, day.snapshot, WidgetRequestCodes.DAY_OPEN_HUNT);
         RemoteViews views = new RemoteViews(ctx.getPackageName(), look.dayLayout);
         String label = DaySelection.headerLabel(day.offset, day.date);
-        views.setImageViewBitmap(R.id.widget_header, WidgetDisplayText.dayTitle(ctx, look, label));
-        views.setContentDescription(R.id.widget_header, ctx.getString(R.string.day_widget_header_open, label));
+        int open = day.openCount();
+        String count = open > 0 ? ctx.getString(R.string.day_widget_left, open) : "";
+        views.setImageViewBitmap(R.id.widget_header, WidgetDisplayText.dayTitle(ctx, look, label, count));
+        views.setContentDescription(R.id.widget_header,
+                ctx.getString(R.string.day_widget_header_open, open > 0 ? label + ", " + count : label));
         views.setOnClickPendingIntent(R.id.widget_header, WidgetSupport.openHunt(ctx, WidgetRequestCodes.DAY_OPEN_HUNT));
         views.setTextViewText(R.id.widget_empty,
                 ctx.getString(R.string.day_widget_nothing_left, DaySelection.inSentence(day.offset, day.date)));

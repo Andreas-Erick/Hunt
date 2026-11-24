@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Neon day switcher: one 40dp pill (inset in the 48dp header) behind the two 48dp arrow targets,
-    like the app's segmented control (surface step 2 with an ink@7% hairline).
+    a flat surface-step-2 fill like the app's segmented control, no hairline.
 -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:insetBottom="4dp"
     android:insetTop="4dp">
     <shape android:shape="rectangle">
         <solid android:color="@color/widget_neon_row" />
-        <stroke android:width="1dp" android:color="@color/widget_neon_edge" />
         <corners android:radius="20dp" />
     </shape>
 </inset>

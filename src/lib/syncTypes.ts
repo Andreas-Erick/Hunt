@@ -287,14 +287,14 @@ export function isSafeSyncId(
   );
 }
 
-const MAX_SYNC_QUESTS = 100;
+// History is never pruned, so a count cap normal use can reach would one day
+// reject every sync. These sit above what the server's 16 MB byte cap
+// (MAX_PAYLOAD_BYTES in the sync route) admits, so that byte cap binds.
+const MAX_SYNC_QUESTS = 5000;
 const MAX_SYNC_HABITS = 200;
-// Tasks are never pruned and habits add one row per habit per day, so a 5000 cap
-// would be reached by normal use. Same count as logs: the server's 16 MB byte
-// cap (MAX_PAYLOAD_BYTES in the sync route) is the limit that binds.
-const MAX_SYNC_TASKS = 20000;
-const MAX_SYNC_LOGS = 20000;
-const MAX_LONG_TEXT_LENGTH = 20_000; // task notes, quest description
+const MAX_SYNC_TASKS = 100_000;
+const MAX_SYNC_LOGS = 100_000;
+export const MAX_LONG_TEXT_LENGTH = 20_000; // notes, description; localStore cuts to it too
 const MAX_EXTRA_TEXT_LENGTH = 10_000; // string values of fields not listed below
 const MAX_COUNTER_SECONDS = 1e9;
 const MAX_WEEKLY_HOURS = 168;
@@ -579,7 +579,7 @@ function sanitizeFocus(raw: unknown): ActiveFocusState {
  * Zero-trust check of a sync payload (a POST body, or a file the server stored).
  *
  * Only STRUCTURAL problems reject the whole payload: not a JSON object, quests
- * / tasks / timeLogs not arrays, or more than 100 / 20000 / 20000 of them. Rows
+ * / tasks / timeLogs not arrays, or more than MAX_SYNC_QUESTS / _TASKS / _LOGS. Rows
  * are rebuilt field by field by sanitizeQuest / sanitizeTask / sanitizeLog: a
  * row that cannot be legitimate is dropped (counted in `dropped`), every other
  * field is coerced, so a stored file always stays readable.

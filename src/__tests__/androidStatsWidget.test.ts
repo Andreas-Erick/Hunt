@@ -135,6 +135,7 @@ describe.skipIf(!hasJdk)("StatsWidgetFit, run on the JDK", () => {
     // [height dp, quests, streaks] -> "questRows questsMore streakRows streaksMore"
     const cases: Array<[number, number, number, string]> = [
       [110, 3, 5, "1 2 0 5"], // 2x2 minimum: one Quest row, every streak behind "+5 more"
+      [156, 3, 5, "2 1 0 5"], // no room for a streak row: no bare streaks label, the Quests take the room
       [180, 3, 5, "1 2 1 4"], // Quests leave room for the streaks label and one streak
       [202, 3, 5, "2 1 1 4"], // a 3x2 widget on a Pixel 7
       [340, 3, 5, "3 0 5 0"], // tall: every streak fits

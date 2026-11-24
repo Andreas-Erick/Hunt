@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Day Widget preview for the launcher's widget picker (API 31+ previewLayout): a static sample
+    day in the Neon look, so the picker shows what the widget is rather than its get-started
+    message. Not drawn by Java and not a placed widget, so it has no ids, targets or Dawn twin.
+    Geometry follows widget_day_neon.xml and widget_day_row_neon.xml.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_neon"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:text="@string/day_widget_today"
+            android:textColor="@color/widget_neon_text"
+            android:textSize="20sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:paddingStart="6dp"
+            android:text="@string/widget_preview_left"
+            android:textColor="@color/widget_neon_muted"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_nav_neon"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:importantForAccessibility="no"
+                android:scaleType="center"
+                android:src="@drawable/widget_chevron_left"
+                android:tint="@color/widget_neon_dim" />
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:importantForAccessibility="no"
+                android:scaleType="center"
+                android:src="@drawable/widget_chevron_right"
+                android:tint="@color/widget_neon_text" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/widget_row_focus_neon"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="12dp">
+
+        <ImageView
+            android:layout_width="3dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_bar"
+            android:tint="@color/widget_neon_q_cyan" />
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="16dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_play"
+            android:tint="@color/widget_neon_accent"
+            android:tintMode="src_in" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="8dp"
+            android:text="@string/widget_preview_task_focus"
+            android:textColor="@color/widget_neon_text"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="22dp"
+            android:background="@drawable/widget_tag_focus_neon"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.08"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="@string/day_widget_focus_tag"
+            android:textAllCaps="true"
+            android:textColor="@color/widget_neon_accent"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_row_neon"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="12dp">
+
+        <ImageView
+            android:layout_width="3dp"
+            android:layout_height="24dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_bar"
+            android:tint="@color/widget_neon_q_amber" />
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="22dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_ring"
+            android:tint="@color/widget_neon_ring"
+            android:tintMode="src_in" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:paddingStart="2dp"
+            android:paddingEnd="8dp"
+            android:text="@string/widget_preview_task_habit"
+            android:textColor="@color/widget_neon_text"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="22dp"
+            android:background="@drawable/widget_tag_neon"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.08"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="@string/day_widget_habit_tag"
+            android:textAllCaps="true"
+            android:textColor="@color/widget_neon_muted"
+            android:textSize="10sp" />
+    </LinearLayout>
+</LinearLayout>

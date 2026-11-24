@@ -48,10 +48,15 @@ final class WidgetDisplayText {
     private WidgetDisplayText() {
     }
 
-    /** The Day Widget's day title ("Today", "Tue 24"), 48dp tall for the header's ImageView. */
-    static Bitmap dayTitle(Context ctx, WidgetLook look, String label) {
-        return render(ctx, 48, new Run(label, look.titleFont, look.titleSp, ctx.getColor(look.text),
-                look.titleTracking, false));
+    /**
+     * The Day Widget's day title ("Today", "Tue 24"), 48dp tall for the header's ImageView, then
+     * the open-row count ("5 left") in the muted label type, or the title alone when `count` is
+     * empty (the empty view already says "Nothing left").
+     */
+    static Bitmap dayTitle(Context ctx, WidgetLook look, String label, String count) {
+        Run title = new Run(label, look.titleFont, look.titleSp, ctx.getColor(look.text), look.titleTracking, false);
+        if (count == null || count.isEmpty()) return render(ctx, 48, title);
+        return render(ctx, 48, title, new Run(count, look.labelFont, 13f, ctx.getColor(look.muted), 0f, true));
     }
 
     /** The Stats Widget's hero: today's focus time in big tabular figures, then "today". */

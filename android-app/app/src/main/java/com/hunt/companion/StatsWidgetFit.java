@@ -48,12 +48,27 @@ final class StatsWidgetFit {
      * Rows that fit a widget `heightDp` tall: Quest rows first (at least one, with a "+N more"
      * line for the rest), then streak rows under their label, whose right end carries the
      * streaks' "+N more". Quests leave room for the label and one streak row, so a widget with
-     * streaks shows at least one whenever it can. With no Quests, the "Set up a Quest in Hunt"
-     * line takes one row.
+     * streaks shows at least one whenever it can; when not even one fits, the section is left
+     * out and the Quests take its room. With no Quests, the "Set up a Quest in Hunt" line takes
+     * one row.
      */
     static StatsWidgetFit fit(int heightDp, int quests, int streaks) {
+        StatsWidgetFit fit = fit(heightDp, quests, streaks, true);
+        // No room for a single streak row under its label: drop the section (a label over nothing
+        // but "+N more" reads as broken) and give the space back to the Quests.
+        return fit.streakRows > 0 ? fit : fit(heightDp, quests, streaks, false);
+    }
+
+    /** Whether the streaks section is drawn: its label shows only when at least one row fits. */
+    boolean showStreaks() {
+        return streakRows > 0;
+    }
+
+    private static StatsWidgetFit fit(int heightDp, int quests, int streaks, boolean withStreaks) {
         StatsWidgetFit fit = new StatsWidgetFit();
         int left = heightDp - PADDING_DP - HEADER_DP;
+        int allStreaks = Math.max(0, streaks);
+        if (!withStreaks) streaks = 0;
         int streaksHeader = streaks > 0 ? STREAKS_HEADER_DP : 0;
         int streaksReserve = streaks > 0 ? STREAKS_HEADER_DP + STREAK_ROW_DP : 0;
         if (quests <= 0) {
@@ -68,7 +83,7 @@ final class StatsWidgetFit {
         left -= streaksHeader;
         int streakRows = Math.min(Math.min(Math.max(0, streaks), MAX_STREAK_ROWS), left / STREAK_ROW_DP);
         fit.streakRows = Math.max(0, streakRows);
-        fit.streaksMore = Math.max(0, streaks) - fit.streakRows;
+        fit.streaksMore = allStreaks - fit.streakRows;
         return fit;
     }
 

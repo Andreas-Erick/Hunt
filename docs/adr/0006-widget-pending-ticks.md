@@ -68,9 +68,14 @@ or at once if it is already running.
   again on the next redraw or read. The read
   reports these as `heldBack` for diagnostics.
 - A tick first opens a 4-second Undo window: the row shows
-  "✓ Done · Undo" and the tick is appended to the queue
-  only when the window ends, still with the tap time.
-  Undo closes the window, so nothing is ever queued. Open
+  "✓ Done · Undo", then hides, and the tick is appended to
+  the queue 1.5 seconds after the window ends, still with
+  the tap time (`LATE_UNDO_MS`), because an Undo tapped
+  near the end reaches the widget 100-300 ms later
+  (launcher, PendingIntent, trampoline); it must still
+  find the window. Undo closes the window, so nothing is
+  ever queued. An Undo that arrives after the tick was
+  queued tells the user to untick it in Hunt. Open
   windows live in the widget's private preferences, written
   before the tap returns; a main-thread timer ends them on
   time, and an inexact alarm, every widget redraw and the

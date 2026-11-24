@@ -80,6 +80,16 @@ final class SelectedDay {
         return day;
     }
 
+    /** Rows still open: the listed rows minus those drawn as "✓ Done · Undo". */
+    int openCount() {
+        int open = 0;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row != null && !undoable.contains(row.optString("id"))) open++;
+        }
+        return open;
+    }
+
     /** Whether `row` offers a tick now: the snapshot marks it tickable and the queue is readable. */
     boolean canTick(JSONObject row) {
         return row != null && !ticksPaused && row.optBoolean("tickable", false);

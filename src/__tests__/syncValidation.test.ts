@@ -124,10 +124,11 @@ describe("validateSyncPayload: structure", () => {
   });
 
   it.each([
-    ["quests", 100, (i: number) => questRow({ id: `quest-${i}` })],
-    // 20,000 like logs: tasks are never pruned, so the old 5000 cap was reached by normal use.
-    ["tasks", 20000, (i: number) => taskRow({ id: `tsk-${i}` })],
-    ["timeLogs", 20000, (i: number) => logRow({ id: `log-${i}-${TASK_ID}` })],
+    // History is never pruned, so these sit above what the 16 MB byte cap admits (older caps of
+    // 100 quests and 20,000 tasks/logs were reachable by years of normal use).
+    ["quests", 5000, (i: number) => questRow({ id: `quest-${i}` })],
+    ["tasks", 100_000, (i: number) => taskRow({ id: `tsk-${i}` })],
+    ["timeLogs", 100_000, (i: number) => logRow({ id: `log-${i}-${TASK_ID}` })],
   ] as const)("accepts exactly %s %i rows and rejects one more", (key, cap, make) => {
     const rows = Array.from({ length: cap + 1 }, (_, i) => make(i));
     const atCap = validateSyncPayload(rawPayload({ [key]: rows.slice(0, cap) }));

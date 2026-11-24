@@ -135,7 +135,7 @@ public class StatsWidgetProvider extends AppWidgetProvider {
         }
         showMore(ctx, views, R.id.widget_stats_quests_more, fit.questsMore);
 
-        views.setViewVisibility(R.id.widget_stats_streaks_header, stats.streaks.length() > 0 ? View.VISIBLE : View.GONE);
+        views.setViewVisibility(R.id.widget_stats_streaks_header, fit.showStreaks() ? View.VISIBLE : View.GONE);
         for (int i = 0; i < STREAK_ROWS.length; i++) {
             JSONObject s = i < fit.streakRows ? stats.streaks.optJSONObject(i) : null;
             views.setViewVisibility(STREAK_ROWS[i], s == null ? View.GONE : View.VISIBLE);

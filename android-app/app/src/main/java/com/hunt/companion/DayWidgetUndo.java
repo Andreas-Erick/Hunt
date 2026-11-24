@@ -20,8 +20,8 @@ import java.util.Set;
 /**
  * The Day Widget's Undo windows (#9): where they are kept and when they end. A tick opens a
  * window ({@link #open}) and the row draws as "✓ Done · Undo"; Undo ({@link #undo}) removes the
- * window and leaves no trace; when the window ends ({@link #commitDue}) the tick is appended to
- * the Pending Tick queue with its original tap time. The rule itself is {@link UndoWindow}.
+ * window and leaves no trace; once the window and {@link UndoWindow#LATE_UNDO_MS} after it have passed ({@link #commitDue}) the tick is
+ * appended to the Pending Tick queue with its original tap time. The rule itself is {@link UndoWindow}.
  *
  * Surviving the process: each window is written synchronously to private preferences before
  * the tap returns, so a killed process loses no tick. The window's end is then noticed by the
@@ -48,6 +48,11 @@ final class DayWidgetUndo {
      * reported to the user.
      */
     private static final Set<String> UNDONE = new HashSet<>();
+    /**
+     * Windows this process closed by Undo -> when (guarded by LOCK), so a second Undo tap on the
+     * same row is not mistaken for one that came too late.
+     */
+    private static final Map<String, Long> RECENTLY_UNDONE = new HashMap<>();
 
     private DayWidgetUndo() {
     }
@@ -76,16 +81,26 @@ final class DayWidgetUndo {
      * Undo: closes the window without queueing anything, as if the tick never happened. Returns
      * false when the removal could not be written (after one retry): this process still never
      * queues it ({@link #UNDONE}) and keeps retrying, but the caller tells the user, because a
-     * process that dies first would queue the tick.
+     * process that dies first would queue the tick. Also false when the window is already gone
+     * because the tick was queued (an Undo later than {@link UndoWindow#LATE_UNDO_MS}): the
+     * tick will reach Hunt, so the user is told rather than shown a silent success.
      */
     static boolean undo(Context ctx, String taskId, String dateKey) {
         String key = TickKeys.taskDay(taskId, dateKey);
         boolean saved;
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
+            long now = System.currentTimeMillis();
+            RECENTLY_UNDONE.values().removeIf(at -> now - at > UndoWindow.WINDOW_MS + UndoWindow.LATE_UNDO_MS);
+            if (!prefs.contains(key) && !UNDONE.contains(key)) {
+                if (RECENTLY_UNDONE.containsKey(key)) return true; // a second tap on the same Undo
+                Log.w(TAG, "Undo arrived after its tick was queued; it will reach Hunt");
+                return false;
+            }
             saved = prefs.edit().remove(key).commit() || prefs.edit().remove(key).commit();
             if (saved) {
                 UNDONE.remove(key);
+                RECENTLY_UNDONE.put(key, now);
             } else {
                 UNDONE.add(key);
                 Log.w(TAG, "Saving an Undo failed; this process keeps the tick out of the queue and retries");

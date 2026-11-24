@@ -8,6 +8,18 @@
     <string name="day_widget_refresh">Open Hunt to refresh</string>
     <string name="day_widget_nothing_left">Nothing left for %1$s</string>
     <string name="day_widget_open_hunt">Open Hunt</string>
+    <string name="day_widget_left">%1$d left</string>
+    <string name="day_widget_label">Day</string>
+    <string name="stats_widget_label">Stats</string>
+    <!-- Sample content for the widget picker's previews (widget_*_preview.xml) -->
+    <string name="widget_preview_left">5 left</string>
+    <string name="widget_preview_task_focus">Fix offline sync</string>
+    <string name="widget_preview_task_habit">15 minutes of vocabulary</string>
+    <string name="widget_preview_focus">2h 36m</string>
+    <string name="widget_preview_quest">Ship the budgeting app</string>
+    <string name="widget_preview_hours">8.5 / 12h</string>
+    <string name="widget_preview_habit">Stretch for 10 minutes</string>
+    <string name="widget_preview_streak">12d</string>
     <string name="day_widget_header_open">%1$s. Open Hunt</string>
     <string name="day_widget_focus_tag">Focus</string>
     <string name="day_widget_habit_tag">Habit</string>

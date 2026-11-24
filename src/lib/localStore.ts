@@ -13,6 +13,7 @@ import {
 import {
   compareRank,
   MAX_HABIT_TITLE_LENGTH,
+  MAX_LONG_TEXT_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
   MAX_TASK_TITLE_LENGTH,
 } from "./syncTypes";
@@ -89,7 +90,11 @@ function changed<T>(wrote: T, options?: LocalWriteOptions): T {
  * never has to change a title saved here.
  */
 export function clampTitle(title: string, max: number): string {
-  const text = title.trim();
+  return clampLength(title.trim(), max);
+}
+
+/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair (not trimmed). */
+export function clampLength(text: string, max: number): string {
   if (text.length <= max) return text;
   const last = text.charCodeAt(max - 1);
   return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
@@ -164,7 +169,7 @@ async function createTask(params: {
   await db.tasks.add({
     id: newId("tsk", now),
     title,
-    notes: notes.trim(),
+    notes: clampTitle(notes, MAX_LONG_TEXT_LENGTH),
     questId,
     status: "queued",
     rank,
@@ -190,6 +195,9 @@ async function updateTask(
     if (title) changes.title = title;
     else delete changes.title;
   }
+  // Same cut the sync validator applies, so the server never shortens notes
+  // saved here (an equal-stamp tie-break would then overwrite the local copy).
+  if (typeof updates.notes === "string") changes.notes = clampLength(updates.notes, MAX_LONG_TEXT_LENGTH);
   return changed(await writeTask(taskId, changes));
 }
 
@@ -355,7 +363,7 @@ async function createQuest(params: {
     slotIndex: (activeCount % 3) as 0 | 1 | 2,
     code: title.slice(0, 10).toUpperCase(),
     title,
-    description: description.trim(),
+    description: clampTitle(description, MAX_LONG_TEXT_LENGTH),
     accentColor,
     targetWeeklyHours: Math.max(1, Number(targetWeeklyHours) || 10),
     archived: false,
@@ -376,7 +384,7 @@ async function updateQuest(questId: string, changes: QuestChanges): Promise<bool
     const title = clampTitle(changes.title, MAX_QUEST_TITLE_LENGTH);
     if (title) patch.title = title;
   }
-  if (typeof changes.description === "string") patch.description = changes.description.trim();
+  if (typeof changes.description === "string") patch.description = clampTitle(changes.description, MAX_LONG_TEXT_LENGTH);
   if (changes.accentColor !== undefined) patch.accentColor = changes.accentColor;
   const hours = changes.targetWeeklyHours;
   if (typeof hours === "number" && Number.isFinite(hours)) patch.targetWeeklyHours = Math.max(1, hours);
@@ -442,7 +450,7 @@ async function createHabit(params: { title: string; notes?: string; questId: str
     const habit: Habit = {
       id: newId("hab", now),
       title,
-      notes: (params.notes ?? "").trim(),
+      notes: clampTitle(params.notes ?? "", MAX_LONG_TEXT_LENGTH),
       questId: params.questId,
       rank: existing.length > 0 ? rankValue(existing[existing.length - 1]) + RANK_STEP : RANK_STEP,
       createdAt: now,
@@ -470,7 +478,7 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
       const title = clampTitle(changes.title, MAX_HABIT_TITLE_LENGTH);
       if (title) patch.title = title;
     }
-    if (typeof changes.notes === "string") patch.notes = changes.notes.trim();
+    if (typeof changes.notes === "string") patch.notes = clampTitle(changes.notes, MAX_LONG_TEXT_LENGTH);
     if (changes.questId !== undefined) patch.questId = changes.questId;
     await db.habits.update(habitId, { ...patch, updatedAt: nextStamp(row) });
 

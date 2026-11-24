@@ -27,11 +27,21 @@ export interface TaskCompletionScene {
   taskId: string;
   ghost: HTMLElement;
   itemRects: Map<string, DOMRect>;
+  /** Top of the task's card before completion, relative to the container. */
+  sourceTop: number;
 }
 
 const BEAT1_HOLD_MS = 230;
 const FLOW_GLIDE_MS = 320;
 const FLOW_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** Largest drift of the fading ghost toward the task's destination. */
+const GHOST_DRIFT_MAX_PX = 12;
+/** Largest offset the Completed card enters from, on the side it came from. */
+const ARRIVAL_OFFSET_MAX_PX = 16;
+
+function clamp(value: number, max: number): number {
+  return Math.max(-max, Math.min(max, value));
+}
 
 function prefersReducedMotion(): boolean {
   try {
@@ -145,7 +155,12 @@ export function captureTaskCompletionScene(
     titleEl.style.textDecorationThickness = "1.5px";
   }
 
-  return { taskId, ghost, itemRects };
+  return {
+    taskId,
+    ghost,
+    itemRects,
+    sourceTop: sourceRect.top - containerRect.top,
+  };
 }
 
 /**
@@ -169,7 +184,28 @@ export function playTwoBeatTaskCompletion(
     return undefined;
   }
 
-  const { ghost, itemRects, taskId } = scene;
+  const { ghost, itemRects, taskId, sourceTop } = scene;
+
+  // The task's own Completed card, if this list shows one. Both beats move
+  // toward it (never past it); a list that drops completed tasks, like a
+  // quest's steps, gets no Completed card, so the ghost fades in place.
+  const taskNodes = Array.from(
+    containerEl.querySelectorAll<HTMLElement>("[data-task-id]")
+  );
+  const isCompletedRow = (el: HTMLElement) =>
+    el.dataset.testid === "completed-task-row" ||
+    el.dataset.completedRow === "true";
+  const arrivalEl = taskNodes.find(
+    (el) => el.dataset.taskId === taskId && isCompletedRow(el)
+  );
+  const travel = arrivalEl
+    ? arrivalEl.getBoundingClientRect().top -
+      containerEl.getBoundingClientRect().top -
+      sourceTop
+    : 0;
+  const ghostDrift = clamp(travel, GHOST_DRIFT_MAX_PX);
+  const arrivalOffset = clamp(-travel, ARRIVAL_OFFSET_MAX_PX);
+
   containerEl.appendChild(ghost);
 
   let cleaned = false;
@@ -207,7 +243,7 @@ export function playTwoBeatTaskCompletion(
       { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
       {
         opacity: 0,
-        transform: "translate3d(0, 12px, 0) scale(0.98)",
+        transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`,
         offset: 1,
       },
     ],
@@ -220,23 +256,18 @@ export function playTwoBeatTaskCompletion(
   const safetyTimer = setTimeout(removeGhost, 540);
 
   // Hold surviving open/completed rows during Beat 1, then glide smoothly in Beat 2
-  const taskNodes = Array.from(
-    containerEl.querySelectorAll<HTMLElement>("[data-task-id]")
-  );
   for (const el of taskNodes) {
     if (typeof el.animate !== "function") continue;
     const id = el.dataset.taskId;
     if (!id) continue;
-    const isCompletedRow =
-      el.dataset.testid === "completed-task-row" ||
-      el.dataset.completedRow === "true";
+    const completedRow = isCompletedRow(el);
 
-    if (id === taskId && isCompletedRow) {
+    if (el === arrivalEl) {
       el.animate(
         [
           {
             opacity: 0,
-            transform: "translate3d(0, -16px, 0) scale(0.985)",
+            transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)`,
           },
           {
             opacity: 1,
@@ -253,7 +284,7 @@ export function playTwoBeatTaskCompletion(
       continue;
     }
 
-    const first = itemRects.get((isCompletedRow ? "done:" : "open:") + id);
+    const first = itemRects.get((completedRow ? "done:" : "open:") + id);
     if (!first) continue;
     const last = el.getBoundingClientRect();
     const dx = first.left - last.left;

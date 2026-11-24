@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { logDiagnostic, summarizeError } from "@/lib/diagnostics";
+import { MAX_LONG_TEXT_LENGTH } from "@/lib/syncTypes";
 import {
   NOTES_DRAFT_KEY_PREFIX,
   clearNoteDraftMirrorIfDraft,
@@ -176,6 +177,7 @@ export function TaskNotesField({
 
   return (
     <textarea
+      maxLength={MAX_LONG_TEXT_LENGTH}
       {...textareaProps}
       value={draft}
       onChange={handleChange}

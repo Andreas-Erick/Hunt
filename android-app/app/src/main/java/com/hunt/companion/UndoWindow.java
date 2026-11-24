@@ -8,15 +8,22 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The Day Widget's Undo window (#9) as a plain rule: a tick is held for {@link #WINDOW_MS} after
- * the tap, showing "✓ Done · Undo", and becomes a Pending Tick only when its window ends. Each
+ * The Day Widget's Undo window (#9) as a plain rule: a tick shows "✓ Done · Undo" for
+ * {@link #WINDOW_MS} after the tap, is then hidden, and becomes a Pending Tick only once
+ * {@link #LATE_UNDO_MS} more has passed, so an Undo already on its way still lands. Each
  * Task and day has its own window, keyed {@link TickKeys#taskDay} with the tap time (epoch ms)
  * as the value. Plain Java, no Android types and no I/O (DayWidgetUndo stores and schedules), so the
  * test suite runs it on the JDK.
  */
 final class UndoWindow {
-    /** How long a ticked row offers Undo before the tick is queued. */
+    /** How long a ticked row offers Undo ("✓ Done · Undo"). */
     static final long WINDOW_MS = 4000;
+    /**
+     * How long after the row stops offering Undo the tick is still held before it is queued. An
+     * Undo tapped just before {@link #WINDOW_MS} reaches the widget 100-300 ms later (launcher,
+     * PendingIntent, trampoline); it must still find the window open rather than lose to the timer.
+     */
+    static final long LATE_UNDO_MS = 1500;
 
     private UndoWindow() {
     }
@@ -30,12 +37,18 @@ final class UndoWindow {
         return age >= WINDOW_MS || age < -WINDOW_MS;
     }
 
-    /** Keys whose window has ended, in tap order (oldest first). Values that are not a Long are due. */
+    /** Whether that tick is due for the queue: its window and LATE_UNDO_MS after it have passed. */
+    static boolean isQueueDue(long tickedAt, long now) {
+        long age = now - tickedAt;
+        return age >= WINDOW_MS + LATE_UNDO_MS || age < -WINDOW_MS;
+    }
+
+    /** Keys due for the queue ({@link #isQueueDue}), in tap order (oldest first). Values that are not a Long are due. */
     static List<String> due(Map<String, ?> held, long now) {
         List<String> due = new ArrayList<>();
         for (Map.Entry<String, ?> e : held.entrySet()) {
             Object v = e.getValue();
-            if (!(v instanceof Long) || isDue((Long) v, now)) due.add(e.getKey());
+            if (!(v instanceof Long) || isQueueDue((Long) v, now)) due.add(e.getKey());
         }
         Collections.sort(due, (a, b) -> Long.compare(tickedAt(held, a), tickedAt(held, b)));
         return due;
@@ -109,12 +122,16 @@ final class UndoWindow {
         return ids;
     }
 
-    /** When the earliest window still open at `now` ends (epoch ms), or -1 if none is. */
+    /**
+     * The next moment (epoch ms) a held tick changes: its row stops offering Undo, or it becomes
+     * due for the queue. -1 when nothing is held that is not already due.
+     */
     static long nextDeadline(Map<String, ?> held, long now) {
         long next = -1;
         for (Object v : held.values()) {
-            if (!(v instanceof Long) || isDue((Long) v, now)) continue;
-            long end = (Long) v + WINDOW_MS;
+            if (!(v instanceof Long) || isQueueDue((Long) v, now)) continue;
+            long tickedAt = (Long) v;
+            long end = isDue(tickedAt, now) ? tickedAt + WINDOW_MS + LATE_UNDO_MS : tickedAt + WINDOW_MS;
             if (next < 0 || end < next) next = end;
         }
         return next;

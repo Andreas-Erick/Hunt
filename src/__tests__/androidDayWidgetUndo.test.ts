@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // Day Widget Undo (#9): a tick first shows "✓ Done · Undo" for 4 seconds and is appended to the
-// Pending Tick queue only when that window ends; Undo leaves no trace. The window rules are plain
+// Pending Tick queue only 1.5 seconds after that window ends; Undo leaves no trace. The window rules are plain
 // Java (UndoWindow.java, TickKeys.java), so they run here on the JDK as the real code. The static
 // guards keep only what a probe cannot show: ADR-0006's boundaries, no new permission, the
 // non-exported intents and 48dp targets.
@@ -57,7 +57,31 @@ describe.skipIf(!hasJdk)("UndoWindow, run on the JDK", () => {
         "System.out.println(UndoWindow.nextDeadline(new HashMap<String, Long>(), 16_500L));",
       ].join("\n"),
     );
-    expect(lines).toEqual(["t-a 2026-11-22", "t-c 2026-11-23", "t-b 2026-11-22", "[t|odd]", "[t-a, t-b, t|odd]", "19000", "-1"]);
+    // t-b (tapped 4.5 s ago) no longer offers Undo but a late Undo could still arrive, so it is not due yet;
+    // the next change is t-b becoming due (12 000 + 4 000 + 1 500), before t|odd's row ends at 19 000.
+    expect(lines).toEqual(["t-a 2026-11-22", "t-c 2026-11-23", "[t|odd]", "[t-a, t-b, t|odd]", "17500", "-1"]);
+  }, 60_000);
+
+  it("an Undo that reaches the widget just after the row stopped offering it still finds the tick held", () => {
+    // Undo tapped at 3.9 s arrives at 4.1-4.3 s (launcher, PendingIntent, trampoline). The row is
+    // already hidden, but the tick is queued only LATE_UNDO_MS later, so that Undo still lands.
+    const cases: Array<[number, number, string]> = [
+      [10_000, 14_100, "true false"], // row no longer offers Undo, tick not queued
+      [10_000, 15_499, "true false"],
+      [10_000, 15_500, "true true"], // LATE_UNDO_MS over: queued
+      [10_000, 5_000, "true true"], // clock set back further than the window: let it go
+    ];
+    const main = cases
+      .map(([t, now]) => `System.out.println(UndoWindow.isDue(${t}L, ${now}L) + " " + UndoWindow.isQueueDue(${t}L, ${now}L));`)
+      .join("\n");
+    expect(runUndo(main)).toEqual(cases.map((c) => c[2]));
+    const held = [
+      "Map<String, Long> held = new HashMap<>();",
+      'held.put(TickKeys.taskDay("t-late", "2026-11-22"), 10_000L);',
+      'System.out.println(new TreeSet<>(UndoWindow.hiddenTaskIds(new HashSet<String>(), held, "2026-11-22", 14_200L)));',
+      "System.out.println(UndoWindow.due(held, 14_200L).isEmpty());",
+    ].join("\n");
+    expect(runUndo(held)).toEqual(["[t-late]", "true"]);
   }, 60_000);
 
   it("queues ended windows in tap order with the tap time, and keeps any tick the queue refused for the next try", () => {
@@ -143,6 +167,9 @@ describe("Day Widget Undo window (#9): boundaries", () => {
     expect(undoBody).toMatch(/saved\s*=\s*prefs\.edit\(\)\.remove\(key\)\.commit\(\)/);
     expect(undoBody).toMatch(/UNDONE\.add\(key\)/);
     expect(undoBody).toMatch(/return saved;/);
+    // An Undo that finds its tick already queued is reported, never a silent success; a second
+    // tap on an Undo that worked is not.
+    expect(undoBody).toMatch(/if\s*\(!prefs\.contains\(key\)\s*&&\s*!UNDONE\.contains\(key\)\)\s*\{[\s\S]*?RECENTLY_UNDONE\.containsKey\(key\)[\s\S]*?return false;/);
     const commitDue = /static\s+UndoWindow\.Commit\s+commitDue\s*\([^)]*\)\s*\{([\s\S]*?)\n    \}/.exec(undo)?.[1] ?? "";
     expect(commitDue).toMatch(/retryUndone\(prefs\)/);
     expect(commitDue).toMatch(/UndoWindow\.commit\(withoutUndone\(/);

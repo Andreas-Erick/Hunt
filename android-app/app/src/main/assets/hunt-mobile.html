@@ -5950,7 +5950,7 @@ var HuntCore = (() => {
         focusBtn.style.opacity = "0.4";
       }
 
-      return { ghost, itemRects, hadEmptyCard };
+      return { ghost, itemRects, hadEmptyCard, sourceTop: sourceRect.top - rootRect.top };
     }
 
     function playTwoBeatTaskCompletion(scene, taskId) {
@@ -5962,6 +5962,16 @@ var HuntCore = (() => {
       const FLOW_MS = 320;
       const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
       const ghost = scene.ghost;
+      // Both beats move toward the task's own Completed card (never past it); with none in this
+      // view, the ghost fades in place.
+      const arrivalEl = Array.from(root.querySelectorAll("[data-flip-task-id]")).find(el =>
+        el.getAttribute("data-flip-task-id") === taskId && el.classList.contains("completed") &&
+        el.getClientRects().length > 0);
+      const travel = arrivalEl
+        ? arrivalEl.getBoundingClientRect().top - root.getBoundingClientRect().top - scene.sourceTop
+        : 0;
+      const ghostDrift = Math.max(-12, Math.min(12, travel));
+      const arrivalOffset = Math.max(-16, Math.min(16, -travel));
       root.appendChild(ghost);
 
       let cleaned = false;
@@ -5994,7 +6004,7 @@ var HuntCore = (() => {
         [
           { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
           { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
-          { opacity: 0, transform: "translate3d(0, 12px, 0) scale(0.98)", offset: 1 }
+          { opacity: 0, transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`, offset: 1 }
         ],
         { duration: 480, easing: EASE, fill: "forwards" }
       );
@@ -6022,10 +6032,10 @@ var HuntCore = (() => {
         const id = el.getAttribute("data-flip-task-id");
         if (!id) return;
         const isDone = el.classList.contains("completed");
-        if (id === taskId && isDone) {
+        if (el === arrivalEl) {
           el.animate(
             [
-              { opacity: 0, transform: "translate3d(0, -16px, 0) scale(0.985)" },
+              { opacity: 0, transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)` },
               { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
             ],
             { delay: BEAT1_MS + 15, duration: FLOW_MS, easing: EASE, fill: "backwards" }
@@ -6121,7 +6131,17 @@ var HuntCore = (() => {
       });
     }
 
+    // A double-tap on a ✓ would complete the next task too: it re-renders into
+    // the same spot (no FLIP shield with reduced motion). Same rule as the
+    // desktop's `e.detail > 1` guard, keyed on time because the second tap
+    // lands on a freshly rendered button.
+    const DOUBLE_TAP_COMPLETE_MS = 400;
+    let lastDirectCompleteAt = -Infinity;
+
     function completeTaskDirect(taskId) {
+      const tapAt = Date.now();
+      if (tapAt - lastDirectCompleteAt < DOUBLE_TAP_COMPLETE_MS) return;
+      lastDirectCompleteAt = tapAt;
       closeSheet();
       if (state.activeFocus && state.activeFocus.activeTaskId === taskId) {
         completeActiveTaskAndNext();
@@ -6210,9 +6230,19 @@ var HuntCore = (() => {
     // Restores the task. If focus is still where the delete left it, its running session comes back
     // too. If focus moved on meanwhile, the task returns to the queue (R6 stamp) and the session it was
     // running in is logged up to the delete time (R3 id + dedupe), so that time is not lost.
+    // A row restored by Undo must not point at a Quest deleted since: unlink it,
+    // as deleting that Quest did to its other rows (a new edit, R6).
+    function unlinkDeletedQuest(row) {
+      if (row && row.questId && asArray(state.deletedQuestIds).includes(row.questId)) {
+        row.questId = null;
+        row.updatedAt = nextStamp(row);
+      }
+    }
+
     function undoDeleteTask(removed, hadTombstone, prevFocus, focusAfter, deletedAt) {
       if (state.tasks.some(t => t.id === removed.id)) return;
       if (!hadTombstone) state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== removed.id);
+      unlinkDeletedQuest(removed);
       state.tasks.push(removed);
       if (focusAfter && JSON.stringify(state.activeFocus) === focusAfter) {
         // a new edit (R6): it also wins if the cleared focus already synced
@@ -6647,7 +6677,7 @@ var HuntCore = (() => {
           ${sheetHeaderHtml("New Task", true)}
 
           <input id="sheetTaskTitle" class="sheet-input" placeholder="What moves the needle?" value="${escapeHtml(draft.title)}" enterkeyhint="done" aria-label="Task title" onkeydown="if(event.key==='Enter') submitNewTaskFromSheet(true)" />
-          <textarea id="sheetTaskNotes" class="sheet-input" rows="2" placeholder="Optional description / session notes..." aria-label="Notes" onkeydown="if(isSubmitKey(event)) submitNewTaskFromSheet(true)">${escapeHtml(draft.notes)}</textarea>
+          <textarea id="sheetTaskNotes" class="sheet-input" maxlength="20000" rows="2" placeholder="Optional description / session notes..." aria-label="Notes" onkeydown="if(isSubmitKey(event)) submitNewTaskFromSheet(true)">${escapeHtml(draft.notes)}</textarea>
 
           <div class="sheet-label">Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Quest">
@@ -6756,7 +6786,7 @@ var HuntCore = (() => {
           ${sheetHeaderHtml("Task Options")}
 
           <input class="sheet-input" value="${escapeHtml(task.title)}" aria-label="Task title" oninput="draftTaskField(${jsArg(task.id)}, 'title', this.value)" onchange="updateTaskField(${jsArg(task.id)}, 'title', this.value)" />
-          <textarea class="sheet-input" rows="3" placeholder="Add session notes..." aria-label="Notes" oninput="draftTaskField(${jsArg(task.id)}, 'notes', this.value)" onchange="updateTaskField(${jsArg(task.id)}, 'notes', this.value)">${escapeHtml(task.notes || "")}</textarea>
+          <textarea maxlength="20000" class="sheet-input" rows="3" placeholder="Add session notes..." aria-label="Notes" oninput="draftTaskField(${jsArg(task.id)}, 'notes', this.value)" onchange="updateTaskField(${jsArg(task.id)}, 'notes', this.value)">${escapeHtml(task.notes || "")}</textarea>
 
           <!-- Quick Actions -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
@@ -6870,7 +6900,7 @@ var HuntCore = (() => {
 
           <input id="newQuestTitleInput" class="sheet-input" placeholder="Quest title (e.g. Launch my idea)" aria-label="Quest Title" value="" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()" />
 
-          <textarea id="newQuestDescInput" class="sheet-input" rows="2" placeholder="Optional description — why this quest matters & what moves it forward" aria-label="Description" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
+          <textarea maxlength="20000" id="newQuestDescInput" class="sheet-input" rows="2" placeholder="Optional description — why this quest matters & what moves it forward" aria-label="Description" onkeydown="if(isSubmitKey(event)) createNewQuestFromSheet()"></textarea>
 
           <div class="quest-meta-grid">
             <div>
@@ -6957,7 +6987,7 @@ var HuntCore = (() => {
           <input id="sheetQuestTitle" class="sheet-input" value="${escapeHtml(q.title)}" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})" />
 
           <label class="sheet-label" for="sheetQuestDesc">Description</label>
-          <textarea id="sheetQuestDesc" class="sheet-input" rows="2" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})">${escapeHtml(q.description || "")}</textarea>
+          <textarea maxlength="20000" id="sheetQuestDesc" class="sheet-input" rows="2" onkeydown="if(isSubmitKey(event)) saveQuestFromSheet(${jsArg(q.id)})">${escapeHtml(q.description || "")}</textarea>
 
           <div class="quest-meta-grid">
             <div>
@@ -7563,7 +7593,7 @@ var HuntCore = (() => {
           ${sheetHeaderHtml("New Daily Habit")}
 
           <input id="newHabitTitleInput" class="sheet-input" placeholder="e.g. Read 20 pages, Review flashcards..." aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
-          <textarea id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional description copied to each day's task..." aria-label="Habit description" onkeydown="if(isSubmitKey(event)) saveNewHabit()"></textarea>
+          <textarea maxlength="20000" id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional description copied to each day's task..." aria-label="Habit description" onkeydown="if(isSubmitKey(event)) saveNewHabit()"></textarea>
 
           <div class="sheet-label">Assign to Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -7630,7 +7660,7 @@ var HuntCore = (() => {
           ${sheetHeaderHtml("Edit Daily Habit")}
 
           <input id="editHabitTitleInput" class="sheet-input" value="${escapeHtml(h.title)}" aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveHabitEdits(${jsArg(h.id)})" />
-          <textarea id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
+          <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
 
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -7720,10 +7750,12 @@ var HuntCore = (() => {
       if (asArray(state.habits).some(x => x.id === removed.id)) return;
       if (!hadHabitTomb) state.deletedHabitIds = asArray(state.deletedHabitIds).filter(id => id !== removed.id);
       if (!state.habits) state.habits = [];
+      unlinkDeletedQuest(removed);
       state.habits.push(removed);
       state.habits.sort(compareRank);
       if (removedTask && !state.tasks.some(t => t.id === removedTask.id)) {
         if (!hadTaskTomb) state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== removedTask.id);
+        unlinkDeletedQuest(removedTask);
         state.tasks.push(removedTask);
         state.tasks.sort(compareRank);
       }
@@ -8425,7 +8457,7 @@ var HuntCore = (() => {
               <input id="guideTaskTitleInput" class="sheet-input" placeholder="e.g. Draft 400 words for essay #4" value="${escapeHtml(guideTaskTitle)}" enterkeyhint="done" oninput="guideTaskTitle=this.value;updateGuideEvalLive();" onkeydown="if(isSubmitKey(event)) saveGuideTask();" />
 
               <label class="sheet-label" for="guideTaskNotesInput">Definition of Done (Optional Notes)</label>
-              <textarea id="guideTaskNotesInput" class="sheet-input" rows="2" placeholder="What does finished look like for this bout?" oninput="guideTaskNotes=this.value;updateGuideEvalLive();">${escapeHtml(guideTaskNotes)}</textarea>
+              <textarea maxlength="20000" id="guideTaskNotesInput" class="sheet-input" rows="2" placeholder="What does finished look like for this bout?" oninput="guideTaskNotes=this.value;updateGuideEvalLive();">${escapeHtml(guideTaskNotes)}</textarea>
 
               <div class="sheet-label">Assign to Quest</div>
               <div class="sheet-pill-group" role="group" aria-label="Assign to Quest" style="margin-bottom:14px;">
@@ -8443,7 +8475,7 @@ var HuntCore = (() => {
               <input id="guideQuestTitleInput" class="sheet-input" placeholder="e.g. Ship v1 of my audio plugin" value="${escapeHtml(guideQuestTitle)}" enterkeyhint="done" oninput="guideQuestTitle=this.value;updateGuideEvalLive();" onkeydown="if(isSubmitKey(event)) saveGuideQuest();" />
 
               <label class="sheet-label" for="guideQuestDescInput">Why it matters &amp; what moves it forward</label>
-              <textarea id="guideQuestDescInput" class="sheet-input" rows="2" placeholder="Core milestones and why this pursuit matters..." oninput="guideQuestDesc=this.value;updateGuideEvalLive();">${escapeHtml(guideQuestDesc)}</textarea>
+              <textarea maxlength="20000" id="guideQuestDescInput" class="sheet-input" rows="2" placeholder="Core milestones and why this pursuit matters..." oninput="guideQuestDesc=this.value;updateGuideEvalLive();">${escapeHtml(guideQuestDesc)}</textarea>
 
               <label class="sheet-label" for="guideQuestHoursInput">Weekly Target Hours</label>
               <input id="guideQuestHoursInput" type="number" inputmode="numeric" min="1" max="100" class="sheet-input" value="${escapeHtml(guideQuestHours)}" enterkeyhint="done" oninput="guideQuestHours=this.value;updateGuideEvalLive();" onkeydown="if(isSubmitKey(event)) saveGuideQuest();" />
@@ -8890,7 +8922,7 @@ var HuntCore = (() => {
                 </div>
 
                 <div class="focus-notes">
-                  <textarea class="focus-notes-input" rows="2" placeholder="Tap to add session notes..." aria-label="Session notes" oninput="draftTaskField(${jsArg(activeTaskObj.id)}, 'notes', this.value)" onchange="saveTaskText(${jsArg(activeTaskObj.id)}, 'notes', this.value)">${escapeHtml(activeTaskObj.notes || "")}</textarea>
+                  <textarea maxlength="20000" class="focus-notes-input" rows="2" placeholder="Tap to add session notes..." aria-label="Session notes" oninput="draftTaskField(${jsArg(activeTaskObj.id)}, 'notes', this.value)" onchange="saveTaskText(${jsArg(activeTaskObj.id)}, 'notes', this.value)">${escapeHtml(activeTaskObj.notes || "")}</textarea>
                 </div>
               </div>
 

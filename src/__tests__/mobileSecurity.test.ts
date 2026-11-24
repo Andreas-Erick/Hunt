@@ -293,6 +293,7 @@ describe("inline handler arguments", () => {
     const status = Object.fromEntries(readState(p).tasks.map((t) => [t.id, t.status]));
     expect(status).toEqual({ "tsk-1": "queued", "tsk-1.a": "queued", "tsk-1.a:b": "completed" });
 
+    vi.advanceTimersByTime(500); // past the double-tap guard: a deliberate second completion
     p.openTaskInspectorSheet("tsk-1.a");
     click(p, Array.from(p.document.querySelectorAll("#sheetContainer button")).find((b) => b.textContent?.includes("Mark Completed")) ?? null);
     expect(readState(p).tasks.find((t) => t.id === "tsk-1.a")?.status).toBe("completed");

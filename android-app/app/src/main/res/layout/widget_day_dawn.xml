@@ -6,8 +6,9 @@
     drawn by WidgetDisplayText, since a widget's TextView cannot load res/font), then the
     day switcher on the right: one pill holding the previous- and next-day arrows, each a 48dp
     square, 8dp clear of the title; at today and today + 6 an arrow stays in place, dimmed.
-    Body: the selected day's rows as cards 8dp apart; widget_empty is its empty view
-    ("Nothing left for Tue 24") under a Done mark.
+    Body: the selected day's rows as flat cards 6dp apart; the list fades out at its edges, so a
+    row cut off at the bottom reads as "scroll for more", not as a clipping bug. widget_empty is
+    its empty view ("Nothing left for Tue 24") under a Done mark.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
@@ -79,8 +80,10 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:divider="@android:color/transparent"
-            android:dividerHeight="8dp"
+            android:dividerHeight="6dp"
+            android:fadingEdgeLength="28dp"
             android:listSelector="@android:color/transparent"
+            android:requiresFadingEdge="vertical"
             android:scrollbars="none" />
 
         <TextView

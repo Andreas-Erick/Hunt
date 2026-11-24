@@ -73,6 +73,7 @@
         -->
         <receiver
             android:name=".DayWidgetProvider"
+            android:label="@string/day_widget_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -107,6 +108,7 @@
         -->
         <receiver
             android:name=".StatsWidgetProvider"
+            android:label="@string/stats_widget_label"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
