@@ -54,3 +54,8 @@ Thumbs.db
 
 # Android signing key (never commit; release CI reads it from the ANDROID_KEYSTORE_BASE64 secret)
 android-app/keystore/
+
+# Local agent docs (kept on this machine only; scripts/worktree.sh copies them into worktrees)
+CLAUDE.md
+CODING_STANDARDS.md
+GLOSSARY.md

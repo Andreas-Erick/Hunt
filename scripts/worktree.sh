@@ -7,6 +7,8 @@
 # setup links what a fresh worktree lacks because git ignores it:
 #   node_modules           -> link to the main checkout's (no npm ci)
 #   Instructions_for_AI.md -> copy (local quality spec named by CLAUDE.md)
+#   CLAUDE.md, CODING_STANDARDS.md, GLOSSARY.md -> copy (local agent docs,
+#                             kept out of the repo)
 #   debug.keystore         -> copy, so android-app/build-apk.sh signs
 #                             with the pinned key without KEYSTORE=...
 # teardown unlinks node_modules first, then removes the worktree, so
@@ -68,10 +70,13 @@ setup() {
     echo "node_modules: linked to $main/node_modules"
   fi
 
-  if [ -f "$main/Instructions_for_AI.md" ]; then
-    cp "$main/Instructions_for_AI.md" "$wt/Instructions_for_AI.md"
-    echo "Instructions_for_AI.md: copied"
-  fi
+  local doc
+  for doc in Instructions_for_AI.md CLAUDE.md CODING_STANDARDS.md GLOSSARY.md; do
+    if [ -f "$main/$doc" ]; then
+      cp "$main/$doc" "$wt/$doc"
+      echo "$doc: copied"
+    fi
+  done
 
   local key=android-app/app/build/direct-apk/debug.keystore
   if [ -f "$main/$key" ] && [ ! -f "$wt/$key" ]; then
