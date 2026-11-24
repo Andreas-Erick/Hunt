@@ -104,6 +104,26 @@ describe("playTwoBeatTaskCompletion direction", () => {
     expect(Math.abs(arrivalOffset("a") ?? 0)).toBeLessThanOrEqual(5);
   });
 
+  it("keeps the bottom task visible and glides it into a Completed card right below", () => {
+    vi.useFakeTimers();
+    const container = setup([row("a", 0), row("b", 50)]);
+    const scene = captureTaskCompletionScene(container, "b", "red");
+    container.removeChild(container.querySelector('[data-task-id="b"]')!);
+    container.appendChild(row("b", 100, true));
+
+    playTwoBeatTaskCompletion(container, scene);
+
+    const ghost = calls.find((c) => c.el.getAttribute("aria-hidden") === "true");
+    const arrival = calls.find(
+      (c) => (c.el as HTMLElement).dataset.taskId === "b" && (c.el as HTMLElement).dataset.completedRow === "true"
+    );
+    // Nothing sits between the task and its Completed card: no fade out and back in.
+    expect(ghost?.keyframes.every((k) => (k as { opacity?: number }).opacity !== 0)).toBe(true);
+    expect((arrival?.keyframes[0] as { opacity?: number } | undefined)?.opacity).not.toBe(0);
+    // The Completed card starts exactly where the task was.
+    expect(arrivalOffset("b")).toBe(-50);
+  });
+
   it("drifts up and enters from below when the Completed card lands above", () => {
     vi.useFakeTimers();
     const container = setup([row("x", 0, true), row("a", 200)]);

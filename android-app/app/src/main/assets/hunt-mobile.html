@@ -5970,8 +5970,19 @@ var HuntCore = (() => {
       const travel = arrivalEl
         ? arrivalEl.getBoundingClientRect().top - root.getBoundingClientRect().top - scene.sourceTop
         : 0;
-      const ghostDrift = Math.max(-12, Math.min(12, travel));
-      const arrivalOffset = Math.max(-16, Math.min(16, -travel));
+      // With no other task card between the task and its Completed card (the last open task,
+      // say), a fade out and back in reads as the task vanishing and reappearing; the card
+      // instead stays visible and glides the whole way.
+      const rootTop = root.getBoundingClientRect().top;
+      const pathTop = Math.min(scene.sourceTop, scene.sourceTop + travel);
+      const pathBottom = Math.max(scene.sourceTop, scene.sourceTop + travel);
+      const glidesStraight = !!arrivalEl && !Array.from(root.querySelectorAll("[data-flip-task-id]")).some(el => {
+        if (el === arrivalEl || el.getClientRects().length === 0) return false;
+        const top = el.getBoundingClientRect().top - rootTop;
+        return top >= pathTop - 1 && top < pathBottom - 1;
+      });
+      const ghostDrift = glidesStraight ? 0 : Math.max(-12, Math.min(12, travel));
+      const arrivalOffset = glidesStraight ? -travel : Math.max(-16, Math.min(16, -travel));
       root.appendChild(ghost);
 
       let cleaned = false;
@@ -6000,14 +6011,24 @@ var HuntCore = (() => {
         );
       }
 
-      const ghostAnim = ghost.animate(
-        [
-          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
-          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
-          { opacity: 0, transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`, offset: 1 }
-        ],
-        { duration: 480, easing: EASE, fill: "forwards" }
-      );
+      // Straight glide: the ghost covers Beat 1, then hands over to the Completed card,
+      // which already sits under it at full opacity.
+      const ghostAnim = glidesStraight
+        ? ghost.animate(
+          [
+            { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+            { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
+          ],
+          { duration: BEAT1_MS }
+        )
+        : ghost.animate(
+          [
+            { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
+            { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
+            { opacity: 0, transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`, offset: 1 }
+          ],
+          { duration: 480, easing: EASE, fill: "forwards" }
+        );
       if (ghostAnim && typeof ghostAnim.addEventListener === "function") {
         ghostAnim.addEventListener("finish", removeGhost);
         ghostAnim.addEventListener("cancel", removeGhost);
@@ -6035,10 +6056,12 @@ var HuntCore = (() => {
         if (el === arrivalEl) {
           el.animate(
             [
-              { opacity: 0, transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)` },
+              glidesStraight
+                ? { opacity: 1, transform: `translate3d(0, ${arrivalOffset}px, 0)` }
+                : { opacity: 0, transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)` },
               { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
             ],
-            { delay: BEAT1_MS + 15, duration: FLOW_MS, easing: EASE, fill: "backwards" }
+            { delay: glidesStraight ? BEAT1_MS : BEAT1_MS + 15, duration: FLOW_MS, easing: EASE, fill: "backwards" }
           );
           return;
         }

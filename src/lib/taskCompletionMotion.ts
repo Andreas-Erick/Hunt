@@ -203,8 +203,21 @@ export function playTwoBeatTaskCompletion(
       containerEl.getBoundingClientRect().top -
       sourceTop
     : 0;
-  const ghostDrift = clamp(travel, GHOST_DRIFT_MAX_PX);
-  const arrivalOffset = clamp(-travel, ARRIVAL_OFFSET_MAX_PX);
+  // With no other task row between the task and its Completed card (the last
+  // open task, say), a fade out and back in reads as the task vanishing and
+  // reappearing. The card instead stays visible and glides the whole way.
+  const containerTop = containerEl.getBoundingClientRect().top;
+  const pathTop = Math.min(sourceTop, sourceTop + travel);
+  const pathBottom = Math.max(sourceTop, sourceTop + travel);
+  const glidesStraight =
+    !!arrivalEl &&
+    !taskNodes.some((el) => {
+      if (el === arrivalEl) return false;
+      const top = el.getBoundingClientRect().top - containerTop;
+      return top >= pathTop - 1 && top < pathBottom - 1;
+    });
+  const ghostDrift = glidesStraight ? 0 : clamp(travel, GHOST_DRIFT_MAX_PX);
+  const arrivalOffset = glidesStraight ? -travel : clamp(-travel, ARRIVAL_OFFSET_MAX_PX);
 
   containerEl.appendChild(ghost);
 
@@ -237,18 +250,28 @@ export function playTwoBeatTaskCompletion(
     );
   }
 
-  const ghostAnim = ghost.animate(
-    [
-      { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
-      { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
-      {
-        opacity: 0,
-        transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`,
-        offset: 1,
-      },
-    ],
-    { duration: 480, easing: FLOW_EASING, fill: "forwards" }
-  );
+  // Straight glide: the ghost covers Beat 1, then hands over to the Completed
+  // card, which already sits under it at full opacity.
+  const ghostAnim = glidesStraight
+    ? ghost.animate(
+        [
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
+        ],
+        { duration: BEAT1_HOLD_MS }
+      )
+    : ghost.animate(
+        [
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
+          { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
+          {
+            opacity: 0,
+            transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`,
+            offset: 1,
+          },
+        ],
+        { duration: 480, easing: FLOW_EASING, fill: "forwards" }
+      );
   if (ghostAnim && typeof ghostAnim.addEventListener === "function") {
     ghostAnim.addEventListener("finish", removeGhost);
     ghostAnim.addEventListener("cancel", removeGhost);
@@ -266,8 +289,10 @@ export function playTwoBeatTaskCompletion(
       el.animate(
         [
           {
-            opacity: 0,
-            transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)`,
+            opacity: glidesStraight ? 1 : 0,
+            transform: glidesStraight
+              ? `translate3d(0, ${arrivalOffset}px, 0)`
+              : `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)`,
           },
           {
             opacity: 1,
@@ -275,7 +300,7 @@ export function playTwoBeatTaskCompletion(
           },
         ],
         {
-          delay: BEAT1_HOLD_MS + 15,
+          delay: glidesStraight ? BEAT1_HOLD_MS : BEAT1_HOLD_MS + 15,
           duration: FLOW_GLIDE_MS,
           easing: FLOW_EASING,
           fill: "backwards",
