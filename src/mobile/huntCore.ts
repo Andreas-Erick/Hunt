@@ -66,12 +66,17 @@ export {
   withHabitFrequency,
 } from "../lib/habitFrequency";
 export { habitSkipRows } from "../lib/habitSkip";
+export { clampLength, clampTitle } from "../lib/textLimits";
 export {
   canonicalString,
   compareRank,
   isSafeSyncId,
   losingSessionEndAt,
   MAX_CHECKLIST_TEXT_LENGTH,
+  MAX_HABIT_TITLE_LENGTH,
+  MAX_LONG_TEXT_LENGTH,
+  MAX_QUEST_TITLE_LENGTH,
+  MAX_TASK_TITLE_LENGTH,
   mergeSyncPayloads,
   sameContent,
   SYNCED_ENTITY_KEYS,

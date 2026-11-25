@@ -5,6 +5,7 @@ import { addHabitDayCount, setHabitDayAmount } from "./habitCount";
 import { habitKindOf, isCountTarget, MAX_COUNT_UNIT_LENGTH } from "./habitKind";
 import { avoidCompletedRow, avoidReopenedRow } from "./localHabitAvoid";
 import { hasLocalTaskTombstone } from "./syncTombstones";
+import { clampTitle } from "./textLimits";
 import { buildHabitTaskRow, completeTaskRow, nextStamp } from "./taskQueue";
 
 /**
@@ -23,7 +24,7 @@ export interface NewHabitKind {
 }
 
 /** A unit as stored: trimmed and cut to MAX_COUNT_UNIT_LENGTH. */
-const cleanUnit = (unit: string | undefined) => (unit ?? "").trim().slice(0, MAX_COUNT_UNIT_LENGTH);
+const cleanUnit = (unit: string | undefined) => clampTitle(unit ?? "", MAX_COUNT_UNIT_LENGTH);
 
 /** A new habit's Kind fields, or null for a Count Habit without a usable target. */
 export function newHabitKindFields(params: NewHabitKind): Partial<Habit> | null {

@@ -1074,7 +1074,6 @@
       overflow-y: auto;
       overscroll-behavior: contain;
       box-shadow: 0 20px 48px -12px rgb(var(--c-black) / 0.78);
-      will-change: transform, opacity;
     }
     body.sheet-typing .bottom-sheet {
       max-height: min(54vh, calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px));
@@ -1094,6 +1093,7 @@
     /* Only a freshly opened sheet glides in; in-place updates never replay the animation. */
     .bottom-sheet.entering {
       animation: slideUp 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform, opacity; /* a layer only while it glides; a resting scroller keeps crisp text */
     }
 
     .sheet-head {
@@ -3293,7 +3293,11 @@ var HuntCore = (() => {
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
     MAX_COUNT_UNIT_LENGTH: () => MAX_COUNT_UNIT_LENGTH,
     MAX_HABIT_REMINDER_TIMES: () => MAX_HABIT_REMINDER_TIMES,
+    MAX_HABIT_TITLE_LENGTH: () => MAX_HABIT_TITLE_LENGTH,
     MAX_LIST_TITLE_LENGTH: () => MAX_LIST_TITLE_LENGTH,
+    MAX_LONG_TEXT_LENGTH: () => MAX_LONG_TEXT_LENGTH,
+    MAX_QUEST_TITLE_LENGTH: () => MAX_QUEST_TITLE_LENGTH,
+    MAX_TASK_TITLE_LENGTH: () => MAX_TASK_TITLE_LENGTH,
     MAX_TIMES_PER_WEEK: () => MAX_TIMES_PER_WEEK,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
     REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
@@ -3313,6 +3317,8 @@ var HuntCore = (() => {
     canonicalString: () => canonicalString,
     checklistOf: () => checklistOf,
     checklistProgress: () => checklistProgress,
+    clampLength: () => clampLength,
+    clampTitle: () => clampTitle,
     cleanListTitle: () => cleanListTitle,
     compareRank: () => compareRank,
     completeTaskRow: () => completeTaskRow,
@@ -4225,6 +4231,10 @@ var HuntCore = (() => {
     }
     return Math.max(S + 1e3, Math.min(...cands));
   }
+  var MAX_QUEST_TITLE_LENGTH = 300;
+  var MAX_HABIT_TITLE_LENGTH = 300;
+  var MAX_TASK_TITLE_LENGTH = 1e3;
+  var MAX_LONG_TEXT_LENGTH = 2e4;
   var QUEST_ACCENTS = {
     cyan: true,
     emerald: true,
@@ -5118,6 +5128,9 @@ var HuntCore = (() => {
     var applyListEdit = HuntCore.applyListEdit;
     var buildList = HuntCore.buildList;
     var cleanListTitle = HuntCore.cleanListTitle;
+    // The sync validator's cuts, so the phone never writes text the server would shorten.
+    var clampLength = HuntCore.clampLength;
+    var clampTitle = HuntCore.clampTitle;
     var listItemsOf = HuntCore.listItemsOf;
     var listProgress = HuntCore.listProgress;
     var newListId = HuntCore.newListId;
@@ -8463,8 +8476,8 @@ var HuntCore = (() => {
       const firstRects = captureTaskFlipRects();
       state.tasks.push({
         id: newTaskId,
-        title: titleEl.value.trim(),
-        notes: notesEl ? notesEl.value.trim() : "",
+        title: clampTitle(titleEl.value, HuntCore.MAX_TASK_TITLE_LENGTH),
+        notes: notesEl ? clampTitle(notesEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         questId: resolveComposerQuestId(composerQuestId),
         status: "queued",
         rank,
@@ -8919,13 +8932,13 @@ var HuntCore = (() => {
       }
       playCompleteSound();
       const now = Date.now();
-      const title = tEl.value.trim();
+      const title = clampTitle(tEl.value, HuntCore.MAX_QUEST_TITLE_LENGTH);
       state.quests.push({
         id: "quest-" + now + "-" + Math.random().toString(36).slice(2, 6),
         slotIndex: activeQuestsList().length % 3,
-        code: title.slice(0, 10).toUpperCase(),
+        code: clampLength(title, 10).toUpperCase(),
         title,
-        description: dEl ? dEl.value.trim() : "",
+        description: dEl ? clampTitle(dEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         accentColor: selectedQuestColor || "cyan",
         targetWeeklyHours: target,
         archived: false,
@@ -8997,8 +9010,8 @@ var HuntCore = (() => {
       const dEl = document.getElementById("sheetQuestDesc");
       const hEl = document.getElementById("sheetQuestTarget");
       const before = JSON.stringify(q);
-      if (tEl && tEl.value.trim()) q.title = tEl.value.trim();
-      if (dEl) q.description = dEl.value.trim();
+      if (tEl && tEl.value.trim()) q.title = clampTitle(tEl.value, HuntCore.MAX_QUEST_TITLE_LENGTH);
+      if (dEl) q.description = clampTitle(dEl.value, HuntCore.MAX_LONG_TEXT_LENGTH);
       const target = hEl ? parseWeeklyTarget(hEl.value) : null;
       if (target !== null) q.targetWeeklyHours = target; // blank or invalid keeps the saved target, like a blank title
       q.accentColor = selectedQuestColor || q.accentColor;
@@ -9691,7 +9704,7 @@ var HuntCore = (() => {
     function saveNewHabit() {
       const tEl = document.getElementById("newHabitTitleInput");
       const nEl = document.getElementById("newHabitNotesInput");
-      const title = tEl ? tEl.value.trim().slice(0, 300) : "";
+      const title = tEl ? clampTitle(tEl.value, HuntCore.MAX_HABIT_TITLE_LENGTH) : "";
       if (!title) {
         flagInvalidField(tEl);
         return;
@@ -9713,7 +9726,7 @@ var HuntCore = (() => {
       const habit = {
         id: "hab-" + now + "-" + Math.random().toString(36).slice(2, 6),
         title,
-        notes: nEl ? nEl.value.trim() : "",
+        notes: nEl ? clampTitle(nEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         questId: selectedHabitQuestId || null,
         rank,
         createdAt: now,
@@ -9722,7 +9735,7 @@ var HuntCore = (() => {
       };
       if (kind === "count") {
         habit.target = target;
-        habit.unit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : "";
+        habit.unit = unitEl ? clampTitle(unitEl.value, HuntCore.MAX_COUNT_UNIT_LENGTH) : "";
       }
       const todayKey = toLocalDateKey(now);
       const frequencyHistory = HuntCore.withHabitFrequency(habit, frequency, todayKey);
@@ -9982,7 +9995,7 @@ var HuntCore = (() => {
       if (!h) { closeSheet(); return; }
       const tEl = document.getElementById("editHabitTitleInput");
       const nEl = document.getElementById("editHabitNotesInput");
-      const title = tEl ? tEl.value.trim().slice(0, 300) : "";
+      const title = tEl ? clampTitle(tEl.value, HuntCore.MAX_HABIT_TITLE_LENGTH) : "";
       if (!title) {
         flagInvalidField(tEl);
         return;
@@ -9999,7 +10012,7 @@ var HuntCore = (() => {
       const now = Date.now();
       const todayKey = toLocalDateKey(now);
       const prev = cloneJson(h);
-      const nextNotes = nEl ? nEl.value.trim() : (h.notes || "");
+      const nextNotes = nEl ? clampTitle(nEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : (h.notes || "");
       const nextQuestId = selectedHabitQuestId || null;
       let nextTarget = null;
       let nextUnit = null;
@@ -10011,7 +10024,7 @@ var HuntCore = (() => {
           flagInvalidField(targetEl);
           return;
         }
-        nextUnit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : (h.unit || "");
+        nextUnit = unitEl ? clampTitle(unitEl.value, HuntCore.MAX_COUNT_UNIT_LENGTH) : (h.unit || "");
       }
       const before = JSON.stringify(h);
       h.title = title;
@@ -10998,7 +11011,7 @@ var HuntCore = (() => {
     }
 
     function saveGuideTask() {
-      const title = guideTaskTitle.trim();
+      const title = clampTitle(guideTaskTitle, HuntCore.MAX_TASK_TITLE_LENGTH);
       if (!title) {
         const el = document.getElementById("guideTaskTitleInput");
         if (el) el.focus();
@@ -11014,7 +11027,7 @@ var HuntCore = (() => {
       state.tasks.push({
         id: "tsk-" + now + "-" + Math.random().toString(36).slice(2, 6),
         title,
-        notes: guideTaskNotes.trim(),
+        notes: clampTitle(guideTaskNotes, HuntCore.MAX_LONG_TEXT_LENGTH),
         questId: qId,
         status: "queued",
         rank,
@@ -11030,7 +11043,7 @@ var HuntCore = (() => {
     }
 
     function saveGuideQuest() {
-      const title = guideQuestTitle.trim();
+      const title = clampTitle(guideQuestTitle, HuntCore.MAX_QUEST_TITLE_LENGTH);
       const hrs = Number(guideQuestHours);
       if (!title) {
         const el = document.getElementById("guideQuestTitleInput");
@@ -11049,9 +11062,9 @@ var HuntCore = (() => {
       state.quests.push({
         id: "quest-" + now + "-" + Math.random().toString(36).slice(2, 6),
         slotIndex: activeQuestsList().length % 3,
-        code: title.slice(0, 10).toUpperCase(),
+        code: clampLength(title, 10).toUpperCase(),
         title,
-        description: guideQuestDesc.trim(),
+        description: clampTitle(guideQuestDesc, HuntCore.MAX_LONG_TEXT_LENGTH),
         accentColor: guideQuestColor || "cyan",
         targetWeeklyHours: Math.max(1, hrs),
         archived: false,

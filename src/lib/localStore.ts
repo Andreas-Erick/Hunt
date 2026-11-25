@@ -341,7 +341,7 @@ async function createQuest(params: {
   await db.quests.add({
     id: newId("quest", now),
     slotIndex: (activeCount % 3) as 0 | 1 | 2,
-    code: title.slice(0, 10).toUpperCase(),
+    code: clampLength(title, 10).toUpperCase(),
     title,
     description: clampTitle(description, MAX_LONG_TEXT_LENGTH),
     accentColor,
