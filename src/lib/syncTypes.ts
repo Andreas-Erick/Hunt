@@ -1,12 +1,5 @@
-import type {
-  ActiveFocusState,
-  Habit,
-  Quest,
-  QuestAccent,
-  Task,
-  TaskStatus,
-  TimeLog,
-} from "./domainTypes";
+import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
+import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
 
 export type { ActiveFocusState } from "./domainTypes";
 
@@ -331,7 +324,7 @@ const TASK_FIELDS: ReadonlySet<string> = new Set([
   "scheduledDate", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -516,6 +509,8 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
+  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
+  if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
   copyScalarExtras(habit, raw, HABIT_FIELDS);
   return habit as Habit;
 }

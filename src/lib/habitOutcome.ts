@@ -1,4 +1,5 @@
 import type { Habit, Task } from "./domainTypes";
+import { isHabitScheduledOn } from "./habitFrequency";
 
 /**
  * How a scheduled Habit day ended (GLOSSARY: Outcome). Derived, never stored.
@@ -29,12 +30,12 @@ export interface HabitDay {
 
 /**
  * SHARED Outcome rule: the Outcome of one Habit day, or null when the day has
- * none (yet): a day after today. A ticked day is Met; today, and a past day
- * whose focus is still running across midnight, are Open; any other past day is
- * Missed.
+ * none (yet): a day after today, or a day its Frequency did not ask for then. A
+ * ticked day is Met; today, and a past day whose focus is still running across
+ * midnight, are Open; any other past day is Missed.
  */
-export function habitDayOutcome({ dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
-  if (dayKey > todayKey) return null;
+export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
+  if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
   if (dayTask?.status === "completed") return "met";
   if (dayKey === todayKey || dayTask?.status === "active") return "open";
   return "missed";
@@ -43,15 +44,17 @@ export function habitDayOutcome({ dayKey, dayTask, todayKey }: HabitDay): HabitO
 /**
  * SHARED Streak rule: how many Met days in a row `outcomes` holds, newest
  * (today) first. Today while Open is passed over, so a Streak does not drop to
- * 0 each morning; any other non-Met day ends it. Reads only as far as the day
- * that ends the Streak, so `outcomes` may be an endless walk back in time.
+ * 0 each morning, and so is a day with no Outcome (unscheduled); any other
+ * non-Met day ends it. Reads only as far as the day that ends the Streak, so
+ * `outcomes` may be a long walk back in time, but it must end: a walk of only
+ * unscheduled days never ends the Streak.
  */
 export function habitStreakOf(outcomes: Iterable<HabitOutcome | null>): number {
   let streak = 0;
   let isToday = true;
   for (const outcome of outcomes) {
     if (outcome === "met") streak += 1;
-    else if (!(isToday && outcome === "open")) break;
+    else if (outcome !== null && !(isToday && outcome === "open")) break;
     isToday = false;
   }
   return streak;

@@ -105,8 +105,9 @@ describe("habitStreakOf (Streak from Outcomes, newest day first)", () => {
     expect(streak("met", "open", "met")).toBe(1);
   });
 
-  it("is ended by a day with no Outcome and is 0 for no days", () => {
-    expect(streak("met", null, "met")).toBe(1);
+  it("passes over a day with no Outcome (unscheduled) and is 0 for no days", () => {
+    expect(streak("met", null, "met")).toBe(2);
+    expect(streak(null, "met", null, null, "met", "missed")).toBe(2);
     expect(streak()).toBe(0);
   });
 

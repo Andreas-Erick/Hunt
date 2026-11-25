@@ -54,7 +54,7 @@ export function widgetAccent(accentColor: string | undefined): QuestAccent | "sl
 function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
   const quests = state.quests ?? [];
   const progress = computeQuestWeekProgress({ quests, logs: state.timeLogs ?? [], todayKey: dateKey });
-  const { summaryFor } = summarizeHabitDays(state.tasks ?? [], dateKey);
+  const { summaryFor } = summarizeHabitDays(state.tasks ?? [], dateKey, state.habits ?? []);
   return {
     dateKey,
     focusSeconds: progress.total.todaySeconds,

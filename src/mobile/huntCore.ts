@@ -20,6 +20,15 @@ export {
 export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
+  HABIT_WEEKDAYS,
+  habitFrequencyLabel,
+  habitFrequencyOn,
+  isHabitScheduledOn,
+  parseHabitFrequency,
+  sameHabitFrequency,
+  withHabitFrequency,
+} from "../lib/habitFrequency";
+export {
   canonicalString,
   compareRank,
   isSafeSyncId,
@@ -35,6 +44,8 @@ export {
   buildBurstLog,
   buildHabitTaskRow,
   completeTaskRow,
+  habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   pickNextFocusTask,
   sessionLogId,

@@ -49,6 +49,12 @@ associativity and idempotence over 400 seeds.
 - Tombstone lists are capped at 5,000 per collection
   (`MAX_TOMBSTONES_PER_KIND`). A device offline long enough
   to miss more deletions than that can bring old rows back.
+- A list stored inside a row merges with that row. A Habit's
+  Frequency history (`frequencyHistory`) is one such list: if
+  two devices change the Frequency while apart, the later
+  Habit row wins with its whole history. The validator
+  rebuilds the list from known shapes only
+  (`sanitizeHabitFrequencyHistory`), so it stays bounded.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator, and a Dexie table.
