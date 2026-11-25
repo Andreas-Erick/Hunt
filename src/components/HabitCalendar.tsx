@@ -89,7 +89,7 @@ function DayTotalForm({
       }}
       className="mt-2 flex flex-wrap items-center gap-2"
     >
-      <span className="min-w-0 break-words font-mono text-xs tabular-nums text-neutral-300 [overflow-wrap:anywhere]">
+      <span className="min-w-0 break-words text-xs tabular-nums text-neutral-300 [overflow-wrap:anywhere]">
         {countProgressLabel(habit, amount)}
       </span>
       <input
@@ -227,11 +227,17 @@ export function HabitCalendar({
         ))}
       </ul>
 
-      <div className={`mt-3 ${isCount ? "min-h-[8.5rem] coarse:min-h-[9.5rem]" : "min-h-[5.5rem]"} rounded-xl border border-white/[0.06] bg-sunken px-3 py-2.5`}>
+      <div className={`mt-3 ${isCount ? "min-h-[8.5rem] coarse:min-h-[10.5rem]" : "min-h-[6.5rem] coarse:min-h-[7rem]"} rounded-xl border border-white/[0.06] bg-sunken px-3 py-2.5`}>
         {chosen ? (
           <div>
             <div className="text-sm text-white">
-              {dayName(chosen)} · <span className="text-hud-muted">{chosen.outcome ? OUTCOME_LABEL[chosen.outcome] : ""}</span>
+              {dayName(chosen)}
+              {chosen.outcome && (
+                <>
+                  {" · "}
+                  <span className="text-hud-muted">{OUTCOME_LABEL[chosen.outcome]}</span>
+                </>
+              )}
             </div>
             {chosenWeek?.outcome && (
               <div className="mt-0.5 text-xs text-hud-muted">

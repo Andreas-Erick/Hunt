@@ -436,7 +436,7 @@ describe("Daily Habits — Desktop UI (HabitsView + CommandCenterView)", () => {
     await db.quests.put(makeQuest("q1", "Icelandic", 0));
 
     const habitsView = render(<HabitsView />);
-    expect(await screen.findByText(/No daily habits yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No habits yet/)).toBeInTheDocument();
 
     const input = screen.getByLabelText("Add a daily habit");
     fireEvent.change(input, { target: { value: "Practice speaking 15m" } });
@@ -472,14 +472,14 @@ describe("Daily Habits — Desktop UI (HabitsView + CommandCenterView)", () => {
     fireEvent.click(
       within(row).getByRole("button", { name: "Edit habit Practice speaking 15m" })
     );
-    const titleInput = screen.getByLabelText("Habit Title");
+    const titleInput = screen.getByLabelText("Habit title");
     fireEvent.keyDown(titleInput, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Habit title")).toBeNull());
 
     fireEvent.click(
       within(row).getByRole("button", { name: "Edit habit Practice speaking 15m" })
     );
-    fireEvent.change(screen.getByLabelText("Habit Title"), {
+    fireEvent.change(screen.getByLabelText("Habit title"), {
       target: { value: "Speak Icelandic 20m" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -536,7 +536,7 @@ describe("Daily Habits — Mobile Parity (hunt-mobile.html)", () => {
 
     p.switchView("habits");
     expect(p.document.getElementById("mainContainer")?.textContent).toContain(
-      "No daily habits yet"
+      "No habits yet"
     );
 
     p.openNewHabitSheet();

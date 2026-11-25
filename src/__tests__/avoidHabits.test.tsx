@@ -37,7 +37,7 @@ describe("Avoid Habits — desktop", () => {
 
   it("offers Avoid as a Habit Kind when the Habit is made", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Habit Kind" })).getByRole("radio", { name: "Avoid" }));
     fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "No alcohol" } });
     fireEvent.click(screen.getByRole("button", { name: "Add Habit" }));

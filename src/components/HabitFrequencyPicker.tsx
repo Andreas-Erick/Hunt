@@ -85,7 +85,7 @@ export function HabitFrequencyPicker({
         </button>
       )}
       {times !== null && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {TIMES.map((n) => (
             <button
               key={n}
@@ -102,7 +102,7 @@ export function HabitFrequencyPicker({
         </div>
       )}
       {chosen && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {HABIT_WEEKDAYS.map(({ day, label: short, name }) => {
             const on = chosen.includes(day);
             return (

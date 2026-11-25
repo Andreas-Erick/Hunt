@@ -43,7 +43,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
     >
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-2 font-mono text-xs text-hud-muted">
+          <span className="inline-flex items-center gap-2 text-xs text-hud-muted">
             <span className={`h-2 w-2 rounded-full ${style.bg}`} aria-hidden="true" />
             <span>Principle {principle.number}</span>
           </span>
@@ -61,7 +61,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
         </p>
 
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-base px-4 py-3">
-          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-hud-cyan">
+          <div className="text-[11px] font-medium text-hud-cyan">
             In Hunt
           </div>
           <p className="mt-1 max-w-[68ch] text-xs leading-relaxed text-neutral-200">
@@ -73,7 +73,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
       {/* Side-by-side Avoid vs. Aim For (adapts via @container query on PrincipleCard) */}
       <div className="cq-two-col mt-5">
         <div className="rounded-xl border border-hud-crimson/20 bg-hud-crimson/[0.04] p-3.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-hud-crimson">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-hud-crimson">
             <X className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Avoid</span>
           </div>
@@ -83,7 +83,7 @@ function PrincipleCard({ principle }: { principle: SciencePrinciple }) {
         </div>
 
         <div className="rounded-xl border border-hud-emerald/25 bg-hud-emerald/[0.05] p-3.5">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-hud-emerald">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-hud-emerald">
             <Check className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Aim for</span>
           </div>
@@ -229,7 +229,7 @@ export function GuideView() {
                 <button
                   type="button"
                   onClick={() => selectTab("tasks")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                  className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   <span>Next: Crafting Tasks</span>
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -240,7 +240,7 @@ export function GuideView() {
                     hudAudio.playClick();
                     setActiveView("quests");
                   }}
-                  className={`rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                  className={`min-h-8 coarse:min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   Go to Quests
                 </button>
@@ -270,7 +270,7 @@ export function GuideView() {
                 <button
                   type="button"
                   onClick={() => selectTab("workshop")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                  className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   <span>Try the Workshop</span>
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -278,7 +278,7 @@ export function GuideView() {
                 <button
                   type="button"
                   onClick={() => selectTab("system")}
-                  className={`rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                  className={`min-h-8 coarse:min-h-11 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                 >
                   See Weekly System
                 </button>
@@ -299,7 +299,7 @@ export function GuideView() {
                   >
                     <div>
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className={`font-mono text-xs font-medium ${style.text}`}>
+                        <span className={`text-xs font-medium ${style.text}`}>
                           {item.step}
                         </span>
                         <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-hud-muted">
@@ -323,7 +323,7 @@ export function GuideView() {
                           hudAudio.playClick();
                           setActiveView(item.view);
                         }}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
+                        className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-2 text-xs text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
                       >
                         <span>{item.viewLabel}</span>
                         <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

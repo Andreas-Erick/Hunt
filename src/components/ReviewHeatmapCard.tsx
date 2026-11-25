@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Flame, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Sparkles } from "lucide-react";
 import type { QuestAccent } from "@/lib/domainTypes";
 import {
   formatTelemetryDuration,
@@ -108,6 +108,12 @@ export function ReviewHeatmapCard({
   const palette = resolvePalette(paletteAccent);
   const shades = LEVEL_CLASSES[palette];
 
+  // Past and present days in date order, for the touch day stepper.
+  const pastCells = React.useMemo(
+    () => heatmap.columns.flatMap((col) => col.cells.filter((cell) => !cell.isFuture)),
+    [heatmap.columns]
+  );
+
   const selectedCell: HeatmapCell | null = React.useMemo(() => {
     for (const col of heatmap.columns) {
       for (const cell of col.cells) {
@@ -133,8 +139,8 @@ export function ReviewHeatmapCard({
     >
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-            Activity Heatmap · Last 26 Weeks
+          <div className="text-sm font-medium text-neutral-400">
+            Last 26 weeks
           </div>
           <p className="mt-1 text-xs text-hud-muted tabular-nums [overflow-wrap:anywhere]">
             {scopeTitle} · {count(heatmap.activeDays)} active{" "}
@@ -242,9 +248,40 @@ export function ReviewHeatmapCard({
 
       {/* Selected Day Readout + Intensity Legend */}
       <div className="mt-5 flex flex-col justify-between gap-3 border-t border-white/[0.06] pt-4 text-xs sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-center gap-2">
+        {/* The day squares are too small to tap reliably: touch steps day by day. */}
+        {(() => {
+          const index = selectedCell ? pastCells.findIndex((c) => c.dateKey === selectedCell.dateKey) : -1;
+          const step = (delta: -1 | 1) => {
+            const next = pastCells[index + delta];
+            if (next) setSelectedDateKey(next.dateKey);
+          };
+          return (
+            <div className="hidden shrink-0 items-center gap-2 coarse:flex">
+              <button
+                type="button"
+                aria-label="Show the day before"
+                disabled={index <= 0}
+                onClick={() => step(-1)}
+                className={`grid h-11 w-11 place-items-center rounded-lg border border-white/10 text-neutral-300 disabled:opacity-40 ${PRESSABLE}`}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Show the day after"
+                disabled={index === -1 || index >= pastCells.length - 1}
+                onClick={() => step(1)}
+                className={`grid h-11 w-11 place-items-center rounded-lg border border-white/10 text-neutral-300 disabled:opacity-40 ${PRESSABLE}`}
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })()}
         <div
           data-testid="heatmap-inspector"
-          className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-neutral-300"
+          className="flex flex-wrap items-center gap-2 tabular-nums text-neutral-300"
         >
           {selectedCell ? (
             <>
@@ -276,6 +313,7 @@ export function ReviewHeatmapCard({
               Select any day square to inspect logged hours and completed tasks.
             </span>
           )}
+        </div>
         </div>
 
         <div className="flex items-center gap-1.5 text-[11px] text-hud-muted">

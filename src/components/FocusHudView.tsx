@@ -217,12 +217,12 @@ export function FocusHudView() {
           )}
         </div>
 
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-hud-muted">
-          {lastCompletedFeedback && topQueuedTask ? "Up Next" : "Focus Mode"}
-        </p>
+        {lastCompletedFeedback && topQueuedTask && (
+          <p className="mb-5 text-sm font-medium text-hud-muted">Up next</p>
+        )}
 
         {topQueuedTask ? (
-          <div className="mt-5 flex w-full max-w-2xl flex-col items-center space-y-6">
+          <div className="flex w-full max-w-3xl flex-col items-center">
             {topQueuedQuest && (
               <div
                 className={`flex max-w-full items-center gap-2 rounded-full border ${nextQuestStyle.border} bg-white/[0.02] px-3.5 py-1 text-xs text-neutral-200`}
@@ -235,22 +235,38 @@ export function FocusHudView() {
                 </span>
               </div>
             )}
-            <h2 className="break-words [text-wrap:balance] text-2xl font-medium leading-snug text-white sm:text-3xl">
+            <h2 className="mt-4 sm:mt-6 w-full max-w-2xl break-words [text-wrap:balance] text-[clamp(1.35rem,2.4vw+0.8rem,2.25rem)] font-normal leading-snug text-white">
               {topQueuedTask.title}
             </h2>
+
+            {/* The clock at rest: the running stage's clock, dimmed, showing
+                what this task has logged so far. Starting the session wakes it. */}
+            <div
+              data-testid="focus-idle-clock"
+              aria-hidden="true"
+              className="focus-fluid-chrono my-6 sm:my-8 max-w-full select-none font-chrono text-7xl font-medium leading-none tracking-tight text-white/20 tabular-nums sm:text-[8.5rem] md:text-[9.5rem]"
+            >
+              {formatChronoMMSS(topQueuedTask.accumulatedSeconds || 0).formatted}
+            </div>
+            <span className="sr-only">
+              {formatChronoMMSS(topQueuedTask.accumulatedSeconds || 0).formatted}{" "}
+              logged so far
+            </span>
+
             <button
               type="button"
               onClick={() => {
                 hudAudio.playLockOn();
                 initializeFocus(topQueuedTask.id);
               }}
-              className="rounded-xl bg-accent px-7 py-3.5 text-sm font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98]"
+              className="flex min-w-[148px] items-center justify-center gap-2.5 rounded-xl bg-accent px-7 py-3.5 text-sm font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-accent-hi active:scale-[0.98]"
             >
-              Start Focus Session
+              <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+              Start focus
             </button>
           </div>
         ) : (
-          <p className="mt-4 text-base text-neutral-400">
+          <p className="text-base text-neutral-400">
             All tasks completed for today.
           </p>
         )}
@@ -258,9 +274,10 @@ export function FocusHudView() {
         <button
           type="button"
           onClick={() => returnToQueue()}
-          className="mt-8 rounded-lg px-3 py-2 coarse:py-3 text-sm text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
+          className="mt-6 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 coarse:py-3 text-sm text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
         >
-          ← Back to Home
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to Home
         </button>
         </div>
       </div>
@@ -272,13 +289,13 @@ export function FocusHudView() {
   const chrono = formatChronoMMSS(totalElapsedSeconds);
   const style = accentStyle(linkedQuest ? linkedQuest.accentColor : "slate");
   const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-  const topBarLabel = `Focus · ${linkedQuest ? linkedQuest.title : "Other Work"}`;
+  const topBarLabel = `Focus · ${linkedQuest ? linkedQuest.title : "Other work"}`;
 
   return (
     <div className="focus-stage-shell mx-auto flex min-h-screen min-h-[100dvh] w-full max-w-[1440px] flex-col justify-between bg-base px-4 py-6 sm:px-14 sm:py-10">
       {/* Top Bar: "● FOCUS · QUEST NAME" on Left, "←" Back Arrow on Right */}
       <div className="flex w-full items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-2.5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
+        <div className="flex min-w-0 items-center gap-2.5 text-xs font-medium text-neutral-400">
           <span className={`h-2 w-2 shrink-0 rounded-full ${style.bg}`} />
           <span className="truncate" title={topBarLabel}>
             {topBarLabel}
@@ -292,11 +309,11 @@ export function FocusHudView() {
               hudAudio.playClick();
               returnToQueue();
             }}
-            title="Return to Home"
-            aria-label="Return to Home"
-            className="shrink-0 rounded-lg p-2 coarse:p-3 text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.98]"
+            aria-label="End session and return to Home"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 coarse:py-3 text-sm text-neutral-400 hover:bg-white/[0.05] hover:text-white transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.98]"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            <span>End session</span>
           </button>
 
           <span
@@ -336,13 +353,13 @@ export function FocusHudView() {
         {/* Giant Tabular-Nums Timer */}
         <div
           data-testid="focus-timer"
-          className="focus-fluid-chrono my-6 sm:my-8 max-w-full select-none font-chrono text-7xl font-medium leading-none tracking-tight text-white tabular-nums sm:text-[8.5rem] md:text-[9.5rem]"
+          className="focus-fluid-chrono focus-chrono-wake my-6 sm:my-8 max-w-full select-none font-chrono text-7xl font-medium leading-none tracking-tight text-white tabular-nums sm:text-[8.5rem] md:text-[9.5rem]"
         >
           {chrono.formatted}
         </div>
 
         {/* RUNNING / PAUSED Status Label */}
-        <div className="focus-status-label mb-8 sm:mb-10 text-xs font-medium uppercase tracking-[0.22em] text-hud-muted">
+        <div className="focus-status-label mb-8 sm:mb-10 text-sm font-medium text-hud-muted">
           {isRunning ? "Running" : "Paused"}
         </div>
 
@@ -423,7 +440,7 @@ export function FocusHudView() {
               <button
                 type="button"
                 onClick={() => setChecklistOpenForTaskId(activeTask.id)}
-                className="-my-2 ml-2 rounded-lg px-3 py-2 coarse:py-3 text-xs text-hud-muted transition-colors hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
+                className={`${activeTask.notes || notesOpenForTaskId === activeTask.id ? "mt-3" : "-my-2 ml-2"} rounded-lg px-3 py-2 coarse:py-3 text-xs text-hud-muted transition-colors hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80`}
               >
                 + Add checklist
               </button>

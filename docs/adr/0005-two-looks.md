@@ -64,7 +64,13 @@ page never flashes the other look.
 
 - New UI uses token classes (`bg-surface`, `text-accent`).
   A hex literal in a component is a review finding.
-- Dawn-only details (serif titles, sentence-case labels,
-  the Focus sun arc) hang off `[data-theme="dawn"]` in CSS
-  rather than branches in components.
+- Dawn-only details (serif titles, the Focus sun arc) hang
+  off `[data-theme="dawn"]` in CSS rather than branches in
+  components.
+- Section labels are sentence case in both looks
+  (2026-11-25). Tracked capitals read as template chrome
+  rather than Neon's character, which lives in the palette,
+  the glows and the mono clock. The phone keeps the
+  `--label-case` and `--label-track` tokens, now `none` and
+  `0` in both looks.
 - Two devices can show different looks. That is intended.

@@ -151,7 +151,7 @@ describe("module size ratchet", () => {
   const FROZEN: Record<string, number> = {
     "src/components/GuideLabSection.tsx": 767,
     "src/components/MobileSyncModal.tsx": 772,
-    "src/components/PlanWeekView.tsx": 809,
+    "src/components/PlanWeekView.tsx": 737,
     "src/components/QuestMatrixPanel.tsx": 1161,
     "src/components/TelemetryDashboardView.tsx": 929,
     "src/lib/questScience.ts": 618,

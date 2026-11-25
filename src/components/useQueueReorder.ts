@@ -31,6 +31,11 @@ export interface QueueReorder {
   dragOverTaskId: string | null;
   /** Drag-and-drop and Alt+↑/↓ handlers for the row of `taskId`. */
   rowHandlers: (taskId: string) => QueueRowReorderHandlers;
+  /**
+   * Moves `taskId` one place up (-1) or down (1) in the visible queue, the
+   * touch equivalent of Alt+↑/↓; undefined at the list end it can't move past.
+   */
+  moveBy: (taskId: string, step: -1 | 1) => (() => void) | undefined;
 }
 
 /**
@@ -114,8 +119,12 @@ export function useQueueReorder(
     if (step === 0 || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (isTextEntryTarget(e.target)) return;
     e.preventDefault();
-    if (e.repeat || keyboardMoveRef.current) return;
+    if (e.repeat) return;
+    await moveByStep(taskId, step);
+  };
 
+  const moveByStep = async (taskId: string, step: -1 | 1) => {
+    if (keyboardMoveRef.current) return;
     const index = queue.findIndex((t) => t.id === taskId);
     const neighbour = index === -1 ? undefined : queue[index + step];
     if (!neighbour) return;
@@ -144,5 +153,11 @@ export function useQueueReorder(
     onDragEnd: clearDrag,
   });
 
-  return { dragOverTaskId, rowHandlers };
+  const moveBy = (taskId: string, step: -1 | 1) => {
+    const index = queue.findIndex((t) => t.id === taskId);
+    if (index === -1 || !queue[index + step]) return undefined;
+    return () => void moveByStep(taskId, step);
+  };
+
+  return { dragOverTaskId, rowHandlers, moveBy };
 }

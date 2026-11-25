@@ -230,7 +230,7 @@ export function TopTelemetryBar() {
                 type="button"
                 onClick={() => setActiveView("command")}
                 aria-label="Hunt, go to Home"
-                className="group flex shrink-0 items-center gap-2.5 text-left"
+                className="group flex shrink-0 items-center justify-center gap-2.5 rounded-lg text-left coarse:min-h-11 coarse:min-w-11 active:opacity-80"
               >
                 <HuntLogo
                   size={36}
@@ -251,7 +251,7 @@ export function TopTelemetryBar() {
 
             <nav
               ref={navRef}
-              className="scroll-shadow-x -my-1 flex min-w-0 items-center gap-1.5 overflow-x-auto no-scrollbar px-1 py-1 [--scroll-shadow-cover:rgb(var(--c-base))] [--scroll-shadow-cover-clear:rgb(var(--c-base)_/_0)]"
+              className="scroll-shadow-x -my-1 flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar px-1 py-1 [--scroll-shadow-cover:rgb(var(--c-base))] [--scroll-shadow-cover-clear:rgb(var(--c-base)_/_0)]"
             >
               {NAV_ITEMS.map((item) => {
                 const isActive =
@@ -288,14 +288,17 @@ export function TopTelemetryBar() {
             {/* Mobile & Cross-Device Sync Button */}
             <PhoneSyncButton onOpen={() => setSyncModalOpen(true)} />
 
-            <LookSwitch />
+            {/* Below sm the nav needs the room; Look and sound stay one resize away. */}
+            <span className="hidden sm:inline-flex">
+              <LookSwitch />
+            </span>
 
             <button
               type="button"
               onClick={handleToggleMute}
               title={muted ? "Unmute interface audio" : "Mute interface audio"}
               aria-label={muted ? "Unmute interface audio" : "Mute interface audio"}
-              className="inline-flex items-center justify-center coarse:min-h-11 coarse:min-w-11 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
+              className="hidden sm:inline-flex items-center justify-center coarse:min-h-11 coarse:min-w-11 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 sm:p-2.5 text-neutral-400 hover:border-white/15 hover:text-white transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98]"
             >
               {muted ? (
                 <VolumeX className="h-4 w-4" />

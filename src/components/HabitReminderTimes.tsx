@@ -85,7 +85,7 @@ export function HabitReminderTimes({
           </span>
         ))}
         {!full && (
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-2">
             <input
               type="time"
               value={draft}

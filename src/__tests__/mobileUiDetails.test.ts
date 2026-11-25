@@ -386,7 +386,7 @@ describe("Quests view groups tasks in one pass", () => {
     const text = (i: number) => cards[i].textContent ?? "";
     const order = (i: number, titles: string[]) => titles.map((t) => text(i).indexOf(t));
 
-    expect(text(0)).toContain("Next Steps (2)");
+    expect(text(0)).toContain("Next steps (2)");
     const pending = order(0, ["Alpha first", "Alpha late"]);
     expect(pending.every((x) => x >= 0)).toBe(true);
     expect(pending[0]).toBeLessThan(pending[1]);
@@ -399,7 +399,7 @@ describe("Quests view groups tasks in one pass", () => {
     expect(text(0)).not.toContain("Done yesterday");
     expect(text(0)).not.toContain("No quest");
 
-    expect(text(1)).toContain("Next Steps (1)");
+    expect(text(1)).toContain("Next steps (1)");
     expect(text(1)).toContain("Beta only");
     expect(text(1)).not.toContain("Completed today");
     expect(localKey(yesterday)).not.toBe(localKey(NOW));

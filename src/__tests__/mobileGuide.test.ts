@@ -92,7 +92,7 @@ describe("mobile Quest & Task Guide", () => {
     expect(tabs().map((t) => t.getAttribute("aria-pressed"))).toEqual(["false", "true", "false", "false"]);
 
     click(p, tabs()[2]);
-    expect(p.document.getElementById("mainContainer")?.textContent).toContain("30-Second Pre-Flight Checklist");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("30-second pre-flight checklist");
 
     click(p, tabs()[3]);
     expect(p.document.querySelector('[data-guide-audit="quests"]')?.textContent).toBe("1");

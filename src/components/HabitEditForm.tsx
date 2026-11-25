@@ -113,7 +113,7 @@ export function HabitEditForm({
     >
       <div>
         <label htmlFor={titleId} className="mb-1 block text-xs text-neutral-400">
-          Habit Title
+          Habit title
         </label>
         <input
           id={titleId}
@@ -122,19 +122,19 @@ export function HabitEditForm({
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
+          className="min-h-8 coarse:min-h-11 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
         />
       </div>
 
       <div>
-        <label htmlFor={notesId} className="mb-1 block text-xs text-neutral-400">Default Notes</label>
+        <label htmlFor={notesId} className="mb-1 block text-xs text-neutral-400">Default notes</label>
         <input
           id={notesId}
           type="text"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Optional reminder copied to each day's task..."
-          className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent focus:outline-none"
+          className="min-h-8 coarse:min-h-11 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent focus:outline-none"
         />
       </div>
 

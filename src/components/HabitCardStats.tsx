@@ -90,24 +90,30 @@ export function HabitCardStats({
         ))}
       </ul>
       {summary.week && (
-        <span className="font-mono text-xs tabular-nums text-hud-muted">
+        <span className="text-xs tabular-nums text-hud-muted">
           {summary.week.met} / {summary.week.target} this week
         </span>
       )}
-      {summary.streak > 0 && (
-        <span className="font-mono text-xs tabular-nums text-neutral-300">
-          {summary.streak}
-          {summary.streakUnit === "week" ? "w" : "d"} streak
-        </span>
-      )}
-      {rate !== null && (
+      {/* Streak and Success Rate keep their width when empty, so the week
+          strips line up from card to card. */}
+      <span className="min-w-16 text-right text-xs tabular-nums text-neutral-300">
+        {summary.streak > 0 && (
+          <>
+            {summary.streak}
+            {summary.streakUnit === "week" ? "w" : "d"} streak
+          </>
+        )}
+      </span>
+      {rate !== null ? (
         <span
           aria-label={`Success Rate ${rate}`}
           title={`Success Rate: Met ${summary.streakUnit === "week" ? "weeks" : "days"} out of Met and Missed ones since the habit began`}
-          className="font-mono text-xs tabular-nums text-hud-muted"
+          className="min-w-9 text-right text-xs tabular-nums text-hud-muted"
         >
           {rate}
         </span>
+      ) : (
+        <span aria-hidden="true" className="min-w-9" />
       )}
     </>
   );

@@ -41,7 +41,7 @@ describe("the Lists section", () => {
     render(<ListsView />);
     expect(await screen.findByText(/No Lists yet/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("New List name"), { target: { value: "Weekly shop" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create List" }));
+    fireEvent.click(screen.getByRole("button", { name: "New List" }));
     await waitFor(async () => expect((await db.lists.toArray()).map((l) => l.title)).toEqual(["Weekly shop"]));
     expect(await screen.findByRole("region", { name: "Weekly shop" })).toBeTruthy();
   });
@@ -79,7 +79,10 @@ describe("the Lists section", () => {
     // the still-disabled button would do nothing (the flake this wait removes).
     const clear = within(card).getByRole("button", { name: "Clear ticked" });
     await waitFor(() => expect(clear.hasAttribute("disabled")).toBe(false));
+    // Two steps: the first click only arms it, so one stray tap deletes nothing.
     fireEvent.click(clear);
+    expect((await listRow())?.items).toHaveLength(seedList().items.length);
+    fireEvent.click(within(card).getByRole("button", { name: /^Delete \d+ ticked\?$/ }));
     await waitFor(async () => expect((await listRow())?.items).toEqual([item("chk-2", "Bread")]));
     await waitFor(() => expect(within(card).getByRole("button", { name: "Clear ticked" }).hasAttribute("disabled")).toBe(true));
   });

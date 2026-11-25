@@ -70,7 +70,7 @@ function AmountChart({ habit, todayKey, amountOn, metClass }: StatsProps) {
         prev={month.prevMonthKey ? () => setMonthKey(month.prevMonthKey!) : null}
         next={month.nextMonthKey ? () => setMonthKey(month.nextMonthKey!) : null}
       />
-      <div className="relative mt-3 h-32 border-b border-white/[0.15]">
+      <div className="relative mt-6 h-32 border-b border-white/[0.15]">
         <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-white/50" style={{ bottom: pct(target) }} aria-hidden="true">
           <span className="absolute -top-4 right-0 text-[10px] tabular-nums text-hud-muted">target {formatCountTotal(target)}</span>
         </div>

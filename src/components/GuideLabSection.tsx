@@ -289,13 +289,13 @@ export function GuideLabSection() {
             <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
               {/* Active Quests KPI */}
               <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
-                <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
+                <div className="text-xs text-hud-muted">
                   Active Quests
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-quest-count"
-                    className={`font-mono text-2xl font-medium tabular-nums ${
+                    className={`text-2xl font-medium tabular-nums ${
                       audit.questLoadStatus === "optimal"
                         ? "text-hud-emerald"
                         : audit.questLoadStatus === "empty"
@@ -314,13 +314,13 @@ export function GuideLabSection() {
 
               {/* Weekly Deep-Work Budget KPI */}
               <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
-                <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
+                <div className="text-xs text-hud-muted">
                   Weekly Target Budget
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-weekly-hours"
-                    className={`font-mono text-2xl font-medium tabular-nums ${
+                    className={`text-2xl font-medium tabular-nums ${
                       audit.budgetStatus === "sustainable"
                         ? "text-hud-emerald"
                         : audit.budgetStatus === "overbooked"
@@ -339,13 +339,13 @@ export function GuideLabSection() {
 
               {/* Open Task Clarity KPI */}
               <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
-                <div className="text-xs uppercase tracking-[0.14em] text-hud-muted">
+                <div className="text-xs text-hud-muted">
                   Open Task Clarity
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
                     data-testid="audit-task-clarity"
-                    className={`font-mono text-2xl font-medium tabular-nums ${
+                    className={`text-2xl font-medium tabular-nums ${
                       audit.openTaskCount === 0
                         ? "text-neutral-300"
                         : audit.clarityPct >= 70
@@ -372,7 +372,7 @@ export function GuideLabSection() {
             {audit.tasksToSharpen.length > 0 && (
               <div className="rounded-2xl border border-white/[0.08] bg-surface p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
+                  <span className="text-xs font-medium text-hud-muted">
                     Open tasks you could sharpen ({audit.tasksToSharpen.length})
                   </span>
                   <button
@@ -600,7 +600,7 @@ export function GuideLabSection() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className={`inline-flex items-center gap-1.5 rounded-xl bg-hud-cyan px-4 py-2 text-xs font-semibold text-black hover:bg-white disabled:opacity-50 ${PRESSABLE}`}
+                  className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-xl bg-hud-cyan px-4 py-2 text-xs font-semibold text-black hover:bg-white disabled:opacity-50 ${PRESSABLE}`}
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Add to Today&apos;s Queue</span>
@@ -697,7 +697,7 @@ export function GuideLabSection() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className={`inline-flex items-center gap-1.5 rounded-xl bg-hud-cyan px-4 py-2 text-xs font-semibold text-black hover:bg-white disabled:opacity-50 ${PRESSABLE}`}
+                  className={`inline-flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-xl bg-hud-cyan px-4 py-2 text-xs font-semibold text-black hover:bg-white disabled:opacity-50 ${PRESSABLE}`}
                 >
                   <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Create Quest</span>
@@ -710,7 +710,7 @@ export function GuideLabSection() {
           {/* Right: Live Science Evaluation */}
           <div className="min-w-0 rounded-xl border border-white/[0.06] bg-base p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
+              <span className="text-xs font-medium text-hud-muted">
                 Science check
               </span>
               <VerdictBadge evaluation={activeEvaluation} />

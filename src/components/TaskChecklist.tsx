@@ -23,7 +23,7 @@ export function ChecklistProgressBadge({ task }: { task: ChecklistTask }) {
   return (
     <span
       aria-label={`Checklist: ${progress.done} of ${progress.total} done`}
-      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/[0.07] bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] tabular-nums ${
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/[0.07] bg-white/[0.02] px-2 py-0.5 text-[11px] tabular-nums ${
         complete ? "text-success" : "text-hud-muted"
       }`}
     >
@@ -49,7 +49,7 @@ export function TaskChecklistEditor({ task, className = "" }: { task: ChecklistT
   if (!canHoldChecklist(task)) return null;
   return (
     <div role="group" aria-label="Checklist" className={`space-y-1.5 ${className}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wider text-hud-muted">Checklist</div>
+      <div className="text-xs font-medium text-hud-muted">Checklist</div>
       <ChecklistItemsEditor
         items={checklistOf(task)}
         onEdit={(change) => void editChecklist(task.id, change)}
@@ -85,7 +85,7 @@ export function ChecklistItemsEditor({ items, onEdit: edit, newItemLabel, addLab
   return (
     <>
       {items.length > 0 && (
-        <ul className="space-y-0.5">
+        <ul className="space-y-2">
           {items.map((item, index) => (
             <ChecklistItemRow
               key={item.id}

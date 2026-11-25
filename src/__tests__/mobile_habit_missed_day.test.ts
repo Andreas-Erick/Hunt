@@ -114,7 +114,7 @@ describe("phone: a missed daily habit never shows up twice the next day", () => 
     const p = load({ seedState: state([missedRow()]) });
     p.switchView("quests");
     expect(cardIds(p).filter((id) => id.includes(HABIT_ID))).toEqual([TODAY_TID]);
-    expect(p.document.body.textContent).toContain("Next Steps (1)");
+    expect(p.document.body.textContent).toContain("Next steps (1)");
     expect(pageErrors(p)).toEqual([]);
   });
 

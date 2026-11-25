@@ -293,7 +293,7 @@ describe("FocusHudView", () => {
       expect(
         await screen.findByRole("heading", { level: 2, name: "Bravo" })
       ).toBeInTheDocument();
-      const startNext = screen.getByRole("button", { name: "Start Focus Session" });
+      const startNext = screen.getByRole("button", { name: "Start focus" });
       expect(startNext).toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent(/Completed\s+Alpha/);
 
@@ -510,7 +510,7 @@ describe("FocusHudView", () => {
       render(<FocusHudView />);
 
       expect(screen.queryByText(ALL_DONE)).toBeNull();
-      expect(screen.queryByText("Start Focus Session")).toBeNull();
+      expect(screen.queryByText("Start focus")).toBeNull();
       await heading("Alpha");
       expect(screen.queryByText(ALL_DONE)).toBeNull();
     });
@@ -549,7 +549,7 @@ describe("FocusHudView", () => {
       async (_label, tasks) => {
         await seed({ tasks });
         render(<FocusHudView />);
-        const start = await screen.findByRole("button", { name: "Start Focus Session" });
+        const start = await screen.findByRole("button", { name: "Start focus" });
 
         // initializeFocus marks the task active (the queue query re-runs) before
         // the view has read the newly focused task.
@@ -590,7 +590,7 @@ describe("FocusHudView", () => {
       expect(await screen.findByText(ALL_DONE)).toBeInTheDocument();
       expect(screen.queryByText("Next week")).toBeNull();
       expect(
-        screen.queryByRole("button", { name: "Start Focus Session" })
+        screen.queryByRole("button", { name: "Start focus" })
       ).toBeNull();
     });
 
@@ -616,7 +616,7 @@ describe("FocusHudView", () => {
       expect(
         await screen.findByRole("heading", { level: 2, name: "Overdue quest work" })
       ).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Start Focus Session" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start focus" }));
       expect(initializeFocus).toHaveBeenCalledWith("tsk-overdue");
     });
   });
@@ -656,7 +656,7 @@ describe("FocusHudView", () => {
       expect(topBar).toHaveClass("truncate");
       expect(topBar.parentElement).toHaveClass("min-w-0");
       expect(
-        screen.getByRole("button", { name: "Return to Home" })
+        screen.getByRole("button", { name: "End session and return to Home" })
       ).toHaveClass("shrink-0");
 
       const timer = screen.getByTestId("focus-timer");
@@ -689,7 +689,7 @@ describe("FocusHudView", () => {
       // The idle screen (nothing focused, one task queued).
       await useCommandStore.getState().returnToQueue();
       render(<FocusHudView />);
-      await screen.findByRole("button", { name: "Start Focus Session" });
+      await screen.findByRole("button", { name: "Start focus" });
       for (const button of screen.getAllByRole("button")) {
         expect(button).toHaveAccessibleName();
       }
@@ -1479,7 +1479,7 @@ describe("QuestMatrixPanel", () => {
       expect(within(card("quest-v")).getByText("Violet task")).toBeInTheDocument();
       // No logs this week: once loaded, the hours read 0.0h (not the loading dash).
       expect(await within(card("quest-v")).findByText("0.0h")).toBeInTheDocument();
-      expect(within(card("quest-v")).getByText("Next Steps (1)")).toBeInTheDocument();
+      expect(within(card("quest-v")).getByText("Next steps (1)")).toBeInTheDocument();
 
       // The drawer opens; no accent pill claims to be selected.
       fireEvent.click(editToggle("Violet quest"));

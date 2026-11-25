@@ -93,7 +93,7 @@ export function TaskComposer({
           }}
           placeholder="Add quest work..."
           aria-label="Add quest work"
-          className="flex-1 bg-transparent px-1 py-1 text-base text-white placeholder:text-hud-muted focus:outline-none"
+          className="min-h-8 coarse:min-h-11 flex-1 bg-transparent px-1 py-1 text-base text-white placeholder:text-hud-muted focus:outline-none"
         />
 
         <div className="flex items-center justify-end gap-2">

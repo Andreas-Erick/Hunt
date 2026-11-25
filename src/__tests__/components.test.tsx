@@ -129,7 +129,7 @@ describe("UI Components & User Workflows", () => {
         ).toBeGreaterThan(0);
       });
 
-      expect(screen.getByText(/Today's Timeline/i)).toBeInTheDocument();
+      expect(screen.getByText(/Today's timeline/i)).toBeInTheDocument();
 
       const input = screen.getByPlaceholderText("Add quest work...");
       fireEvent.change(input, { target: { value: "Ship mobile PWA manifest" } });
@@ -205,7 +205,7 @@ describe("UI Components & User Workflows", () => {
       ).toBeInTheDocument();
 
       await waitFor(() => {
-        expect(screen.getByText("Quest Hours · Per Day")).toBeInTheDocument();
+        expect(screen.getByText("Quest hours per day")).toBeInTheDocument();
         expect(screen.getByText("Hours by Quest")).toBeInTheDocument();
       });
     });

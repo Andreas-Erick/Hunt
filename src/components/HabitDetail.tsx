@@ -91,7 +91,7 @@ export function HabitDetail({
         if (e.target === e.currentTarget && pressOnBackdrop.current) onClose();
         pressOnBackdrop.current = false;
       }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-start sm:p-4 sm:pt-[8vh]"
     >
       <div
         ref={dialogRef}

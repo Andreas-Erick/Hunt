@@ -209,7 +209,7 @@ describe("desktop Habit detail: Edit tab", () => {
   it("asks before closing the screen with unsaved edits", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const form = await openEditTab();
-    fireEvent.change(within(form).getByLabelText("Habit Title"), { target: { value: "Stretch more" } });
+    fireEvent.change(within(form).getByLabelText("Habit title"), { target: { value: "Stretch more" } });
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(confirm).toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();

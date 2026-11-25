@@ -72,7 +72,8 @@ const config: Config = {
           orange: token("q-orange"),
           lime: token("q-lime"),
           slate: token("q-slate"),
-          // Secondary text / placeholders: >= 5.9:1 (WCAG AA) on every ground in both looks.
+          // Secondary text / placeholders: >= 5.0:1 (WCAG AA) on void through raised-2 in both
+          // looks; ~4.4:1 on edge, so never use it as text on an `edge` fill.
           muted: token("c-muted"),
           border: "rgb(var(--c-accent) / 0.18)",
         },
@@ -111,6 +112,13 @@ const config: Config = {
           "100%": { transform: "translateY(1000%)" },
         },
       },
+    },
+    // `text-base` must stay the 16px font size only. With the `base` ground in the text
+    // colours it also painted text in the page background colour (invisible wherever the
+    // generated colour rule outranked the element's own text colour).
+    textColor: ({ theme }) => {
+      const { base: _base, ...colors } = theme("colors");
+      return colors;
     },
   },
   plugins: [
