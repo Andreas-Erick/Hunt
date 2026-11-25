@@ -54,8 +54,9 @@ export function saveLook(look: Look): boolean {
 
 /**
  * Runs in the document head before first paint, so a Dawn device never
- * flashes Neon. Kept dependency-free: it is inlined as a string.
+ * flashes Neon. Kept dependency-free: it is inlined as a string. Blocked
+ * storage leaves the default look, which the app then applies itself.
  */
 export const LOOK_BOOT_SCRIPT = `(function(){try{var l=localStorage.getItem(${JSON.stringify(
   LOOK_STORAGE_KEY
-)});if(l==="neon"||l==="dawn"){document.documentElement.dataset.theme=l;}}catch(e){}})();`;
+)});if(l==="neon"||l==="dawn"){document.documentElement.dataset.theme=l;}}catch(e){/* default look */}})();`;

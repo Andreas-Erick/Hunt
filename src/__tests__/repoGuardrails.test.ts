@@ -95,6 +95,23 @@ describe("phone page uses the shared core for domain rows", () => {
 });
 
 // ---------------------------------------------------------------------------
+// CODING_STANDARDS "Empty catch": a swallowed error says why losing it is safe
+// ---------------------------------------------------------------------------
+describe("no silent catch blocks", () => {
+  const EMPTY_CATCH = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/g;
+  const emptyCatches = (file: string, text: string) =>
+    [...text.matchAll(EMPTY_CATCH)].map((m) => `${file}:${text.slice(0, m.index).split("\n").length}`);
+
+  it("every empty catch in the desktop source and the phone page carries a comment", () => {
+    const offenders = [
+      ...productionFiles.flatMap((f) => emptyCatches(rel(f), fs.readFileSync(f, "utf8"))),
+      ...emptyCatches("public/hunt-mobile.html", read("public", "hunt-mobile.html")),
+    ];
+    expect(offenders, "write `catch (e) { /* why losing this error is safe */ }`").toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests are named after behaviour and exercise behaviour
 // ---------------------------------------------------------------------------
 describe("tests describe behaviour", () => {
