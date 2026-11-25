@@ -49,6 +49,11 @@ associativity and idempotence over 400 seeds.
 - Tombstone lists are capped at 5,000 per collection
   (`MAX_TOMBSTONES_PER_KIND`). A device offline long enough
   to miss more deletions than that can bring old rows back.
+- A Count Habit stores one running total per day, and the
+  whole row wins or loses. If two devices each add to the
+  same day while out of sync, one of the additions is lost.
+  This is accepted for the same reason: one person, rarely
+  logging on two devices at once.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator, and a Dexie table.
