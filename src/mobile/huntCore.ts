@@ -17,7 +17,8 @@ export {
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey } from "../lib/habitDay";
+export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
+export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
   canonicalString,
   compareRank,
