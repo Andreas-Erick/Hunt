@@ -30,7 +30,7 @@
     "dexie": "^4.0.10",
     "dexie-react-hooks": "^1.1.7",
     "framer-motion": "^11.15.0",
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^1.77.0",
     "next": "^16.4.6",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
