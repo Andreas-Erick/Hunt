@@ -61,7 +61,11 @@ export function HabitSkipToday({
   );
 }
 
-/** A Habit card's last days as dots, oldest first: Met, Skipped, today Open, other days unmet. */
+/**
+ * A Habit card's recent days, oldest first: a dot per scheduled day (filled
+ * when Met, dashed when Skipped, ringed for today while Open, dim when Missed)
+ * and a short dash for a day with no Outcome (the Frequency did not ask for it).
+ */
 export function HabitRecentDays({
   days,
   todayKey,
@@ -82,6 +86,11 @@ export function HabitRecentDays({
     >
       {days.map((dKey) => {
         const outcome = outcomeOn(dKey);
+        if (outcome === null) {
+          return (
+            <span key={dKey} title={`${dKey}: Not scheduled`} className="h-0.5 w-2 rounded-full bg-white/[0.12]" />
+          );
+        }
         const label =
           outcome === "met" ? "Completed" : outcome === "skipped" ? "Skipped" : "Not completed";
         const look =

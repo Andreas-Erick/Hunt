@@ -1,5 +1,6 @@
 import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
-import type { Task } from "./domainTypes";
+import type { Habit, Task } from "./domainTypes";
+import { isHabitScheduledOn } from "./habitFrequency";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -59,14 +60,36 @@ function addDayTask(days: Map<string, Task>, task: Task, day: string): void {
 }
 
 /**
+ * The first day a Habit could have been Met: the earlier of the day it was
+ * created and its first day Task, else today. The Streak walk ends there.
+ */
+function firstHabitDay(
+  habit: Partial<Habit>,
+  dayTasks: ReadonlyMap<string, Task> | undefined,
+  todayKey: string
+): string {
+  let first = todayKey;
+  if (isStampValue(habit.createdAt)) {
+    const created = toLocalDateKey(habit.createdAt);
+    if (created < first) first = created;
+  }
+  for (const day of dayTasks?.keys() ?? []) if (day < first) first = day;
+  return first;
+}
+
+/**
  * Per-habit day summary from the materialized habit tasks. Today's instance is
  * the row with the deterministic id (habitTaskId) when present, else any row of
  * that habit scheduled for `todayKey`. Pure: `habitTasks` is not modified.
  * Habits without any task still get a summary from `summaryFor`.
+ *
+ * `habits` gives each Habit's Frequency and the day it began; a Habit missing
+ * from it is judged as an old row (every day) from its first day Task on.
  */
 export function summarizeHabitDays(
   habitTasks: readonly Task[],
-  todayKey: string
+  todayKey: string,
+  habits: readonly Partial<Habit>[] = []
 ): {
   summaryFor: (habitId: string) => HabitDaySummary;
 } {
@@ -98,6 +121,8 @@ export function summarizeHabitDays(
       addDayTask(dayTasks, task, task.scheduledDate);
     }
   }
+  const habitById = new Map<string, Partial<Habit>>();
+  for (const habit of habits) if (habit.id) habitById.set(habit.id, habit);
   const cache = new Map<string, HabitDaySummary>();
   return {
     summaryFor(habitId) {
@@ -106,12 +131,13 @@ export function summarizeHabitDays(
         const todayTask = todayByHabit.get(habitId);
         const completedDates = datesByHabit.get(habitId) ?? EMPTY_DATES;
         const dayTasks = dayTasksByHabit.get(habitId);
+        const habit = habitById.get(habitId) ?? { id: habitId };
         const outcomeOn = (dayKey: string) =>
-          habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
+          habitDayOutcome({ habit, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
         summary = {
           todayTask,
           completedDates,
-          streak: habitStreakOn(todayKey, outcomeOn),
+          streak: habitStreakOn(todayKey, outcomeOn, firstHabitDay(habit, dayTasks, todayKey)),
           doneToday: todayTask?.status === "completed",
           outcomeOn,
         };
@@ -120,4 +146,25 @@ export function summarizeHabitDays(
       return summary;
     },
   };
+}
+
+/**
+ * SHARED "done today" tally: the Habits asked of `todayKey` (scheduled by
+ * their Frequency and not Skipped) and how many of them are done.
+ */
+export function habitTodayTally(
+  habits: readonly Habit[],
+  summaryFor: (habitId: string) => HabitDaySummary,
+  todayKey: string
+): { done: number; asked: number } {
+  let done = 0;
+  let asked = 0;
+  for (const habit of habits) {
+    if (!isHabitScheduledOn(habit, todayKey)) continue;
+    const summary = summaryFor(habit.id);
+    if (summary.outcomeOn(todayKey) === "skipped") continue;
+    asked += 1;
+    if (summary.doneToday) done += 1;
+  }
+  return { done, asked };
 }

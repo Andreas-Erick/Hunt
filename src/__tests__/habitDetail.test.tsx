@@ -101,6 +101,17 @@ describe("desktop Habit detail: Calendar tab", () => {
     await waitFor(async () => expect((await db.tasks.get(tid))?.skipped).toBeUndefined());
   });
 
+  it("shows an unscheduled day as no Outcome, with nothing to correct", async () => {
+    await db.habits.update("h1", {
+      frequencyHistory: [{ effectiveFrom: "2026-10-20", frequency: { type: "weekdays", weekdays: [1] } }],
+    });
+    const dialog = await openDetail();
+    // 12 November 2026 is a Thursday; 16 November a Monday.
+    expect(within(dialog).getByText("12", { selector: "[aria-label='12 November: no Outcome']" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: /^12 November/ })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "16 November: Missed" })).toBeInTheDocument();
+  });
+
   it("closes on Escape", async () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });

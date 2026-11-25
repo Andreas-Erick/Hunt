@@ -22,6 +22,7 @@ import {
   localStore,
   onLocalChange,
   type HabitChanges,
+  type NewHabit,
   type QuestChanges,
   type TaskChanges,
 } from "@/lib/localStore";
@@ -186,12 +187,8 @@ interface CommandStoreState extends HabitDayActions {
 
   // Daily Habit CRUD & Materialization
   /** Resolves to false when the local write failed (actionError is then set), true otherwise. */
-  createHabit: (params: {
-    title: string;
-    notes?: string;
-    questId: string | null;
-  }) => Promise<boolean>;
-  updateHabit: (habitId: string, changes: HabitChanges) => Promise<boolean>;
+  createHabit: (params: NewHabit) => Promise<boolean>;
+  updateHabit:(habitId: string, changes: HabitChanges) => Promise<boolean>;
   deleteHabit: (habitId: string) => Promise<void>;
   /**
    * Ensures every daily habit has a task materialized for `dateKey` (default: today),

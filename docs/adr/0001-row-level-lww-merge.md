@@ -54,6 +54,12 @@ associativity and idempotence over 400 seeds.
   Checklist while apart keep only the newer row's items.
   This is accepted: Checklists are short and edited on one
   device at a time.
+- A Habit's Frequency history (`frequencyHistory`) is also a
+  list stored on its row: if two devices change the
+  Frequency while apart, the later Habit row wins with its
+  whole history. The validator rebuilds the list from known
+  shapes only (`sanitizeHabitFrequencyHistory`), so it stays
+  bounded.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator, and a Dexie table.

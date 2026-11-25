@@ -769,6 +769,12 @@
       border-color: transparent;
       color: rgb(var(--c-on-accent));
     }
+    /* A Habit day its Frequency does not ask for: nothing to tick */
+    .task-check-ring:disabled {
+      border-style: dashed;
+      border-color: rgb(var(--c-ink) / 0.22);
+      cursor: default;
+    }
 
     .queue-item-body {
       flex: 1;
@@ -1369,6 +1375,12 @@
       border-color: rgb(var(--c-ink) / 0.32);
       background: rgb(var(--c-ink) / 0.12);
       color: var(--white);
+    }
+    /* Frequency weekday chips: 7 in a row where they fit, each a 44 px target */
+    .sheet-pill.weekday-pill {
+      min-width: 44px;
+      justify-content: center;
+      padding: 9px 8px;
     }
 
     @keyframes fadeIn {
@@ -3068,6 +3080,7 @@ var HuntCore = (() => {
   // src/mobile/huntCore.ts
   var huntCore_exports = {};
   __export(huntCore_exports, {
+    HABIT_WEEKDAYS: () => HABIT_WEEKDAYS,
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
     REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
@@ -3091,10 +3104,15 @@ var HuntCore = (() => {
     dueReminders: () => dueReminders,
     fromFocusSession: () => fromFocusSession,
     habitDayOutcome: () => habitDayOutcome,
+    habitFrequencyLabel: () => habitFrequencyLabel,
+    habitFrequencyOn: () => habitFrequencyOn,
     habitMonth: () => habitMonth,
     habitStartKey: () => habitStartKey,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
+    habitTodayTally: () => habitTodayTally,
+    habitTodayTaskAfterEdit: () => habitTodayTaskAfterEdit,
+    isHabitScheduledOn: () => isHabitScheduledOn,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
     isReminderTime: () => isReminderTime,
@@ -3102,23 +3120,89 @@ var HuntCore = (() => {
     isTaskVisibleToday: () => isTaskVisibleToday,
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
+    missingHabitRows: () => missingHabitRows,
     newChecklistItemId: () => newChecklistItemId,
     nextStamp: () => nextStamp,
+    parseHabitFrequency: () => parseHabitFrequency,
     pickNextFocusTask: () => pickNextFocusTask,
     reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
+    sameHabitFrequency: () => sameHabitFrequency,
     sessionLogId: () => sessionLogId,
     shiftMonthKey: () => shiftMonthKey,
     skipHabitDayRow: () => skipHabitDayRow,
     summarizeHabitDays: () => summarizeHabitDays,
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
-    transitionFocus: () => transitionFocus
+    transitionFocus: () => transitionFocus,
+    withHabitFrequency: () => withHabitFrequency
   });
 
+  // src/lib/habitFrequency.ts
+  var EVERY_DAY = { type: "everyDay" };
+  var WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+  var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function weekdayOfKey(dateKey) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d, 12).getDay();
+  }
+  function habitFrequencyOn(habit, dayKey) {
+    var _a;
+    let inForce = EVERY_DAY;
+    for (const change of (_a = habit.frequencyHistory) != null ? _a : []) {
+      if (change.effectiveFrom > dayKey) break;
+      inForce = change.frequency;
+    }
+    return inForce;
+  }
+  function isHabitScheduledOn(habit, dayKey) {
+    const frequency = habitFrequencyOn(habit, dayKey);
+    return frequency.type !== "weekdays" || frequency.weekdays.includes(weekdayOfKey(dayKey));
+  }
+  function sameHabitFrequency(a, b) {
+    if (a.type !== b.type) return false;
+    if (a.type === "weekdays" && b.type === "weekdays") {
+      return normalizedWeekdays(a.weekdays).join() === normalizedWeekdays(b.weekdays).join();
+    }
+    return true;
+  }
+  function normalizedWeekdays(weekdays) {
+    return Array.from(new Set(weekdays)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b);
+  }
+  function normalizedFrequency(frequency) {
+    return frequency.type === "weekdays" ? { type: "weekdays", weekdays: normalizedWeekdays(frequency.weekdays) } : EVERY_DAY;
+  }
+  function withHabitFrequency(habit, frequency, todayKey) {
+    var _a;
+    const kept = ((_a = habit.frequencyHistory) != null ? _a : []).filter((c) => c.effectiveFrom < todayKey);
+    const before = habitFrequencyOn({ frequencyHistory: kept }, todayKey);
+    if (sameHabitFrequency(before, frequency)) return kept;
+    return [...kept, { effectiveFrom: todayKey, frequency: normalizedFrequency(frequency) }];
+  }
+  function habitFrequencyLabel(frequency) {
+    if (frequency.type === "everyDay") return "Every day";
+    return WEEK_ORDER.filter((d) => frequency.weekdays.includes(d)).map((d) => WEEKDAY_SHORT[d]).join(", ");
+  }
+  var WEEKDAY_NAME = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var HABIT_WEEKDAYS = WEEK_ORDER.map(
+    (day) => ({ day, label: WEEKDAY_SHORT[day], name: WEEKDAY_NAME[day] })
+  );
+  function isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+  function parseHabitFrequency(raw) {
+    if (!isRecord(raw)) return null;
+    if (raw.type === "everyDay") return EVERY_DAY;
+    if (raw.type === "weekdays" && Array.isArray(raw.weekdays)) {
+      const weekdays = normalizedWeekdays(raw.weekdays.filter((d) => typeof d === "number"));
+      return weekdays.length > 0 ? { type: "weekdays", weekdays } : null;
+    }
+    return null;
+  }
+
   // src/lib/habitOutcome.ts
-  function habitDayOutcome({ dayKey, dayTask, todayKey }) {
-    if (dayKey > todayKey) return null;
+  function habitDayOutcome({ habit, dayKey, dayTask, todayKey }) {
+    if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
     if ((dayTask == null ? void 0 : dayTask.status) === "completed") return "met";
     if (dayTask == null ? void 0 : dayTask.skipped) return "skipped";
     if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
@@ -3129,7 +3213,7 @@ var HuntCore = (() => {
     let isToday = true;
     for (const outcome of outcomes) {
       if (outcome === "met") streak += 1;
-      else if (outcome !== "skipped" && !(isToday && outcome === "open")) break;
+      else if (outcome !== null && outcome !== "skipped" && !(isToday && outcome === "open")) break;
       isToday = false;
     }
     return streak;
@@ -3166,14 +3250,20 @@ var HuntCore = (() => {
   function dateKeyFromOffset(baseKey, dayOffset) {
     return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
   }
-  function* outcomesBackFrom(todayKey, outcomeOn) {
-    for (let offset = 0; ; offset -= 1) yield outcomeOn(dateKeyFromOffset(todayKey, offset));
+  function* outcomesBackFrom(todayKey, firstDayKey, outcomeOn) {
+    for (let offset = 0; ; offset -= 1) {
+      const dayKey = dateKeyFromOffset(todayKey, offset);
+      if (dayKey < firstDayKey) return;
+      yield outcomeOn(dayKey);
+    }
   }
-  function habitStreakOn(todayKey, outcomeOn) {
-    return habitStreakOf(outcomesBackFrom(todayKey, outcomeOn));
+  function habitStreakOn(todayKey, outcomeOn, firstDayKey) {
+    return habitStreakOf(outcomesBackFrom(todayKey, firstDayKey, outcomeOn));
   }
   var TICKED_DAY = { status: "completed" };
   function computeHabitStreak(completedDates, todayKey) {
+    let firstDayKey = todayKey;
+    for (const dayKey of completedDates) if (dayKey < firstDayKey) firstDayKey = dayKey;
     return habitStreakOn(
       todayKey,
       (dayKey) => habitDayOutcome({
@@ -3181,7 +3271,8 @@ var HuntCore = (() => {
         dayKey,
         dayTask: completedDates.has(dayKey) ? TICKED_DAY : void 0,
         todayKey
-      })
+      }),
+      firstDayKey
     );
   }
 
@@ -3204,7 +3295,17 @@ var HuntCore = (() => {
     const held = days.get(day);
     if (!held || held.status !== "completed" && task.status === "completed") days.set(day, task);
   }
-  function summarizeHabitDays(habitTasks, todayKey) {
+  function firstHabitDay(habit, dayTasks, todayKey) {
+    var _a;
+    let first = todayKey;
+    if (isStampValue(habit.createdAt)) {
+      const created = toLocalDateKey(habit.createdAt);
+      if (created < first) first = created;
+    }
+    for (const day of (_a = dayTasks == null ? void 0 : dayTasks.keys()) != null ? _a : []) if (day < first) first = day;
+    return first;
+  }
+  function summarizeHabitDays(habitTasks, todayKey, habits = []) {
     const todayByHabit = /* @__PURE__ */ new Map();
     const datesByHabit = /* @__PURE__ */ new Map();
     const dayTasksByHabit = /* @__PURE__ */ new Map();
@@ -3233,20 +3334,23 @@ var HuntCore = (() => {
         addDayTask(dayTasks, task, task.scheduledDate);
       }
     }
+    const habitById = /* @__PURE__ */ new Map();
+    for (const habit of habits) if (habit.id) habitById.set(habit.id, habit);
     const cache = /* @__PURE__ */ new Map();
     return {
       summaryFor(habitId) {
-        var _a;
+        var _a, _b;
         let summary = cache.get(habitId);
         if (!summary) {
           const todayTask = todayByHabit.get(habitId);
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
           const dayTasks = dayTasksByHabit.get(habitId);
-          const outcomeOn = (dayKey) => habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
+          const habit = (_b = habitById.get(habitId)) != null ? _b : { id: habitId };
+          const outcomeOn = (dayKey) => habitDayOutcome({ habit, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
           summary = {
             todayTask,
             completedDates,
-            streak: habitStreakOn(todayKey, outcomeOn),
+            streak: habitStreakOn(todayKey, outcomeOn, firstHabitDay(habit, dayTasks, todayKey)),
             doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed",
             outcomeOn
           };
@@ -3255,6 +3359,18 @@ var HuntCore = (() => {
         return summary;
       }
     };
+  }
+  function habitTodayTally(habits, summaryFor, todayKey) {
+    let done = 0;
+    let asked = 0;
+    for (const habit of habits) {
+      if (!isHabitScheduledOn(habit, todayKey)) continue;
+      const summary = summaryFor(habit.id);
+      if (summary.outcomeOn(todayKey) === "skipped") continue;
+      asked += 1;
+      if (summary.doneToday) done += 1;
+    }
+    return { done, asked };
   }
 
   // src/lib/syncIds.ts
@@ -3758,7 +3874,30 @@ var HuntCore = (() => {
     var _a, _b, _c;
     const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
     for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
-    return ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
+    return ((_c = state.habits) != null ? _c : []).filter((h) => isHabitScheduledOn(h, dateKey) && !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
+  }
+  function todayTaskForFrequency(habit, todayTask, todayKey) {
+    if (isHabitScheduledOn(habit, todayKey)) {
+      if (!todayTask) return buildHabitTaskRow(habit, todayKey);
+      return todayTask.status === "archived" ? { ...todayTask, status: "queued" } : todayTask;
+    }
+    if (!todayTask || todayTask.status !== "queued" || (todayTask.accumulatedSeconds || 0) > 0) return todayTask;
+    return { ...todayTask, status: "archived" };
+  }
+  function habitTodayTaskAfterEdit(before, after, todayTask, todayKey, now = Date.now()) {
+    var _a, _b;
+    const frequencyChanged = JSON.stringify((_a = before.frequencyHistory) != null ? _a : []) !== JSON.stringify((_b = after.frequencyHistory) != null ? _b : []);
+    const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+    if (!task) return null;
+    const next = { ...task };
+    if (next.status === "queued" || next.status === "active") {
+      next.title = after.title;
+      next.questId = after.questId;
+      if ((next.notes || "") === (before.notes || "")) next.notes = after.notes;
+    }
+    if (!todayTask) return next;
+    if (JSON.stringify(next) === JSON.stringify(todayTask)) return null;
+    return { ...next, updatedAt: nextStamp(todayTask, now) };
   }
   function nextStamp(row, now = Date.now()) {
     return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
@@ -3851,10 +3990,10 @@ var HuntCore = (() => {
     return accentColor && ACCENTS.has(accentColor) ? accentColor : "slate";
   }
   function statsFor(state, dateKey) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const quests = (_a = state.quests) != null ? _a : [];
     const progress = computeQuestWeekProgress({ quests, logs: (_b = state.timeLogs) != null ? _b : [], todayKey: dateKey });
-    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey);
+    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey, (_d = state.habits) != null ? _d : []);
     return {
       dateKey,
       focusSeconds: progress.total.todaySeconds,
@@ -3870,7 +4009,7 @@ var HuntCore = (() => {
           met: p.met
         };
       }),
-      streaks: ((_d = state.habits) != null ? _d : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
+      streaks: ((_e = state.habits) != null ? _e : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
     };
   }
   function buildWidgetStats(state, todayKey) {
@@ -4055,6 +4194,10 @@ var HuntCore = (() => {
     var newChecklistItemId = HuntCore.newChecklistItemId;
     var isReminderTime = HuntCore.isReminderTime;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
+    var isHabitScheduledOn = HuntCore.isHabitScheduledOn;
+    var habitTodayTally = HuntCore.habitTodayTally;
+    var habitFrequencyOn = HuntCore.habitFrequencyOn;
+    var habitFrequencyLabel = HuntCore.habitFrequencyLabel;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
     // "Android 10; K" UA reduction) and drives --kb frame-by-frame via WindowInsetsAnimation. Lock
@@ -6309,21 +6452,15 @@ var HuntCore = (() => {
       return task.scheduledDate || todayKey;
     }
 
+    // Builds the day Tasks of `dateKey` that are missing, only for Habits whose Frequency asks for
+    // that day; existing and tombstoned ids are left alone (shared rule HuntCore.missingHabitRows).
     function materializeDailyHabitsInto(targetState, dateKey) {
-      const habits = asArray(targetState.habits).slice().sort(compareRank);
-      if (!habits.length) return 0;
-      const delTasks = new Set(asArray(targetState.deletedTaskIds));
-      const existingIds = new Set(asArray(targetState.tasks).map(t => t.id));
-      let added = 0;
-      for (const h of habits) {
-        const tid = habitTaskId(h.id, dateKey);
-        if (existingIds.has(tid) || delTasks.has(tid)) continue;
-        targetState.tasks.push(buildHabitTaskRow(h, dateKey));
-        existingIds.add(tid);
-        added++;
-      }
-      if (added > 0) targetState.tasks.sort(compareRank);
-      return added;
+      if (!asArray(targetState.habits).length) return 0;
+      if (!Array.isArray(targetState.tasks)) targetState.tasks = [];
+      const rows = HuntCore.missingHabitRows(targetState, dateKey);
+      rows.forEach(row => targetState.tasks.push(row));
+      if (rows.length > 0) targetState.tasks.sort(compareRank);
+      return rows.length;
     }
 
     function materializeDailyHabits(dateKey) {
@@ -8227,6 +8364,60 @@ var HuntCore = (() => {
     // DAILY HABITS: create, edit, delete (with Undo), toggle today & focus
     // =========================================================================
     let selectedHabitQuestId = null;
+    // The Frequency being edited in an open Habit sheet (chosen weekdays may still be empty).
+    let habitFrequencyDraft = { type: "everyDay" };
+
+    function habitFrequencyPickerHtml() {
+      const chosen = habitFrequencyDraft.type === "weekdays" ? habitFrequencyDraft.weekdays : null;
+      const weekdays = chosen ? `
+        <div class="sheet-pill-group" role="group" aria-label="Habit weekdays">
+          ${HuntCore.HABIT_WEEKDAYS.map(d => {
+            const on = chosen.includes(d.day);
+            return `<button class="sheet-pill weekday-pill ${on ? "selected" : ""}" aria-label="${d.name}" aria-pressed="${on}" onclick="toggleHabitWeekday(${jsArg(d.day)})">${d.label}</button>`;
+          }).join("")}
+        </div>
+        ${chosen.length ? "" : `<div style="margin:-8px 0 16px;font-size:12px;color:var(--dim);">Pick at least one day</div>`}` : "";
+      return `
+        <div class="sheet-pill-group" role="group" aria-label="Habit frequency">
+          <button class="sheet-pill ${chosen ? "" : "selected"}" aria-label="Every day" aria-pressed="${!chosen}" onclick="setHabitFrequencyType('everyDay')">Every day</button>
+          <button class="sheet-pill ${chosen ? "selected" : ""}" aria-label="Chosen days" aria-pressed="${!!chosen}" onclick="setHabitFrequencyType('weekdays')">Chosen days</button>
+        </div>
+        ${weekdays}`;
+    }
+
+    // Redraws the picker in place and puts focus back on the chip that was pressed.
+    function renderHabitFrequencyPicker(focusLabel) {
+      const el = document.getElementById("habitFrequencyPicker");
+      if (!el) return;
+      el.innerHTML = habitFrequencyPickerHtml();
+      const again = focusLabel ? el.querySelector(`[aria-label="${focusLabel}"]`) : null;
+      if (again) focusQuietly(again);
+    }
+
+    function setHabitFrequencyType(type) {
+      playClickSound();
+      if (type === "everyDay") habitFrequencyDraft = { type: "everyDay" };
+      else if (habitFrequencyDraft.type !== "weekdays") habitFrequencyDraft = { type: "weekdays", weekdays: [] };
+      renderHabitFrequencyPicker(type === "everyDay" ? "Every day" : "Chosen days");
+    }
+
+    function toggleHabitWeekday(dayArg) {
+      const day = Number(dayArg); // jsArg passes the weekday as a string
+      if (habitFrequencyDraft.type !== "weekdays") return;
+      playClickSound();
+      const days = habitFrequencyDraft.weekdays;
+      const weekdays = days.includes(day) ? days.filter(d => d !== day) : days.concat(day).sort((a, b) => a - b);
+      habitFrequencyDraft = { type: "weekdays", weekdays };
+      const named = HuntCore.HABIT_WEEKDAYS.find(d => d.day === day);
+      renderHabitFrequencyPicker(named ? named.name : null);
+    }
+
+    // The draft as a valid Frequency, or null (no weekday chosen yet): the picker is flagged then.
+    function habitFrequencyFromDraft() {
+      const frequency = HuntCore.parseHabitFrequency(habitFrequencyDraft);
+      if (!frequency) flagInvalidField(document.querySelector('#habitFrequencyPicker [aria-label="Chosen days"]'));
+      return frequency;
+    }
 
     function openNewHabitSheet(preselectQuestId) {
       playClickSound();
@@ -8234,12 +8425,16 @@ var HuntCore = (() => {
       selectedHabitQuestId = preselectQuestId !== undefined
         ? preselectQuestId
         : (activeQuests[0] ? activeQuests[0].id : null);
+      habitFrequencyDraft = { type: "everyDay" };
 
       showSheet("newHabit", `
           ${sheetHeaderHtml("New Daily Habit")}
 
           <input id="newHabitTitleInput" class="sheet-input" placeholder="e.g. Read 20 pages, Review flashcards..." aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
           <textarea maxlength="20000" id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional description copied to each day's task..." aria-label="Habit description" onkeydown="if(isSubmitKey(event)) saveNewHabit()"></textarea>
+
+          <div class="sheet-label">Frequency</div>
+          <div id="habitFrequencyPicker">${habitFrequencyPickerHtml()}</div>
 
           <div class="sheet-label">Assign to Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -8272,6 +8467,8 @@ var HuntCore = (() => {
         flagInvalidField(tEl);
         return;
       }
+      const frequency = habitFrequencyFromDraft();
+      if (!frequency) return;
       playCompleteSound();
       const now = Date.now();
       const habits = asArray(state.habits).slice().sort(compareRank);
@@ -8285,10 +8482,12 @@ var HuntCore = (() => {
         createdAt: now,
         updatedAt: now
       };
+      const todayKey = toLocalDateKey(now);
+      const frequencyHistory = HuntCore.withHabitFrequency(habit, frequency, todayKey);
+      if (frequencyHistory.length > 0) habit.frequencyHistory = frequencyHistory;
       const firstRects = captureTaskFlipRects();
       if (!state.habits) state.habits = [];
       state.habits.push(habit);
-      const todayKey = toLocalDateKey(now);
       materializeDailyHabitsInto(state, todayKey);
       closeSheet();
       commitLocalChange();
@@ -8301,12 +8500,16 @@ var HuntCore = (() => {
       const h = asArray(state.habits).find(x => x.id === habitId);
       if (!h) return;
       selectedHabitQuestId = h.questId || null;
+      habitFrequencyDraft = habitFrequencyOn(h, toLocalDateKey());
 
       showSheet("habit:" + h.id, `
           ${sheetHeaderHtml("Edit Daily Habit")}
 
           <input id="editHabitTitleInput" class="sheet-input" value="${escapeHtml(h.title)}" aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveHabitEdits(${jsArg(h.id)})" />
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
+
+          <div class="sheet-label">Frequency · applies from today</div>
+          <div id="habitFrequencyPicker">${habitFrequencyPickerHtml()}</div>
 
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -8331,11 +8534,11 @@ var HuntCore = (() => {
       `);
     }
 
-    // The sheet's "Skip today" row: only for a day still waiting to be done (not ticked, not Skipped,
-    // no focus running on it).
+    // The sheet's "Skip today" row: only for a scheduled day still waiting to be done (not ticked,
+    // not Skipped, no focus running on it). An unscheduled day has no Outcome, so no row.
     function habitSkipTodayHtml(h) {
       const todayKey = toLocalDateKey();
-      const today = summarizeHabitDays(state.tasks, todayKey).summaryFor(h.id);
+      const today = summarizeHabitDays(state.tasks, todayKey, asArray(state.habits)).summaryFor(h.id);
       if (today.outcomeOn(todayKey) !== "open" || (today.todayTask && today.todayTask.status === "active")) return "";
       return `
           <div class="sheet-label">Today</div>
@@ -8355,25 +8558,29 @@ var HuntCore = (() => {
         flagInvalidField(tEl);
         return;
       }
+      const frequency = habitFrequencyFromDraft();
+      if (!frequency) return;
       playClickSound();
-      const prevNotes = h.notes || "";
-      const nextNotes = nEl ? nEl.value.trim() : prevNotes;
+      const now = Date.now();
+      const todayKey = toLocalDateKey(now);
+      const prev = cloneJson(h);
+      const nextNotes = nEl ? nEl.value.trim() : (h.notes || "");
       const nextQuestId = selectedHabitQuestId || null;
       const before = JSON.stringify(h);
       h.title = title;
       h.notes = nextNotes;
       h.questId = nextQuestId;
+      // A Frequency change applies from today; earlier days keep the Frequency they had.
+      const frequencyHistory = HuntCore.withHabitFrequency(h, frequency, todayKey);
+      if (frequencyHistory.length > 0 || h.frequencyHistory) h.frequencyHistory = frequencyHistory;
       closeSheet();
       if (JSON.stringify(h) === before) return;
-      const now = Date.now();
       h.updatedAt = nextStamp(h, now);
-      // Keep today's open materialized task aligned.
-      const todayTask = state.tasks.find(t => t.id === habitTaskId(h.id, toLocalDateKey(now)));
-      if (todayTask && (todayTask.status === "queued" || todayTask.status === "active")) {
-        todayTask.title = h.title;
-        todayTask.questId = h.questId;
-        if ((todayTask.notes || "") === prevNotes) todayTask.notes = h.notes;
-        todayTask.updatedAt = nextStamp(todayTask, now);
+      // Today's day Task follows the edit (shared rule): set aside, brought back or kept aligned.
+      const todayId = habitTaskId(h.id, todayKey);
+      const todayTask = HuntCore.habitTodayTaskAfterEdit(prev, h, state.tasks.find(t => t.id === todayId), todayKey, now);
+      if (todayTask && !asArray(state.deletedTaskIds).includes(todayId)) {
+        state.tasks = state.tasks.filter(t => t.id !== todayId).concat(todayTask).sort(compareRank);
       }
       commitLocalChange();
       showToast("Habit saved");
@@ -8431,7 +8638,7 @@ var HuntCore = (() => {
       if (!t) {
         // Re-materialize if needed (even if user had dismissed today's copy earlier).
         const h = asArray(state.habits).find(x => x.id === habitId);
-        if (!h) return;
+        if (!h || !isHabitScheduledOn(h, todayKey)) return;
         state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
         t = buildHabitTaskRow(h, todayKey);
         state.tasks.push(t);
@@ -8450,7 +8657,7 @@ var HuntCore = (() => {
       let t = state.tasks.find(x => x.id === tid);
       if (!t) {
         const h = asArray(state.habits).find(x => x.id === habitId);
-        if (!h) return;
+        if (!h || !isHabitScheduledOn(h, todayKey)) return;
         state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
         t = buildHabitTaskRow(h, todayKey);
         state.tasks.push(t);
@@ -8486,7 +8693,7 @@ var HuntCore = (() => {
       const h = habitDetail && asArray(state.habits).find(x => x.id === habitDetail.habitId);
       if (!h) { habitDetail = null; return; }
       const todayKey = toLocalDateKey();
-      const summary = summarizeHabitDays(state.tasks, todayKey).summaryFor(h.id);
+      const summary = summarizeHabitDays(state.tasks, todayKey, asArray(state.habits)).summaryFor(h.id);
       const month = HuntCore.habitMonth({
         monthKey: habitDetail.monthKey, todayKey, startKey: HuntCore.habitStartKey(h, todayKey), outcomeOn: summary.outcomeOn
       });
@@ -8582,7 +8789,7 @@ var HuntCore = (() => {
       let t = state.tasks.find(x => x.id === tid);
       if (!t) {
         const h = asArray(state.habits).find(x => x.id === habitId);
-        if (!h) return;
+        if (!h || !isHabitScheduledOn(h, todayKey)) return;
         state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
         t = buildHabitTaskRow(h, todayKey);
         state.tasks.push(t);
@@ -10514,10 +10721,9 @@ var HuntCore = (() => {
         const recentDays = [];
         for (let i = 6; i >= 0; i--) recentDays.push(dayKeyOffset(-i, now));
 
-        const habitDays = summarizeHabitDays(state.tasks, todayKey);
-        const doneTodayCount = habitsList.filter(h => habitDays.summaryFor(h.id).doneToday).length;
-        // A Habit Skipped today is not asked of the user, so it leaves the day's total.
-        const askedTodayCount = habitsList.filter(h => habitDays.summaryFor(h.id).outcomeOn(todayKey) !== "skipped").length;
+        const habitDays = summarizeHabitDays(state.tasks, todayKey, habitsList);
+        // Only Habits asked of today (scheduled by their Frequency, not Skipped) count toward "done today".
+        const todayTally = habitTodayTally(habitsList, habitDays.summaryFor, todayKey);
 
         container.innerHTML = `
           <div class="hero-bar">
@@ -10534,8 +10740,8 @@ var HuntCore = (() => {
 
           ${habitsList.length > 0 ? `
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px;margin:0 0 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;">
-              <span>Added to Today automatically each day</span>
-              <span style="color:var(--white);font-weight:600;flex-shrink:0;white-space:nowrap;">${doneTodayCount} / ${askedTodayCount} done today</span>
+              <span>Added to Today on the days they ask for</span>
+              <span style="color:var(--white);font-weight:600;flex-shrink:0;white-space:nowrap;">${todayTally.done} / ${todayTally.asked} done today</span>
             </div>
           ` : ""}
 
@@ -10549,8 +10755,12 @@ var HuntCore = (() => {
             const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
             const skippedToday = outcomeOn(todayKey) === "skipped";
             const title = escapeHtml(h.title);
+            const asked = isHabitScheduledOn(h, todayKey);
+            const frequencyLabel = escapeHtml(habitFrequencyLabel(habitFrequencyOn(h, todayKey)));
             const dotsHtml = recentDays.map(dk => {
               const outcome = outcomeOn(dk);
+              // A day the Frequency did not ask for has no Outcome: a short dash.
+              if (outcome === null) return `<span style="width:7px;height:2px;border-radius:1px;background:rgb(var(--c-ink) / 0.14);"></span>`;
               const hit = outcome === "met";
               const isTodayDot = dk === todayKey;
               return `<span style="width:7px;height:7px;border-radius:50%;${hit ? `background:${hex};` : outcome === "skipped" ? "border:1px dashed rgb(var(--c-ink) / 0.35);background:transparent;" : isTodayDot ? "border:1px solid rgb(var(--c-ink) / 0.35);background:transparent;" : "background:rgb(var(--c-ink) / 0.1);"}"></span>`;
@@ -10559,7 +10769,7 @@ var HuntCore = (() => {
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
                 <div class="card-edge-bar" style="background:${hex};"></div>
-                <button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">
+                ${asked ? `<button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">` : `<button class="task-check-ring" style="margin-top:2px;" disabled aria-label="Not scheduled today: ${title}">`}
                   ${SVG_CHECK}
                 </button>
                 <div class="queue-item-body" role="button" tabindex="0" aria-label="Open habit ${title}" onclick="openHabitDetailSheet(${jsArg(h.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHabitDetailSheet(${jsArg(h.id)})}">
@@ -10570,6 +10780,7 @@ var HuntCore = (() => {
                     <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1;">
                       <span style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
                       <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
+                      <span style="flex-shrink:0;color:var(--dim);">· ${frequencyLabel}</span>
                     </span>
                     <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
                       <span style="display:inline-flex;align-items:center;gap:4px;">${dotsHtml}</span>
@@ -10580,7 +10791,7 @@ var HuntCore = (() => {
                 <div class="queue-item-right">
                   ${skippedToday
                     ? `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, false)" aria-label="Undo skip: ${title}">Undo skip</button>`
-                    : !doneToday ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
+                    : asked && !doneToday ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
                   <button class="more-dots-btn" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">${SVG_MORE}</button>
                 </div>
               </div>
