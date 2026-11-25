@@ -1,4 +1,5 @@
 import type { Habit, HabitFrequency, HabitFrequencyChange, Weekday } from "./domainTypes";
+import { WEEKDAY_SHORT } from "./dateKeys";
 import { isHabitEndedOn } from "./habitEnd";
 import { habitKindRules } from "./habitKind";
 
@@ -18,7 +19,6 @@ const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Monday first, the order of a Habit Week. */
 const WEEK_ORDER: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0];
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 type FrequencySource = Readonly<Pick<Partial<Habit>, "frequencyHistory">>;
 type ScheduleSource = Readonly<Pick<Partial<Habit>, "frequencyHistory" | "endDate" | "endedSpans">>;

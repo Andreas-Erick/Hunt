@@ -3342,6 +3342,33 @@ var HuntCore = (() => {
     withHabitFrequency: () => withHabitFrequency
   });
 
+  // src/lib/dateKeys.ts
+  var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function toLocalDateKey(timestamp = Date.now()) {
+    const d = new Date(timestamp);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  function dateFromKey(dateKey, dayOffset = 0) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d + dayOffset, 12);
+  }
+  function dateKeyFromOffset(baseKey, dayOffset) {
+    return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
+  }
+
+  // src/lib/textLimits.ts
+  function clampLength(text, max) {
+    if (text.length <= max) return text;
+    const last = text.charCodeAt(max - 1);
+    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
+  }
+  function clampTitle(title, max) {
+    return clampLength(title.trim(), max);
+  }
+
   // src/lib/habitKind.ts
   var HABIT_KIND_TABLE = {
     check: { label: "Check Habit", logs: "tick", canFocus: true, allowsPerWeek: true },
@@ -3404,13 +3431,6 @@ var HuntCore = (() => {
 
   // src/lib/habitEnd.ts
   var MAX_ENDED_SPANS = 100;
-  function shiftDateKey(dateKey, days) {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    const date = new Date(y, m - 1, d + days, 12);
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${date.getFullYear()}-${mm}-${dd}`;
-  }
   function isHabitEndedOn(habit, dayKey) {
     var _a;
     if (habit.endDate && dayKey > habit.endDate) return true;
@@ -3424,8 +3444,8 @@ var HuntCore = (() => {
     const spans = [...(_a = habit.endedSpans) != null ? _a : []];
     const restarts = isEndedHabit(habit, todayKey) && (endDate === null || endDate >= todayKey);
     if (restarts) {
-      const from = shiftDateKey(habit.endDate, 1);
-      const to = shiftDateKey(todayKey, -1);
+      const from = dateKeyFromOffset(habit.endDate, 1);
+      const to = dateKeyFromOffset(todayKey, -1);
       if (from <= to) spans.push({ from, to });
     }
     const kept = spans.slice(-MAX_ENDED_SPANS);
@@ -3441,7 +3461,6 @@ var HuntCore = (() => {
   // src/lib/habitFrequency.ts
   var EVERY_DAY = { type: "everyDay" };
   var WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-  var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   function weekdayOfKey(dateKey) {
     const [y, m, d] = dateKey.split("-").map(Number);
     return new Date(y, m - 1, d, 12).getDay();
@@ -3563,20 +3582,6 @@ var HuntCore = (() => {
   function isOpenTask(task, todayKey) {
     return (task.status === "queued" || task.status === "active") && !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) && !isMissedHabitTask(task, todayKey);
   }
-  function toLocalDateKey(timestamp = Date.now()) {
-    const d = new Date(timestamp);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-  function dateFromKey(dateKey, dayOffset = 0) {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    return new Date(y, m - 1, d + dayOffset, 12);
-  }
-  function dateKeyFromOffset(baseKey, dayOffset) {
-    return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
-  }
   function* outcomesBackFrom(todayKey, firstDayKey, outcomeOn) {
     for (let offset = 0; ; offset -= 1) {
       const dayKey = dateKeyFromOffset(todayKey, offset);
@@ -3619,7 +3624,6 @@ var HuntCore = (() => {
     return `${percent}%`;
   }
   var HABIT_WEEK_STRIP_DAYS = 7;
-  var WEEKDAY_SHORT2 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var OUTCOME_NAME = {
     open: "Open",
     met: "Met",
@@ -3631,7 +3635,7 @@ var HuntCore = (() => {
       const day = dateFromKey(lastKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
       const dayKey = toLocalDateKey(day.getTime());
       const outcome = outcomeOn(dayKey);
-      const short = WEEKDAY_SHORT2[day.getDay()];
+      const short = WEEKDAY_SHORT[day.getDay()];
       const when = `${short} ${day.getDate()}${dayKey === todayKey ? " (today)" : ""}`;
       return {
         dayKey,
@@ -3930,16 +3934,6 @@ var HuntCore = (() => {
   var SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
   function isSafeSyncId(value, maxLength = MAX_ENTITY_ID_LENGTH) {
     return typeof value === "string" && value.length > 0 && value.length <= maxLength && SAFE_ID_CHARS_RE.test(value);
-  }
-
-  // src/lib/textLimits.ts
-  function clampLength(text, max) {
-    if (text.length <= max) return text;
-    const last = text.charCodeAt(max - 1);
-    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
-  }
-  function clampTitle(title, max) {
-    return clampLength(title.trim(), max);
   }
 
   // src/lib/checklist.ts
@@ -8556,14 +8550,19 @@ var HuntCore = (() => {
       commitLocalChange();
     }
 
+    // The edit a List or Checklist row's control asks for (applyListEdit / applyChecklistEdit): a rename
+    // carries the text, a move the index (both arrive as strings from jsArg), the others the item only.
+    function itemEditOf(kind, itemId, arg) {
+      return kind === "rename" ? { kind, id: itemId, text: String(arg) }
+        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
+        : { kind, id: itemId };
+    }
+
     // One item edit, Clear ticked or Untick all through the shared rule; a refused one just redraws.
     function editListItems(listId, kind, itemId, arg) {
       const l = findList(listId);
       if (!l) return;
-      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
-        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
-        : { kind, id: itemId };
-      const next = applyListEdit(l, edit);
+      const next = applyListEdit(l, itemEditOf(kind, itemId, arg));
       if (!next) { renderApp(); return; }
       if (kind === "toggle" || kind === "clearTicked" || kind === "untickAll") playClickSound();
       l.items = next;
@@ -8628,10 +8627,7 @@ var HuntCore = (() => {
     function editTaskChecklist(taskId, kind, itemId, arg) {
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
-      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
-        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
-        : { kind, id: itemId };
-      const next = applyChecklistEdit(t, edit);
+      const next = applyChecklistEdit(t, itemEditOf(kind, itemId, arg));
       if (next) {
         t.checklist = next;
         t.updatedAt = nextStamp(t);
@@ -10237,7 +10233,7 @@ var HuntCore = (() => {
               <div class="habit-cal-title" aria-live="polite">${habitDetailMonthName(month.monthKey, true)}</div>
               <button class="habit-cal-nav pressable" aria-label="Next month" ${month.nextMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.nextMonthKey || "")})">›</button>
             </div>
-            <div class="habit-cal-grid" aria-hidden="true">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(x => `<span class="habit-cal-wd">${x}</span>`).join("")}</div>
+            <div class="habit-cal-grid" aria-hidden="true">${HuntCore.HABIT_WEEKDAYS.map(d => `<span class="habit-cal-wd">${d.label}</span>`).join("")}</div>
             <div class="habit-cal-grid">${cells}</div>
             <ul class="habit-cal-legend" aria-label="Legend">${legend}</ul>
             <div class="habit-cal-daybox${isCount ? " count" : ""}">${dayBox}</div>

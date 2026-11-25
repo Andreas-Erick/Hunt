@@ -1,3 +1,4 @@
+import { dateKeyFromOffset } from "./dateKeys";
 import type { Habit, HabitEndedSpan } from "./domainTypes";
 import { isDateKey } from "./syncValues";
 
@@ -14,15 +15,6 @@ import { isDateKey } from "./syncValues";
 export const MAX_ENDED_SPANS = 100;
 
 type EndSource = Readonly<Pick<Partial<Habit>, "endDate" | "endedSpans">>;
-
-/** The local YYYY-MM-DD key `days` days after `dateKey` (negative: before). */
-function shiftDateKey(dateKey: string, days: number): string {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const date = new Date(y, m - 1, d + days, 12);
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${mm}-${dd}`;
-}
 
 /** Whether `dayKey` is past the Habit's end date or inside a stretch it spent Ended. */
 export function isHabitEndedOn(habit: EndSource, dayKey: string): boolean {
@@ -51,8 +43,8 @@ export function withHabitEndDate(
   const spans = [...(habit.endedSpans ?? [])];
   const restarts = isEndedHabit(habit, todayKey) && (endDate === null || endDate >= todayKey);
   if (restarts) {
-    const from = shiftDateKey(habit.endDate as string, 1);
-    const to = shiftDateKey(todayKey, -1);
+    const from = dateKeyFromOffset(habit.endDate as string, 1);
+    const to = dateKeyFromOffset(todayKey, -1);
     if (from <= to) spans.push({ from, to });
   }
   const kept = spans.slice(-MAX_ENDED_SPANS);

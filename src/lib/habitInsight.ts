@@ -1,4 +1,4 @@
-import { dateFromKey, toLocalDateKey } from "./dateUtils";
+import { dateFromKey, toLocalDateKey, WEEKDAY_SHORT } from "./dateKeys";
 import type { HabitOutcome } from "./habitOutcome";
 
 /**
@@ -29,8 +29,6 @@ export function habitSuccessRateLabel(rate: number | null): string | null {
 
 /** Days the Habit card's week strip shows, ending today. */
 export const HABIT_WEEK_STRIP_DAYS = 7;
-
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 const OUTCOME_NAME: Record<HabitOutcome, string> = {
   open: "Open",

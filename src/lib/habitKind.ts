@@ -1,4 +1,5 @@
 import type { Habit, HabitKind, Task } from "./domainTypes";
+import { clampLength } from "./textLimits";
 
 /**
  * SHARED Habit Kind rules (GLOSSARY: Habit Kind, Count Habit, Avoid Habit):
@@ -56,14 +57,6 @@ function isCountAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair. */
-function clampUnit(text: string): string {
-  const max = MAX_COUNT_UNIT_LENGTH;
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
 /**
  * Sync boundary: a Habit row's valid Kind fields from `raw`. An unknown Kind,
  * a target that is not a positive number and a unit that is not text are left
@@ -74,7 +67,7 @@ export function sanitizeHabitKindFields(raw: Record<string, unknown>): Partial<H
   const out: Partial<Habit> = {};
   if (isHabitKind(raw.kind)) out.kind = raw.kind;
   if (isCountAmount(raw.target) && raw.target > 0) out.target = Math.min(raw.target, MAX_COUNT_AMOUNT);
-  if (typeof raw.unit === "string") out.unit = clampUnit(raw.unit);
+  if (typeof raw.unit === "string") out.unit = clampLength(raw.unit, MAX_COUNT_UNIT_LENGTH);
   return out;
 }
 

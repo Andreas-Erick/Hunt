@@ -14,11 +14,9 @@ import {
 import type { HabitWeek } from "@/lib/habitWeek";
 import type { HabitOutcome } from "@/lib/habitOutcome";
 import { countProgressLabel, formatCountAmount, habitKindOf, parseCountAmount } from "@/lib/habitKind";
-import { isHabitScheduledOn } from "@/lib/habitFrequency";
+import { HABIT_WEEKDAYS, isHabitScheduledOn } from "@/lib/habitFrequency";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
-
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const OUTCOME_LABEL: Record<HabitOutcome, string> = {
   met: "Met",
@@ -181,7 +179,7 @@ export function HabitCalendar({
       </div>
 
       <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] text-hud-muted" aria-hidden="true">
-        {WEEKDAYS.map((w) => (
+        {HABIT_WEEKDAYS.map(({ label: w }) => (
           <span key={w}>{w}</span>
         ))}
       </div>
