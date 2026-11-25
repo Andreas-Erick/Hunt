@@ -454,9 +454,9 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         pressOnBackdropRef.current = false;
         if (onBackdrop) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
+      className="hunt-backdrop-enter fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
     >
-      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
+      <div className="hunt-panel-enter relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
         {/* Top Modal Header */}
         <div className="flex items-start justify-between gap-3 sm:gap-4">
           <div className="flex min-w-0 items-center gap-3">

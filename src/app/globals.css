@@ -401,3 +401,51 @@ body {
 .focus-chrono-wake {
   animation: focusChronoWake 700ms cubic-bezier(0.22, 1, 0.36, 1) none;
 }
+
+/* Desktop modals (HabitDetail, MobileSyncModal): the backdrop fades and the panel
+   settles up from just below, like the phone's `.bottom-sheet.entering`. Fill-mode
+   `none` as above, so a resting modal is always fully opaque. Close stays instant. */
+@keyframes huntBackdropEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes huntPanelEnter {
+  from {
+    opacity: 0.01;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hunt-backdrop-enter {
+  animation: huntBackdropEnter 160ms ease-out none;
+}
+
+.hunt-panel-enter {
+  animation: huntPanelEnter 180ms cubic-bezier(0.22, 1, 0.36, 1) none;
+}
+
+/* Anchored menus grow out of their trigger: pair with an `origin-*` class on the
+   edge that touches the button. */
+@keyframes huntPopoverEnter {
+  from {
+    opacity: 0.01;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hunt-popover-enter {
+  animation: huntPopoverEnter 140ms cubic-bezier(0.16, 1, 0.3, 1) none;
+}

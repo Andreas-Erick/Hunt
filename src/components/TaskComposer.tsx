@@ -155,7 +155,7 @@ export function TaskComposer({
               aria-pressed={isSelected}
               className={`flex min-w-0 max-w-full sm:max-w-[230px] min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
                 isSelected
-                  ? `${st.border} bg-white/[0.06] text-white font-medium`
+                  ? `${st.border} bg-white/[0.06] text-white`
                   : "border-white/[0.07] bg-transparent text-neutral-400 hover:border-white/15 hover:text-neutral-200"
               }`}
             >
@@ -176,7 +176,7 @@ export function TaskComposer({
           aria-pressed={otherWorkSelected}
           className={`flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
             otherWorkSelected
-              ? "border-white/30 bg-white/[0.08] text-white font-medium"
+              ? "border-white/30 bg-white/[0.08] text-white"
               : "border-white/[0.07] text-hud-muted hover:text-neutral-300"
           }`}
         >

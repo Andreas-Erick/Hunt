@@ -380,7 +380,7 @@ export function PlanWeekView() {
                   aria-pressed={isSelected}
                   className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full sm:max-w-[200px] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                     isSelected
-                      ? "bg-white/10 text-white font-medium"
+                      ? "bg-white/10 text-white"
                       : "text-neutral-400 hover:text-neutral-200"
                   }`}
                 >
@@ -400,7 +400,7 @@ export function PlanWeekView() {
               aria-pressed={otherSelected}
               className={`flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                 otherSelected
-                  ? "bg-white/10 text-white font-medium"
+                  ? "bg-white/10 text-white"
                   : "text-hud-muted hover:text-neutral-300"
               }`}
             >

@@ -234,7 +234,7 @@ export function TopTelemetryBar() {
               >
                 <HuntLogo
                   size={36}
-                  className="transition-transform duration-200 group-hover:scale-105"
+                  className="transition-transform duration-200 [@media(hover:hover)]:group-hover:scale-105"
                 />
                 <span className="hidden sm:inline text-lg font-semibold tracking-tight text-white">
                   Hunt

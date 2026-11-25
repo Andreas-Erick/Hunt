@@ -27,6 +27,7 @@ import {
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
+import { HeightReveal } from "./HeightReveal";
 import { ReviewHeatmapCard } from "./ReviewHeatmapCard";
 import { useTodayDateKey } from "./useTodayDateKey";
 
@@ -299,7 +300,7 @@ export function TelemetryDashboardView() {
                 role="listbox"
                 aria-label="Quest filter options"
                 onKeyDown={handleScopeListKeyDown}
-                className="absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-raised p-1 shadow-2xl"
+                className="hunt-popover-enter origin-top-left lg:origin-top-right absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-raised p-1 shadow-2xl"
               >
                 <button
                   type="button"
@@ -799,9 +800,7 @@ export function TelemetryDashboardView() {
 
           {/* Card: FOCUS SPLIT (quest work vs other) */}
           <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
-            <div className="mb-5 text-sm font-medium text-neutral-400">
-              Focus split
-            </div>
+            <div className="mb-5 text-sm font-medium text-neutral-400">Focus split</div>
 
             <div className="flex h-11 w-full overflow-hidden rounded-lg bg-raised-2">
               <div
@@ -866,7 +865,7 @@ export function TelemetryDashboardView() {
           />
         </button>
 
-        {showSessionHistory && (
+        <HeightReveal show={showSessionHistory}>
           <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-surface px-4 sm:px-6 py-2">
             {periodLogs !== undefined && report.filteredLogs.length === 0 && (
               <p className="py-3.5 text-sm text-hud-muted">
@@ -922,7 +921,7 @@ export function TelemetryDashboardView() {
               </div>
             )}
           </div>
-        )}
+        </HeightReveal>
       </div>
     </div>
   );

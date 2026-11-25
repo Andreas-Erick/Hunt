@@ -953,7 +953,8 @@ describe("empty and loading states", () => {
     expect(screen.queryAllByTestId("session-row")).toEqual([]);
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("No sessions logged this week.")).toBeNull();
+    // The log collapses through HeightReveal, so it leaves after the exit animation.
+    await waitFor(() => expect(screen.queryByText("No sessions logged this week.")).toBeNull());
   });
 
   it("Review: quests without logs show their rows, not the empty copy; last week's logs do not count", async () => {

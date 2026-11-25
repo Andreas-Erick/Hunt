@@ -91,7 +91,7 @@ export function HabitDetail({
         if (e.target === e.currentTarget && pressOnBackdrop.current) onClose();
         pressOnBackdrop.current = false;
       }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-start sm:p-4 sm:pt-[8vh]"
+      className="hunt-backdrop-enter fixed inset-0 z-50 flex items-end justify-center bg-black/75 backdrop-blur-sm sm:items-start sm:p-4 sm:pt-[8vh]"
     >
       <div
         ref={dialogRef}
@@ -99,7 +99,7 @@ export function HabitDetail({
         aria-modal="true"
         aria-labelledby={`${ids}-title`}
         onKeyDown={onKeyDown}
-        className="max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-white/[0.1] bg-surface px-3 pb-5 pt-3 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:px-5"
+        className="hunt-panel-enter max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-white/[0.1] bg-surface px-3 pb-5 pt-3 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:px-5"
       >
         <div className="flex items-start justify-between gap-3">
           <h2
