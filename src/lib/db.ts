@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "./domainTypes";
 import { compareQuestSlot, dateKeyFromOffset, toLocalDateKey } from "./dateUtils";
 
 class CommandCenterDB extends Dexie {
@@ -7,6 +7,7 @@ class CommandCenterDB extends Dexie {
   tasks!: EntityTable<Task, "id">;
   timeLogs!: EntityTable<TimeLog, "id">;
   habits!: EntityTable<Habit, "id">;
+  lists!: EntityTable<List, "id">;
 
   constructor() {
     super("JourneyCommandDB");
@@ -28,6 +29,15 @@ class CommandCenterDB extends Dexie {
       tasks: "id, [status+rank], status, rank, questId, scheduledDate, habitId, completedAt",
       timeLogs: "id, dateKey, questId, taskId, startTime, [dateKey+questId]",
       habits: "id, rank, questId",
+    });
+
+    // Standalone Lists, a synced collection of their own (read whole, sorted by rank in memory).
+    this.version(4).stores({
+      quests: "id, slotIndex, archived",
+      tasks: "id, [status+rank], status, rank, questId, scheduledDate, habitId, completedAt",
+      timeLogs: "id, dateKey, questId, taskId, startTime, [dateKey+questId]",
+      habits: "id, rank, questId",
+      lists: "id",
     });
 
     // Yield stale connections on schema upgrades while keeping auto-open enabled
@@ -53,6 +63,7 @@ async function localDbHasRows(): Promise<boolean> {
     db.tasks.count(),
     db.timeLogs.count(),
     db.habits.count(),
+    db.lists.count(),
   ]);
   return counts.some((count) => count > 0);
 }

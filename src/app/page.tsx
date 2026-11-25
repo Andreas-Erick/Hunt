@@ -17,6 +17,7 @@ import { PlanWeekView } from "@/components/PlanWeekView";
 import { FocusHudView } from "@/components/FocusHudView";
 import { QuestMatrixPanel } from "@/components/QuestMatrixPanel";
 import { HabitsView } from "@/components/HabitsView";
+import { ListsView } from "@/components/ListsView";
 import { TelemetryDashboardView } from "@/components/TelemetryDashboardView";
 import { GuideView } from "@/components/GuideView";
 import { RegionErrorBoundary } from "@/components/RegionErrorBoundary";
@@ -48,6 +49,7 @@ const VIEWS: Record<HudView, ViewEntry> = {
   focus: { key: "view-focus", region: "Focus", Component: FocusHudView },
   quests: { key: "view-quests", region: "Quests", Component: QuestMatrixPanel },
   habits: { key: "view-habits", region: "Habits", Component: HabitsView },
+  lists: { key: "view-lists", region: "Lists", Component: ListsView },
   telemetry: REVIEW_VIEW,
   // Legacy alias of the Review view.
   log: REVIEW_VIEW,

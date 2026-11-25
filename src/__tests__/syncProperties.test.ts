@@ -4,6 +4,7 @@ import type {
   ChecklistItem,
   Habit,
   HabitFrequencyChange,
+  List,
   Quest,
   QuestAccent,
   Task,
@@ -59,6 +60,7 @@ const TASK_IDS = [
   "tsk-1763400000003-dddd",
   "tsk-01",
 ];
+const LIST_IDS = ["list-1763400000000-aaaa", "list-1763400000001-bbbb", "list-01"];
 const STAMPS = [1000, 2000, 3000]; // few values, so equal stamps are frequent
 const LOG_STARTS = [10_000, 20_000];
 const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${start}-${taskId}`));
@@ -133,6 +135,16 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     tasks.push(task);
   });
 
+  // Lists merge per row: equal-stamp versions with different items exercise R1's tie-break.
+  const lists: List[] = LIST_IDS.filter(() => chance(0.6)).map((id) => ({
+    id,
+    title: pick(["Groceries", "Packing"]),
+    items: pick(CHECKLISTS),
+    rank: pick([1000, 2000]),
+    createdAt: 500,
+    updatedAt: pick(STAMPS),
+  }));
+
   const timeLogs: TimeLog[] = [];
   for (const taskId of TASK_IDS) {
     for (const startTime of LOG_STARTS) {
@@ -182,10 +194,12 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     tasks,
     timeLogs,
     habits,
+    lists,
     deletedHabitIds: HABIT_IDS.filter(() => chance(0.15)),
     deletedQuestIds: QUEST_IDS.filter(() => chance(0.15)),
     deletedTaskIds: TASK_IDS.filter(() => chance(0.15)),
     deletedLogIds: LOG_IDS.filter(() => chance(0.1)),
+    deletedListIds: LIST_IDS.filter(() => chance(0.15)),
     activeFocus,
     lastSyncedAt: 0,
   };
@@ -213,9 +227,11 @@ function rowsKey(p: SyncPayload, options: { withCounters: boolean }): string {
     habits: rows(p.habits ?? []),
     deletedHabitIds: ids(p.deletedHabitIds),
     timeLogs: rows(p.timeLogs),
+    lists: rows(p.lists ?? []),
     deletedQuestIds: ids(p.deletedQuestIds),
     deletedTaskIds: ids(p.deletedTaskIds),
     deletedLogIds: ids(p.deletedLogIds),
+    deletedListIds: ids(p.deletedListIds),
   });
 }
 
@@ -229,6 +245,10 @@ function expectTombstonesWin(p: SyncPayload, msg: string): void {
   ]);
   for (const row of [...p.quests, ...p.tasks, ...p.timeLogs, ...(p.habits ?? [])]) {
     expect(deleted.has(row.id), `${msg} ${row.id} survived its tombstone`).toBe(false);
+  }
+  const deletedLists = new Set(p.deletedListIds ?? []);
+  for (const list of p.lists ?? []) {
+    expect(deletedLists.has(list.id), `${msg} ${list.id} survived its tombstone`).toBe(false);
   }
   for (const task of p.tasks) {
     expect(task.questId !== null && deleted.has(task.questId), `${msg} ${task.id} kept a deleted quest`).toBe(false);
@@ -278,6 +298,7 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     let equalStampCases = 0;
     let tombstoneCases = 0;
     let checklistConflictCases = 0;
+    let listConflictCases = 0;
 
     for (let i = 0; i < ITERATIONS; i++) {
       const seed = BASE_SEED + i;
@@ -349,6 +370,9 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
       const differentChecklists = (t: Task) =>
         b.tasks.some((u) => u.id === t.id && canonicalString(u.checklist) !== canonicalString(t.checklist));
       if (sharedTaskIds.some(differentChecklists)) checklistConflictCases++;
+      const listConflict = (l: List) =>
+        (b.lists ?? []).some((u) => u.id === l.id && u.updatedAt === l.updatedAt && canonicalString(u) !== canonicalString(l));
+      if ((a.lists ?? []).some(listConflict)) listConflictCases++;
       if (a.deletedTaskIds.length + (a.deletedQuestIds ?? []).length + a.deletedLogIds.length > 0) {
         tombstoneCases++;
       }
@@ -359,5 +383,6 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     expect(equalStampCases).toBeGreaterThan(ITERATIONS / 5);
     expect(tombstoneCases).toBeGreaterThan(ITERATIONS / 4);
     expect(checklistConflictCases).toBeGreaterThan(ITERATIONS / 5);
+    expect(listConflictCases).toBeGreaterThan(ITERATIONS / 5);
   });
 });

@@ -1129,7 +1129,7 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
     expect(pageErrors(p)).toEqual([]);
   });
 
-  it("keeps a clean 5-tab bottom bar and routes to Review via top-bar button and Today's hours pill", () => {
+  it("keeps a clean 6-tab bottom bar and routes to Review via top-bar button and Today's hours pill", () => {
     const p = load({ seedState: baseState() });
     const navButtons = Array.from(p.document.querySelectorAll("#bottomNav .nav-tab"));
     expect(navButtons.map((b) => b.textContent?.trim())).toEqual([
@@ -1138,6 +1138,7 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
       "Focus",
       "Quests",
       "Habits",
+      "Lists",
     ]);
     expect(p.document.getElementById("nav-telemetry")).toBeNull();
 

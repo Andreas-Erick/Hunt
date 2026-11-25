@@ -34,6 +34,9 @@ const PHONE_APP_VIEWPORTS = [
  */
 const MIN_PLAN_TITLE_WIDTH = 100;
 
+/** The seeded List's name (e2e/fixtures.ts). */
+const LONG_LIST_TITLE = LONG_QUEST_TITLE + LONG_QUEST_TITLE;
+
 /** The phone app's localStorage key (STORAGE_KEY in public/hunt-mobile.html). */
 const MOBILE_STORAGE_KEY = "hunt-mobile-standalone-v1";
 
@@ -163,7 +166,7 @@ async function seedDesktopDb(page: Page, fixtures: GeometryFixtures): Promise<vo
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
-      const stores = ["quests", "tasks", "habits", "timeLogs"] as const;
+      const stores = ["quests", "tasks", "habits", "lists", "timeLogs"] as const;
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(stores as unknown as string[], "readwrite");
         for (const name of stores) {
@@ -197,6 +200,7 @@ const DESKTOP_VIEWS: Array<{ nav: string; marker?: (page: Page) => Promise<void>
   { nav: "Plan", marker: (p) => expect(p.getByText(LONG_TASK_TITLE).first()).toBeVisible() },
   { nav: "Quests", marker: (p) => expect(p.getByText(LONG_QUEST_TITLE).first()).toBeVisible() },
   { nav: "Habits", marker: (p) => expect(p.getByText(URL_TASK_TITLE).first()).toBeVisible() },
+  { nav: "Lists", marker: (p) => expect(p.getByRole("region", { name: LONG_LIST_TITLE })).toBeVisible() },
   {
     nav: "Review",
     marker: (p) => expect(p.locator('button[aria-haspopup="listbox"]')).toBeVisible(),
@@ -274,6 +278,10 @@ test.describe(`desktop app geometry (${look})`, () => {
       await checkChecklistEditor(page, longRow.getByRole("group", { name: "Checklist" }), 32, `${label(vp)} desktop Home`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Home drawer`);
 
+      // The seeded List's card: its item editor and actions stay inside the card, 32px targets.
+      await clickDesktopNav(page, "Lists");
+      await checkChecklistEditor(page, page.getByRole("region", { name: LONG_LIST_TITLE }), 32, `${label(vp)} desktop Lists`, failures);
+
       // Focus hides the header, so it goes last.
       await clickDesktopNav(page, "Focus");
       await expect(page.locator("header")).toHaveCount(0);
@@ -295,6 +303,7 @@ const MOBILE_VIEWS: Array<{ name: string; bodyView: string; open: string | null 
   { name: "Plan", bodyView: "plan", open: "#nav-plan" },
   { name: "Quests", bodyView: "quests", open: "#nav-quests" },
   { name: "Habits", bodyView: "habits", open: "#nav-habits" },
+  { name: "Lists", bodyView: "lists", open: "#nav-lists" },
   { name: "Review", bodyView: "telemetry", open: "#reviewBtn" },
   { name: "Guide", bodyView: "guide", open: null },
   { name: "Focus", bodyView: "focus", open: "#nav-focus" },
@@ -364,6 +373,10 @@ test.describe(`phone app geometry (${look})`, () => {
           await checkTabletPlanTitles(page, vp, failures);
         }
       }
+
+      // The seeded List's card: item editor and actions inside the card, 48px Android targets.
+      await openMobileView(page, MOBILE_VIEWS.find((v) => v.bodyView === "lists")!);
+      await checkChecklistEditor(page, page.locator("#mainContainer section.list-card").first(), 48, `${label(vp)} phone-app Lists`, failures);
 
       // Task Options of the long Task: its Checklist editor (48px Android targets).
       await openMobileView(page, MOBILE_VIEWS[0]);
