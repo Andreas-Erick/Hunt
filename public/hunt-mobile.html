@@ -2898,6 +2898,8 @@ var HuntCore = (() => {
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
     fromFocusSession: () => fromFocusSession,
+    habitDayOutcome: () => habitDayOutcome,
+    habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -2909,10 +2911,29 @@ var HuntCore = (() => {
     pickNextFocusTask: () => pickNextFocusTask,
     sameContent: () => sameContent,
     sessionLogId: () => sessionLogId,
+    summarizeHabitDays: () => summarizeHabitDays,
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
     transitionFocus: () => transitionFocus
   });
+
+  // src/lib/habitOutcome.ts
+  function habitDayOutcome({ dayKey, dayTask, todayKey }) {
+    if (dayKey > todayKey) return null;
+    if ((dayTask == null ? void 0 : dayTask.status) === "completed") return "met";
+    if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
+    return "missed";
+  }
+  function habitStreakOf(outcomes) {
+    let streak = 0;
+    let isToday = true;
+    for (const outcome of outcomes) {
+      if (outcome === "met") streak += 1;
+      else if (!(isToday && outcome === "open")) break;
+      isToday = false;
+    }
+    return streak;
+  }
 
   // src/lib/dateUtils.ts
   function habitTaskId(habitId, dateKey) {
@@ -2926,7 +2947,7 @@ var HuntCore = (() => {
   }
   function isMissedHabitTask(task, todayKey) {
     var _a;
-    return Boolean(task.habitId) && task.status === "queued" && ((_a = task.scheduledDate) != null ? _a : "") < todayKey;
+    return Boolean(task.habitId) && task.status === "queued" && habitDayOutcome({ habit: {}, dayKey: (_a = task.scheduledDate) != null ? _a : "", dayTask: task, todayKey }) === "missed";
   }
   function isOpenTask(task, todayKey) {
     return (task.status === "queued" || task.status === "active") && !isMissedHabitTask(task, todayKey);
@@ -2945,14 +2966,23 @@ var HuntCore = (() => {
   function dateKeyFromOffset(baseKey, dayOffset) {
     return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
   }
+  function* outcomesBackFrom(todayKey, outcomeOn) {
+    for (let offset = 0; ; offset -= 1) yield outcomeOn(dateKeyFromOffset(todayKey, offset));
+  }
+  function habitStreakOn(todayKey, outcomeOn) {
+    return habitStreakOf(outcomesBackFrom(todayKey, outcomeOn));
+  }
+  var TICKED_DAY = { status: "completed" };
   function computeHabitStreak(completedDates, todayKey) {
-    let offset = completedDates.has(todayKey) ? 0 : -1;
-    let streak = 0;
-    while (completedDates.has(dateKeyFromOffset(todayKey, offset))) {
-      streak += 1;
-      offset -= 1;
-    }
-    return streak;
+    return habitStreakOn(
+      todayKey,
+      (dayKey) => habitDayOutcome({
+        habit: {},
+        dayKey,
+        dayTask: completedDates.has(dayKey) ? TICKED_DAY : void 0,
+        todayKey
+      })
+    );
   }
 
   // src/lib/habitDay.ts
@@ -2970,15 +3000,25 @@ var HuntCore = (() => {
     return null;
   }
   var EMPTY_DATES = /* @__PURE__ */ new Set();
+  function addDayTask(days, task, day) {
+    const held = days.get(day);
+    if (!held || held.status !== "completed" && task.status === "completed") days.set(day, task);
+  }
   function summarizeHabitDays(habitTasks, todayKey) {
     const todayByHabit = /* @__PURE__ */ new Map();
     const datesByHabit = /* @__PURE__ */ new Map();
+    const dayTasksByHabit = /* @__PURE__ */ new Map();
     for (const task of habitTasks) {
       const habitId = task.habitId;
       if (!habitId) continue;
       const canonical = task.id === habitTaskId(habitId, todayKey);
       if (canonical || task.scheduledDate === todayKey && !todayByHabit.has(habitId)) {
         todayByHabit.set(habitId, task);
+      }
+      let dayTasks = dayTasksByHabit.get(habitId);
+      if (!dayTasks) {
+        dayTasks = /* @__PURE__ */ new Map();
+        dayTasksByHabit.set(habitId, dayTasks);
       }
       const day = completionDateKey(task);
       if (day) {
@@ -2988,6 +3028,9 @@ var HuntCore = (() => {
           datesByHabit.set(habitId, dates);
         }
         dates.add(day);
+        addDayTask(dayTasks, task, day);
+      } else if (task.scheduledDate) {
+        addDayTask(dayTasks, task, task.scheduledDate);
       }
     }
     const cache = /* @__PURE__ */ new Map();
@@ -2998,11 +3041,14 @@ var HuntCore = (() => {
         if (!summary) {
           const todayTask = todayByHabit.get(habitId);
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
+          const dayTasks = dayTasksByHabit.get(habitId);
+          const outcomeOn = (dayKey) => habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
           summary = {
             todayTask,
             completedDates,
-            streak: computeHabitStreak(completedDates, todayKey),
-            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed"
+            streak: habitStreakOn(todayKey, outcomeOn),
+            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed",
+            outcomeOn
           };
           cache.set(habitId, summary);
         }
@@ -3620,6 +3666,7 @@ var HuntCore = (() => {
     var buildHabitTaskRow = HuntCore.buildHabitTaskRow;
     var computeHabitStreak = HuntCore.computeHabitStreak;
     var completionDateKey = HuntCore.completionDateKey;
+    var summarizeHabitDays = HuntCore.summarizeHabitDays;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
     // "Android 10; K" UA reduction) and drives --kb frame-by-frame via WindowInsetsAnimation. Lock
@@ -9738,28 +9785,8 @@ var HuntCore = (() => {
         const recentDays = [];
         for (let i = 6; i >= 0; i--) recentDays.push(dayKeyOffset(-i, now));
 
-        const completedDatesByHabit = new Map();
-        const todayTaskByHabit = new Map();
-        for (const t of state.tasks) {
-          if (!t.habitId) continue;
-          if (t.id === habitTaskId(t.habitId, todayKey) || t.scheduledDate === todayKey) {
-            if (!todayTaskByHabit.has(t.habitId) || t.id === habitTaskId(t.habitId, todayKey)) {
-              todayTaskByHabit.set(t.habitId, t);
-            }
-          }
-          if (t.status === "completed") {
-            const dk = completionDateKey(t);
-            if (dk) {
-              if (!completedDatesByHabit.has(t.habitId)) completedDatesByHabit.set(t.habitId, new Set());
-              completedDatesByHabit.get(t.habitId).add(dk);
-            }
-          }
-        }
-
-        const doneTodayCount = habitsList.filter(h => {
-          const tt = todayTaskByHabit.get(h.id);
-          return tt && tt.status === "completed";
-        }).length;
+        const habitDays = summarizeHabitDays(state.tasks, todayKey);
+        const doneTodayCount = habitsList.filter(h => habitDays.summaryFor(h.id).doneToday).length;
 
         container.innerHTML = `
           <div class="hero-bar">
@@ -9788,13 +9815,10 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + habitsList.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const tt = todayTaskByHabit.get(h.id);
-            const doneToday = !!(tt && tt.status === "completed");
-            const compSet = completedDatesByHabit.get(h.id) || new Set();
-            const streak = computeHabitStreak(compSet, todayKey);
+            const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
             const title = escapeHtml(h.title);
             const dotsHtml = recentDays.map(dk => {
-              const hit = compSet.has(dk);
+              const hit = outcomeOn(dk) === "met";
               const isTodayDot = dk === todayKey;
               return `<span style="width:7px;height:7px;border-radius:50%;${hit ? `background:${hex};` : isTodayDot ? "border:1px solid rgb(var(--c-ink) / 0.35);background:transparent;" : "background:rgb(var(--c-ink) / 0.1);"}"></span>`;
             }).join("");

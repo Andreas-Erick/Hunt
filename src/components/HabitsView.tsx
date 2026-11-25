@@ -389,7 +389,7 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, completedDates, streak } =
+            const { doneToday, outcomeOn, streak } =
               habitDays.summaryFor(habit.id);
             const isEditing = editingHabit?.id === habit.id;
 
@@ -525,11 +525,11 @@ export function HabitsView() {
                       <div
                         className="flex items-center gap-1.5"
                         aria-label={`${
-                          recentDays.filter((d) => completedDates.has(d)).length
+                          recentDays.filter((d) => outcomeOn(d) === "met").length
                         } of last 7 days completed`}
                       >
                         {recentDays.map((dKey) => {
-                          const hit = completedDates.has(dKey);
+                          const hit = outcomeOn(dKey) === "met";
                           const isCurrent = dKey === todayKey;
                           return (
                             <span
