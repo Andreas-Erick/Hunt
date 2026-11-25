@@ -118,7 +118,7 @@ describe("desktop Habit detail: Calendar tab", () => {
     const dialog = await openDetail();
     const tid = habitTaskId("h1", "2026-11-12");
     fireEvent.click(within(dialog).getByRole("button", { name: "12 November: Missed" }));
-    expect(within(dialog).getByText("1 / 3 sets")).toBeInTheDocument();
+    expect(await within(dialog).findByText("1 / 3 sets")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Tick 12 November" }));
     await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 3, status: "completed" }));
 
@@ -169,5 +169,57 @@ describe("desktop Habit detail: Calendar tab", () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+});
+
+describe("desktop Habit detail: Edit tab", () => {
+  beforeEach(async () => {
+    await Promise.all([db.quests.clear(), db.tasks.clear(), db.timeLogs.clear(), db.habits.clear()]);
+    useCommandStore.setState({ activeView: "habits", activeTaskId: null, actionError: null, discardGuard: null });
+    await db.habits.put({ id: "h1", title: "Stretch", notes: "", questId: null, rank: 1000, createdAt: 1, kind: "count", target: 3, unit: "sets" });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const openEditTab = async () => {
+    const dialog = await openDetail();
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Edit" }));
+    return within(dialog).getByRole("form", { name: "Edit habit Stretch" });
+  };
+
+  it("shows the Kind read-only with the target and unit, the Frequency, the end date and the reminders", async () => {
+    const form = await openEditTab();
+    expect(within(form).getByText("Count Habit")).toBeInTheDocument();
+    expect(within(form).getByLabelText("Daily target")).toHaveValue("3");
+    expect(within(form).getByLabelText("Unit")).toHaveValue("sets");
+    expect(within(form).getByRole("group", { name: "Habit frequency" })).toBeInTheDocument();
+    expect(within(form).getByLabelText("End date")).toBeInTheDocument();
+    expect(within(form).getByRole("group", { name: /reminder/i })).toBeInTheDocument();
+  });
+
+  it("saves a new target and Frequency from the tab", async () => {
+    const form = await openEditTab();
+    fireEvent.change(within(form).getByLabelText("Daily target"), { target: { value: "5" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Chosen days" }));
+    fireEvent.click(within(form).getByRole("button", { name: "Monday" }));
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(async () => expect((await db.habits.get("h1"))?.target).toBe(5));
+    expect((await db.habits.get("h1"))?.frequencyHistory?.at(-1)?.frequency).toEqual({ type: "weekdays", weekdays: [1] });
+  });
+
+  it("asks before closing the screen with unsaved edits", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const form = await openEditTab();
+    fireEvent.change(within(form).getByLabelText("Habit Title"), { target: { value: "Stretch more" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("the card's edit button keeps its own drawer, built from the same editor", async () => {
+    render(<HabitsView />);
+    const row = await screen.findByTestId("habit-row");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit habit Stretch" }));
+    const form = within(row).getByRole("form", { name: "Edit habit Stretch" });
+    expect(within(form).getByLabelText("Daily target")).toHaveValue("3");
   });
 });

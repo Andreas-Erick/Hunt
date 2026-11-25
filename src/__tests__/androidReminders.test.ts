@@ -8,6 +8,9 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import { hasJdk, JAVA_DIR, runJavaProbe } from "./helpers/javaProbe";
+import { REMINDER_LATE_LIMIT_MS } from "@/lib/reminderAlarm";
+import { SLIP_CHECK_IN_TEXT } from "@/lib/reminderActions";
+import { REMINDER_PLAN_MAX } from "@/lib/reminderPlan";
 
 const MIN = 60_000;
 const T0 = 1_800_000_000_000;
@@ -72,6 +75,28 @@ describe.skipIf(!hasJdk)("ReminderPlan, run on the JDK", () => {
     const reminders = Array.from({ length: 70 }, (_, i) => entry(`r${i}`, T0 + (70 - i) * MIN));
     const lines = planProbe({ version: 1, reminders }, 'System.out.println(p.entries.size() + " " + p.entries.get(0).key + " " + ReminderPlan.MAX_ENTRIES);');
     expect(lines).toEqual(["64 r69 64"]);
+  }, 60_000);
+
+  it("keeps the shell's limits equal to HuntCore's plan size and late limit", () => {
+    const lines = planProbe({ version: 1, reminders: [] }, "System.out.println(ReminderPlan.MAX_ENTRIES + \" \" + ReminderPlan.LATE_LIMIT_MS);");
+    expect(lines).toEqual([`${REMINDER_PLAN_MAX} ${REMINDER_LATE_LIMIT_MS}`]);
+  }, 60_000);
+
+  it("reads an Avoid Habit's check-in mark, and keeps it on the entry's JSON and on a snoozed copy", () => {
+    const plan = { version: 1, reminders: [entry("dry", T0, { kind: "habit", checkIn: true }), entry("read", T0, { kind: "habit" })] };
+    const until = T0 + 10 * MIN;
+    const lines = planProbe(
+      plan,
+      [
+        "for (ReminderPlan.Entry e : p.entries) System.out.println(e.key + \" \" + e.checkIn);",
+        "ReminderPlan.Entry dry = ReminderPlan.Entry.fromJson(p.entries.get(0).key.equals(\"dry\") ? p.entries.get(0).toJson() : p.entries.get(1).toJson());",
+        "System.out.println(dry.checkIn);",
+        `ReminderPlan s = p.withSnoozes(java.util.Collections.singletonList(new ReminderPlan.Snooze(dry, ${until}L)));`,
+        "for (ReminderPlan.Entry e : s.entries) if (e.snoozeOfKey != null) System.out.println(e.key + \" \" + e.checkIn);",
+      ].join("\n"),
+    );
+    expect(lines.slice(0, 2).sort()).toEqual(["dry true", "read false"]);
+    expect(lines.slice(2)).toEqual(["true", `dry~${until} true`]);
   }, 60_000);
 });
 
@@ -187,6 +212,14 @@ describe("Android reminder shell: source contract", () => {
     expect(mainActivity).toMatch(/handleReminderIntent\(\s*intent\s*\)/);
     expect(mainActivity).toMatch(/callJs\(\s*"__huntOpenReminder"/);
     expect(page).toMatch(/window\.__huntOpenReminder\s*=/);
+  });
+
+  it("an Avoid Habit's check-in asks whether there was a Slip, in the desktop's words; the channel covers Tasks and Habits", () => {
+    const strings = read(path.join(MAIN, "res", "values", "strings.xml"));
+    const text = (name: string) => new RegExp(`<string name="${name}">([^<]*)</string>`).exec(strings)?.[1];
+    expect(text("reminder_check_in_text")).toBe(SLIP_CHECK_IN_TEXT);
+    expect(text("reminder_channel_description")).toMatch(/Task and Habit reminders/);
+    expect(source("Reminders.java")).toMatch(/e\.checkIn\s*\?\s*R\.string\.reminder_check_in_text/);
   });
 
   it("the page hands over the plan HuntCore built after every save, and asks for permissions through the bridge", () => {

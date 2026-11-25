@@ -75,7 +75,11 @@ describe("the Lists section", () => {
     await waitFor(async () => expect((await listRow())?.items.every((i) => !i.done)).toBe(true));
 
     await db.lists.put(seedList({ updatedAt: 9_999_999_999_999 }));
-    fireEvent.click(await within(card).findByRole("button", { name: "Clear ticked" }));
+    // Clear ticked stays disabled until the live query shows the ticked items again; a click on
+    // the still-disabled button would do nothing (the flake this wait removes).
+    const clear = within(card).getByRole("button", { name: "Clear ticked" });
+    await waitFor(() => expect(clear.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(clear);
     await waitFor(async () => expect((await listRow())?.items).toEqual([item("chk-2", "Bread")]));
     await waitFor(() => expect(within(card).getByRole("button", { name: "Clear ticked" }).hasAttribute("disabled")).toBe(true));
   });

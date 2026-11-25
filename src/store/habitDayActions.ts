@@ -20,6 +20,8 @@ export interface HabitDayActions {
   editHabitSlip: (habitId: string, dateKey: string, edit: SlipEdit) => Promise<void>;
   /** Ticks, unticks or Skips one habit day from its calendar (the shared correctHabitDayRow row). */
   correctHabitDay: (habitId: string, dateKey: string, mark: HabitDayMark) => Promise<void>;
+  /** A Count Habit day: "+1" adds one, a number sets the total. False when the write failed. */
+  logHabitAmount: (habitId: string, dateKey: string, amount: number | "+1") => Promise<boolean>;
 }
 
 export function habitDayActions(run: RunAction): HabitDayActions {
@@ -43,5 +45,8 @@ export function habitDayActions(run: RunAction): HabitDayActions {
     correctHabitDay: async (habitId, dateKey, mark) => {
       await run("correctHabitDay", () => localStore.correctHabitDay(habitId, dateKey, mark));
     },
+
+    logHabitAmount: (habitId, dateKey, amount) =>
+      run("logHabitAmount", () => localStore.logHabitAmount(habitId, dateKey, amount)),
   };
 }

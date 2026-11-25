@@ -37,6 +37,7 @@ import {
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useTransientHighlight } from "./useTransientHighlight";
+import { RowTick } from "./RowTick";
 
 interface DayColumn {
   dateKey: string;
@@ -636,24 +637,15 @@ export function PlanWeekView() {
 
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              // The second click of a double-click would hit
-                              // the next card, which slides up under the cursor.
-                              if (e.detail > 1) return;
-                              handleCompleteTask(task.id, col.dateKey);
-                            }}
-                            title="Mark complete"
-                            aria-label="Mark complete"
+                          <RowTick
+                            task={task}
+                            onComplete={() => handleCompleteTask(task.id, col.dateKey)}
                             className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
                               isCompleting
                                 ? `${style.bg} border-transparent text-black`
                                 : "border-white/40 text-transparent hover:border-success hover:text-success"
                             }`}
-                          >
-                            <Check className="h-2.5 w-2.5" />
-                          </button>
+                          />
 
                           <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-neutral-300">
                             <span

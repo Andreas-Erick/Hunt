@@ -1,6 +1,9 @@
+import { dateFromKey, dateKeyFromOffset, toLocalDateKey } from "./dateKeys";
 import type { Quest, Task } from "./domainTypes";
 import { habitDaySlips } from "./habitKind";
 import { habitDayOutcome, habitStreakOf, type HabitOutcome } from "./habitOutcome";
+
+export { dateFromKey, dateKeyFromOffset, toLocalDateKey };
 
 /**
  * Deterministic Quest sort by slotIndex (0..2), breaking ties by createdAt then id.
@@ -80,32 +83,6 @@ export function isOpenTask(
     !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) &&
     !isMissedHabitTask(task, todayKey)
   );
-}
-
-/**
- * Formats a timestamp (ms) into local YYYY-MM-DD string
- */
-export function toLocalDateKey(timestamp: number = Date.now()): string {
-  const d = new Date(timestamp);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-/** Local date for a YYYY-MM-DD key, at noon (safe across DST changes). */
-export function dateFromKey(dateKey: string, dayOffset = 0): Date {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, m - 1, d + dayOffset, 12);
-}
-
-/**
- * The YYYY-MM-DD key `dayOffset` calendar days away from `baseKey`. Steps whole
- * calendar days from a noon anchor, so 23- and 25-hour DST days never skip or
- * repeat a key (unlike `now - n * 86_400_000`).
- */
-export function dateKeyFromOffset(baseKey: string, dayOffset: number): string {
-  return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
 }
 
 /**

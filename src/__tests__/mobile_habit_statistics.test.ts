@@ -182,3 +182,27 @@ describe("phone Habit detail: Calendar tab on a Count Habit", () => {
     expect(pageErrors(p)).toEqual([]);
   });
 });
+
+describe("phone Habit detail: Edit tab", () => {
+  it("shows the Kind read-only with the target and unit, the Frequency, the end date and the reminders, and saves", () => {
+    const p = load([], COUNT);
+    click(p, tab(p, "Edit"));
+    expect(tab(p, "Edit").getAttribute("aria-selected")).toBe("true");
+    const panel = sheet(p).querySelector("#habitPanel-edit") as HTMLElement;
+    expect(panel.textContent).toContain("Count Habit");
+    expect((panel.querySelector('[aria-label="Daily target"]') as HTMLInputElement).value).toBe("3");
+    expect((panel.querySelector('[aria-label="Unit"]') as HTMLInputElement).value).toBe("miles");
+    expect(panel.querySelector('[aria-label="Habit frequency"]')).not.toBeNull();
+    expect(panel.querySelector('[aria-label="End date"]')).not.toBeNull();
+    expect(panel.querySelector('[aria-label="Habit reminders"]')).not.toBeNull();
+
+    (panel.querySelector('[aria-label="Daily target"]') as HTMLInputElement).value = "5";
+    click(p, panel.querySelector('[aria-label="Chosen days"]'));
+    click(p, sheet(p).querySelector('#habitPanel-edit [aria-label="Monday"]'));
+    click(p, Array.from(sheet(p).querySelectorAll("#habitPanel-edit button")).find((b) => b.textContent?.trim() === "Save") ?? null);
+    const habit = (readState(p).habits as Record<string, unknown>[])[0];
+    expect(habit.target).toBe(5);
+    expect(habit.frequencyHistory).toEqual([{ effectiveFrom: "2026-11-18", frequency: { type: "weekdays", weekdays: [1] } }]);
+    expect(pageErrors(p)).toEqual([]);
+  });
+});

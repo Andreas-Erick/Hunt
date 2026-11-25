@@ -6,7 +6,7 @@ import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
 import { isReminderTime, sanitizeHabitReminderTimes } from "./reminderTime";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
-import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequencyFor, withHabitFrequency } from "./habitFrequency";
 import { writeHabitSlip, type SlipEdit } from "./localHabitAvoid";
 import { correctHabitDay, ensureHabitTaskForDay, habitWeekTasks, setHabitDaySkipped } from "./localHabitDays";
 import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
@@ -423,10 +423,11 @@ export type NewHabit = { title: string; notes?: string; questId: string | null; 
 export type HabitChanges = Partial<Omit<NewHabit, "kind">> & { endDate?: string | null; reminderTimes?: readonly string[] };
 
 /** Adds a habit at the end, with today's instance when its Frequency asks for today (unless tombstoned).
- * False for an empty title, an invalid Frequency (no weekday chosen) or a Count Habit with no target. */
+ * False for an empty title, an invalid Frequency (no weekday chosen; N per week on an Avoid Habit)
+ * or a Count Habit with no target. */
 async function createHabit(params: NewHabit): Promise<boolean> {
   const title = clampTitle(params.title, MAX_HABIT_TITLE_LENGTH);
-  const frequency = params.frequency ? parseHabitFrequency(params.frequency) : EVERY_DAY;
+  const frequency = params.frequency ? parseHabitFrequencyFor(params, params.frequency) : EVERY_DAY;
   const kindFields = newHabitKindFields(params);
   if (!title || !frequency || !kindFields) return false;
   const now = Date.now();
@@ -471,7 +472,7 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
     if (changes.questId !== undefined) patch.questId = changes.questId;
     Object.assign(patch, countFieldChanges(row, changes));
     if (changes.frequency !== undefined) {
-      const frequency = parseHabitFrequency(changes.frequency);
+      const frequency = parseHabitFrequencyFor(row, changes.frequency);
       if (!frequency) return false;
       patch.frequencyHistory = withHabitFrequency(row, frequency, todayKey);
     }

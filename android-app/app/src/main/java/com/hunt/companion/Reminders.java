@@ -28,8 +28,9 @@ import java.io.File;
  * posted again from {@link ReminderPlan#withSnoozes} until the page's next plan has judged it.
  * Nothing here decides what is due or writes Hunt data.
  *
- * <p>Habit reminders are plan entries of kind "habit": only their text differs, and the kind is
- * passed back to the page as it is.
+ * <p>Habit reminders are plan entries of kind "habit": only their text differs (an Avoid Habit's
+ * check-in asks whether there was a Slip, and offers only Snooze), and the kind is passed back to
+ * the page as it is.
  */
 final class Reminders {
     private static final String TAG = "HuntReminders";
@@ -127,7 +128,9 @@ final class Reminders {
         NotificationManager nm = app.getSystemService(NotificationManager.class);
         if (nm == null) return;
         ensureChannel(app, nm);
-        int text = KIND_HABIT.equals(e.kind) ? R.string.reminder_habit_text : R.string.reminder_task_text;
+        // An Avoid Habit's check-in asks whether there was a Slip; its tap opens the Habit to log one.
+        int text = e.checkIn ? R.string.reminder_check_in_text
+                : KIND_HABIT.equals(e.kind) ? R.string.reminder_habit_text : R.string.reminder_task_text;
         Notification.Builder b = new Notification.Builder(app, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher_monochrome)
                 .setContentTitle(e.title)
@@ -151,8 +154,11 @@ final class Reminders {
         }
     }
 
+    /**
+     * Creates the channel, or for one that exists updates its name and description (Android keeps
+     * the user's importance and sound settings), so an update's new description reaches it too.
+     */
     private static void ensureChannel(Context app, NotificationManager nm) {
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return;
         NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
                 app.getString(R.string.reminder_channel_name), NotificationManager.IMPORTANCE_HIGH);
         channel.setDescription(app.getString(R.string.reminder_channel_description));

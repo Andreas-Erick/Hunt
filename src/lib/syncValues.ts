@@ -2,6 +2,7 @@
  * Value checks and coercions the sync sanitizers (syncTypes.ts) build rows
  * with. Pure, so the phone's bundled core runs the same ones.
  */
+import { clampLength } from "./textLimits";
 
 export type UnknownRecord = Record<string, unknown>;
 
@@ -33,9 +34,5 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Cuts `text` to at most `max` UTF-16 units without splitting a surrogate pair. */
-export function clampText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
+/** Cuts `text` to at most `max` UTF-16 units without splitting a surrogate pair (textLimits). */
+export const clampText = clampLength;

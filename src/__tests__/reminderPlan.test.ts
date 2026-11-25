@@ -5,7 +5,7 @@
 // and far enough ahead to cover the days Hunt stays closed.
 import { describe, expect, it } from "vitest";
 import { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "@/mobile/huntCore";
-import type { Task } from "@/lib/domainTypes";
+import type { Habit, Task } from "@/lib/domainTypes";
 
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).getTime();
 const NOW = at(25, 9);
@@ -72,5 +72,17 @@ describe("reminderPlan", () => {
     expect(plan.reminders).toHaveLength(64);
     expect(plan.reminders[0].itemId).toBe("t000");
     expect(plan.reminders[63].itemId).toBe("t063");
+  });
+
+  it("marks an Avoid Habit's reminder as a Slip check-in, with Snooze only (no Done or +1)", () => {
+    const habit = (id: string, kind: Habit["kind"]): Habit => ({
+      id, title: id, notes: "", questId: null, rank: 1000, createdAt: at(1, 8), kind, reminderTimes: ["18:00"],
+    });
+    const plan = reminderPlan({ tasks: [], habits: [habit("dry", "avoid"), habit("read", "check")] }, NOW);
+    const [dry, read] = ["dry", "read"].map((id) => plan.reminders.find((r) => r.itemId === id && r.dateKey === "2026-11-25"));
+    expect(dry).toMatchObject({ kind: "habit", checkIn: true });
+    expect(dry?.action).toBeUndefined();
+    expect(read?.checkIn).toBeUndefined();
+    expect(read?.action).toEqual({ tick: "done", taskId: "habtsk-2026-11-25-read" });
   });
 });

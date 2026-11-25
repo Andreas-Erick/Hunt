@@ -1,4 +1,5 @@
 import type { Habit, HabitKind, Task } from "./domainTypes";
+import { clampLength } from "./textLimits";
 
 /**
  * SHARED Habit Kind rules (GLOSSARY: Habit Kind, Count Habit, Avoid Habit):
@@ -8,11 +9,23 @@ import type { Habit, HabitKind, Task } from "./domainTypes";
  * Count day's total is habitCount.ts; logging a Slip is habitAvoid.ts.
  */
 
-/** Every Habit Kind this build knows. */
-const HABIT_KIND_TABLE: Record<HabitKind, true> = {
-  check: true,
-  count: true,
-  avoid: true,
+/** What a Habit Kind does: its name, how a day of it is logged, and what it allows. */
+export type HabitKindRules = {
+  /** The Kind as the edit form names it. */
+  label: string;
+  /** How a day is logged on the Habit card: a tick, +1 / an exact total, or a Slip. */
+  logs: "tick" | "count" | "slip";
+  /** Whether a day of it can be worked on in a focus session. */
+  canFocus: boolean;
+  /** Whether it may ask N times per Habit Week (an Avoid Habit is judged day by day). */
+  allowsPerWeek: boolean;
+};
+
+/** Every Habit Kind this build knows, with its rules. */
+const HABIT_KIND_TABLE: Record<HabitKind, HabitKindRules> = {
+  check: { label: "Check Habit", logs: "tick", canFocus: true, allowsPerWeek: true },
+  count: { label: "Count Habit", logs: "count", canFocus: true, allowsPerWeek: true },
+  avoid: { label: "Avoid Habit", logs: "slip", canFocus: false, allowsPerWeek: false },
 };
 
 /** Largest Count target or day total kept; larger ones are cut to it. */
@@ -29,22 +42,19 @@ export function isHabitKind(value: unknown): value is HabitKind {
  * The Habit's Kind: "check" for an old row without one, or with one this build
  * does not know (the migration rule).
  */
-export function habitKindOf(habit: Readonly<Pick<Partial<Habit>, "kind">> | null | undefined): HabitKind {
+export function habitKindOf(habit: { readonly kind?: unknown } | null | undefined): HabitKind {
   const kind = habit?.kind;
   return isHabitKind(kind) ? kind : "check";
+}
+
+/** The rules of the Habit's Kind (HABIT_KIND_TABLE). */
+export function habitKindRules(habit: { readonly kind?: unknown } | null | undefined): HabitKindRules {
+  return HABIT_KIND_TABLE[habitKindOf(habit)];
 }
 
 /** A Count target or day total as stored: a finite number >= 0. */
 function isCountAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-
-/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair. */
-function clampUnit(text: string): string {
-  const max = MAX_COUNT_UNIT_LENGTH;
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
 }
 
 /**
@@ -57,7 +67,7 @@ export function sanitizeHabitKindFields(raw: Record<string, unknown>): Partial<H
   const out: Partial<Habit> = {};
   if (isHabitKind(raw.kind)) out.kind = raw.kind;
   if (isCountAmount(raw.target) && raw.target > 0) out.target = Math.min(raw.target, MAX_COUNT_AMOUNT);
-  if (typeof raw.unit === "string") out.unit = clampUnit(raw.unit);
+  if (typeof raw.unit === "string") out.unit = clampLength(raw.unit, MAX_COUNT_UNIT_LENGTH);
   return out;
 }
 

@@ -1,12 +1,17 @@
-import { habitStreakOn, habitTaskId, outcomesBackFrom, toLocalDateKey } from "./dateUtils";
+import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habitFrequency";
 import { habitSuccessRate } from "./habitInsight";
-import { habitKindOf } from "./habitKind";
+import { habitDayAmount, habitKindOf, habitKindRules, type HabitKindRules } from "./habitKind";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
-import { habitDayAmount } from "./habitKind";
 import { habitScore } from "./habitStats";
-import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, weekOutcomesBackFrom, type HabitWeek } from "./habitWeek";
+import {
+  frequencyUnitStart,
+  habitUnitOutcomesBackFrom,
+  habitWeekOf,
+  habitWeekStreakOn,
+  type HabitWeek,
+} from "./habitWeek";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -73,9 +78,10 @@ export interface HabitDaySummary {
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
   /**
-   * The Success Rate (habitSuccessRate) over every day since the Habit began
-   * (every Habit Week for an N per week Habit), or null before any was Met or
-   * Missed. Worked out on first call only.
+   * The Success Rate (habitSuccessRate) over every unit since the Habit began:
+   * days under a daily Frequency, Habit Weeks under N per week, across any
+   * switch between them (habitUnitOutcomesBackFrom), or null before any was
+   * Met or Missed. Worked out on first call only.
    */
   successRate: () => number | null;
   /**
@@ -182,9 +188,10 @@ export function summarizeHabitDays(
         const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
         let rate: number | null | undefined;
         let score: number | null | undefined;
-        // The units the Success Rate and Habit Score judge, newest first: days, or Habit Weeks.
+        // The units the Success Rate and Habit Score judge, newest first: days and Habit Weeks, as each
+        // stretch of the Habit's history was asked for.
         const units = () =>
-          weekly ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn) : outcomesBackFrom(todayKey, firstDay, outcomeOn);
+          habitUnitOutcomesBackFrom(habit, todayKey, firstDay, { dayOutcomeOn: outcomeOn, weekOutcomeOn });
         const week = weekly ? weekOn(todayKey) : null;
         const doneToday = outcomeOn(todayKey) === "met";
         const unitStart = frequencyUnitStart(habit, todayKey);
@@ -229,6 +236,29 @@ export function summarizeHabitDays(
  */
 export function habitWantsDayTask(summary: Pick<HabitDaySummary, "askedToday" | "skipState">): boolean {
   return summary.askedToday && summary.skipState !== "skipped";
+}
+
+/** How a Habit card's row logs today (habitRowMode). */
+export interface HabitRowMode {
+  /**
+   * "tick", "count" (+1 / an exact total) or "slip" by the Habit's Kind on a
+   * day it asks for; "skipped" on a day (or Habit Week) set aside; "unasked"
+   * on a day it does not ask for.
+   */
+  mode: HabitKindRules["logs"] | "skipped" | "unasked";
+  /** Whether the row offers to start focus on today: asked, not done, and a Kind that can be worked on. */
+  focusable: boolean;
+}
+
+/** SHARED row rule of the Habit card on both apps: which control logs today, and whether focus is offered. */
+export function habitRowMode(
+  habit: { readonly kind?: unknown },
+  summary: Pick<HabitDaySummary, "askedToday" | "skipState" | "doneToday">
+): HabitRowMode {
+  if (summary.skipState === "skipped") return { mode: "skipped", focusable: false };
+  if (!summary.askedToday) return { mode: "unasked", focusable: false };
+  const rules = habitKindRules(habit);
+  return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday };
 }
 
 /**

@@ -157,7 +157,9 @@ async function checkChecklistEditor(
 /**
  * The Habit detail's Calendar tab (#25) with a day chosen: the screen lies inside the viewport,
  * every control inside the screen's box, and each control at least `minTarget` px tall and wide,
- * except a calendar day, which shares its row with six others and needs only `minDayWidth` px.
+ * except a calendar day (CODING_STANDARDS: 7-column calendar exception): it is at least 44px tall
+ * and `minDayWidth` px wide, and neighbouring days sit 8px apart, or, where seven 44px days and
+ * 8px gaps do not fit in the row, as far apart as the row leaves room for.
  */
 async function checkHabitDetail(
   page: Page,
@@ -181,12 +183,29 @@ async function checkHabitDetail(
     for (const b of Array.from(el.querySelectorAll<HTMLElement>("button:not(.sheet-close)"))) {
       const r = b.getBoundingClientRect();
       const name = b.getAttribute("aria-label") || (b.textContent || "").trim();
-      const minWidth = /^\d+ \w+: /.test(name) ? minDayWidth : minTarget;
+      const isDay = /^\d+ \w+: /.test(name);
+      const minWidth = isDay ? minDayWidth : minTarget;
+      const minHeight = isDay ? Math.max(minTarget, 44) : minTarget;
       if (r.right > box.right + 1 || r.left < box.left - 1) {
         out.push(`"${name.slice(0, 40)}" spans x=${Math.round(r.left)}..${Math.round(r.right)} outside ${Math.round(box.left)}..${Math.round(box.right)}`);
       }
-      if (r.height < minTarget - 0.5 || r.width < minWidth - 0.5) {
+      if (r.height < minHeight - 0.5 || r.width < minWidth - 0.5) {
         out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);
+      }
+    }
+    // Neighbouring days in a row: 8px apart, or the largest gap seven 44px days leave room for.
+    const days = Array.from(el.querySelectorAll<HTMLElement>("button[aria-label], span[aria-label]")).filter((d) =>
+      /^\d+ \w+: /.test(d.getAttribute("aria-label") || "")
+    );
+    const row = days[0]?.parentElement?.getBoundingClientRect();
+    const wantGap = row ? Math.max(0, Math.min(8, (row.width - 7 * 44) / 6)) : 8;
+    for (let i = 1; i < days.length; i++) {
+      const a = days[i - 1].getBoundingClientRect();
+      const b = days[i].getBoundingClientRect();
+      if (Math.abs(a.top - b.top) > 1) continue; // the next week's row
+      const gap = b.left - a.right;
+      if (gap < wantGap - 0.5) {
+        out.push(`days "${days[i - 1].getAttribute("aria-label")}" and the next are ${gap.toFixed(1)}px apart (< ${wantGap.toFixed(1)}px)`);
       }
     }
     return out;
@@ -375,7 +394,7 @@ test.describe(`desktop app geometry (${look})`, () => {
       await clickDesktopNav(page, "Habits");
       await page.getByRole("button", { name: `Open habit: ${URL_TASK_TITLE}` }).click();
       const detail = page.getByRole("dialog");
-      await checkHabitDetail(page, detail, { minTarget: 32, minDayWidth: 32 }, `${label(vp)} desktop`, failures);
+      await checkHabitDetail(page, detail, { minTarget: 32, minDayWidth: 44 }, `${label(vp)} desktop`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habit detail`);
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
@@ -531,12 +550,12 @@ test.describe(`phone app geometry (${look})`, () => {
       await page.evaluate(() => (window as unknown as { closeSheet: () => void }).closeSheet());
 
       // The Habit detail sheet, Calendar tab, with a day chosen (48px Android targets; a day shares
-      // its row with six others).
+      // its row with six others, so it needs 44px).
       await openMobileView(page, MOBILE_VIEWS[3]);
       await checkPhoneHabitCards(page, `${label(vp)} phone-app`, failures);
       await page.locator(".habits-grid .queue-item-body").first().click();
       const habitPanel = page.locator("#sheetContainer [role=dialog]");
-      await checkHabitDetail(page, habitPanel, { minTarget: 48, minDayWidth: 40 }, `${label(vp)} phone-app`, failures);
+      await checkHabitDetail(page, habitPanel, { minTarget: 48, minDayWidth: 44 }, `${label(vp)} phone-app`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit detail`);
       await page.evaluate(() => (window as unknown as { closeSheet: () => void }).closeSheet());
 

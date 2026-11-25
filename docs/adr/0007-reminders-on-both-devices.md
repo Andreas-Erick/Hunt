@@ -40,7 +40,11 @@ per week day is Open on its own, so its Habit Week
 days, or was set aside (Skipped), its other days stay
 quiet. Habit Kinds need no rule of their own
 here: an Avoid Habit's day stays Open until a Slip, so
-its evening reminder is a check-in. Each answer carries
+its evening reminder is a check-in (`isSlipCheckIn`):
+its text asks "Check-in: did you slip? Log a Slip in
+Hunt" on both devices (the phone's plan entry carries
+`checkIn: true`), and a tap opens the Habit, where the
+Slip is logged. Each answer carries
 a `kind` (`task` or `habit`) and a `key`
 (`task:<id>:<date>T<time>`, `habit:<id>:<date>T<time>`)
 that is stable per item and time. Snoozes are folded
@@ -58,9 +62,11 @@ Each device re-plans after every save and every sync.
   Notification, which the launcher's Chromium window turns
   into a Windows notification. The notification tag is the
   reminder key, so two windows replace each other's toast
-  instead of stacking. A click focuses Hunt; a Habit's
-  opens Habits at its card (with the service worker, the
-  worker hands the click to the window, which opens it).
+  instead of stacking. A click focuses Hunt and opens the
+  item: a Habit's opens Habits at its card, a Task's opens
+  Today with its row's drawer open (with the service
+  worker, the worker hands the click to the window, which
+  opens it).
 - **Phone.** After every save (a sync's merge is saved
   too), at boot and at the start of each day, the page
   hands the shell a Reminder Plan: HuntCore's
@@ -77,7 +83,8 @@ Each device re-plans after every save and every sync.
   opens Hunt on the item (a Task's options; a Habit's
   sheet on Habits); an item gone since just opens Hunt.
   The shell decides nothing about what is due; it only
-  picks the notification's text by `kind`.
+  picks the notification's text by `kind` and
+  `checkIn`.
 
 ## Consequences
 

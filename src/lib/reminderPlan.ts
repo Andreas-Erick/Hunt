@@ -1,5 +1,5 @@
 import { REMINDER_LATE_LIMIT_MS } from "./reminderAlarm";
-import { reminderAction, type ReminderAction } from "./reminderActions";
+import { isSlipCheckIn, reminderAction, type ReminderAction } from "./reminderActions";
 import { dueReminders, type DueReminder, type ReminderSources } from "./reminders";
 import { sanitizeReminderSnoozes, type ReminderSnooze } from "./reminderSnooze";
 
@@ -23,6 +23,8 @@ export type PlannedReminder = DueReminder & {
   action?: ReminderAction;
   /** Set on a snoozed reminder: the original, which a second Snooze moves the snooze of. */
   snoozeOf?: { key: string; fireAt: number };
+  /** Set on an Avoid Habit's check-in (isSlipCheckIn): the shell shows its "did you slip?" text. */
+  checkIn?: true;
 };
 
 export interface ReminderPlan {
@@ -50,7 +52,9 @@ export function reminderPlan(sources: ReminderPlanSources, now: number): Reminde
   const due = dueReminders({ ...sources, snoozes }, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
   const reminders = due.slice(0, REMINDER_PLAN_MAX).map((r): PlannedReminder => {
     const action = reminderAction(r, sources.habits);
-    return action ? { ...r, action } : r;
+    const planned: PlannedReminder = action ? { ...r, action } : { ...r };
+    if (isSlipCheckIn(r, sources.habits)) planned.checkIn = true;
+    return planned;
   });
   return { version: 1, reminders, snoozes };
 }

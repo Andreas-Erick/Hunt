@@ -1149,7 +1149,11 @@
       background: rgb(var(--c-ink) / 0.05); color: var(--text-2); font-size: 18px; cursor: pointer;
     }
     .habit-cal-nav:disabled { opacity: 0.3; cursor: default; }
-    .habit-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; margin: 8px -6px 0; }
+    /* Days 8px apart while seven 44px days fit; narrower, the gap shrinks first (CODING_STANDARDS: 7-column calendar). */
+    .habit-cal-grid {
+      display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 8px -6px 0;
+      column-gap: clamp(0px, calc((100% - 7 * 44px) / 6), 8px); row-gap: 8px;
+    }
     .habit-cal-wd { text-align: center; font-size: 11px; color: var(--dim); padding-bottom: 2px; }
     .habit-cal-day {
       display: flex; align-items: center; justify-content: center; min-width: 0;
@@ -3286,8 +3290,10 @@ var HuntCore = (() => {
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
     habitKindOf: () => habitKindOf,
+    habitKindRules: () => habitKindRules,
     habitMonth: () => habitMonth,
     habitMonthAmounts: () => habitMonthAmounts,
+    habitRowMode: () => habitRowMode,
     habitScore: () => habitScore,
     habitSkipRows: () => habitSkipRows,
     habitStartKey: () => habitStartKey,
@@ -3302,6 +3308,7 @@ var HuntCore = (() => {
     habitYearTotals: () => habitYearTotals,
     isCountTarget: () => isCountTarget,
     isEndedHabit: () => isEndedHabit,
+    isFrequencyAllowedFor: () => isFrequencyAllowedFor,
     isHabitScheduledOn: () => isHabitScheduledOn,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -3319,6 +3326,7 @@ var HuntCore = (() => {
     nextStamp: () => nextStamp,
     parseCountAmount: () => parseCountAmount,
     parseHabitFrequency: () => parseHabitFrequency,
+    parseHabitFrequencyFor: () => parseHabitFrequencyFor,
     pickNextFocusTask: () => pickNextFocusTask,
     reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
@@ -3338,11 +3346,38 @@ var HuntCore = (() => {
     withHabitFrequency: () => withHabitFrequency
   });
 
+  // src/lib/dateKeys.ts
+  var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function toLocalDateKey(timestamp = Date.now()) {
+    const d = new Date(timestamp);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  function dateFromKey(dateKey, dayOffset = 0) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    return new Date(y, m - 1, d + dayOffset, 12);
+  }
+  function dateKeyFromOffset(baseKey, dayOffset) {
+    return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
+  }
+
+  // src/lib/textLimits.ts
+  function clampLength(text, max) {
+    if (text.length <= max) return text;
+    const last = text.charCodeAt(max - 1);
+    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
+  }
+  function clampTitle(title, max) {
+    return clampLength(title.trim(), max);
+  }
+
   // src/lib/habitKind.ts
   var HABIT_KIND_TABLE = {
-    check: true,
-    count: true,
-    avoid: true
+    check: { label: "Check Habit", logs: "tick", canFocus: true, allowsPerWeek: true },
+    count: { label: "Count Habit", logs: "count", canFocus: true, allowsPerWeek: true },
+    avoid: { label: "Avoid Habit", logs: "slip", canFocus: false, allowsPerWeek: false }
   };
   var MAX_COUNT_AMOUNT = 1e6;
   var MAX_COUNT_UNIT_LENGTH = 40;
@@ -3352,6 +3387,9 @@ var HuntCore = (() => {
   function habitKindOf(habit) {
     const kind = habit == null ? void 0 : habit.kind;
     return isHabitKind(kind) ? kind : "check";
+  }
+  function habitKindRules(habit) {
+    return HABIT_KIND_TABLE[habitKindOf(habit)];
   }
   function isCountAmount(value) {
     return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -3397,13 +3435,6 @@ var HuntCore = (() => {
 
   // src/lib/habitEnd.ts
   var MAX_ENDED_SPANS = 100;
-  function shiftDateKey(dateKey, days) {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    const date = new Date(y, m - 1, d + days, 12);
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    return `${date.getFullYear()}-${mm}-${dd}`;
-  }
   function isHabitEndedOn(habit, dayKey) {
     var _a;
     if (habit.endDate && dayKey > habit.endDate) return true;
@@ -3417,8 +3448,8 @@ var HuntCore = (() => {
     const spans = [...(_a = habit.endedSpans) != null ? _a : []];
     const restarts = isEndedHabit(habit, todayKey) && (endDate === null || endDate >= todayKey);
     if (restarts) {
-      const from = shiftDateKey(habit.endDate, 1);
-      const to = shiftDateKey(todayKey, -1);
+      const from = dateKeyFromOffset(habit.endDate, 1);
+      const to = dateKeyFromOffset(todayKey, -1);
       if (from <= to) spans.push({ from, to });
     }
     const kept = spans.slice(-MAX_ENDED_SPANS);
@@ -3434,7 +3465,6 @@ var HuntCore = (() => {
   // src/lib/habitFrequency.ts
   var EVERY_DAY = { type: "everyDay" };
   var WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
-  var WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   function weekdayOfKey(dateKey) {
     const [y, m, d] = dateKey.split("-").map(Number);
     return new Date(y, m - 1, d, 12).getDay();
@@ -3469,6 +3499,9 @@ var HuntCore = (() => {
     return frequency.type === "weekdays" ? { type: "weekdays", weekdays: normalizedWeekdays(frequency.weekdays) } : EVERY_DAY;
   }
   var MAX_TIMES_PER_WEEK = 7;
+  function isFrequencyAllowedFor(habit, frequency) {
+    return frequency.type !== "perWeek" || habitKindRules(habit).allowsPerWeek;
+  }
   function isPerWeekFrequency(frequency) {
     return frequency.type === "perWeek";
   }
@@ -3503,6 +3536,10 @@ var HuntCore = (() => {
       return { type: "perWeek", times: Number(times) };
     }
     return null;
+  }
+  function parseHabitFrequencyFor(habit, raw) {
+    const frequency = parseHabitFrequency(raw);
+    return frequency && isFrequencyAllowedFor(habit, frequency) ? frequency : null;
   }
 
   // src/lib/habitOutcome.ts
@@ -3549,20 +3586,6 @@ var HuntCore = (() => {
   function isOpenTask(task, todayKey) {
     return (task.status === "queued" || task.status === "active") && !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) && !isMissedHabitTask(task, todayKey);
   }
-  function toLocalDateKey(timestamp = Date.now()) {
-    const d = new Date(timestamp);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-  function dateFromKey(dateKey, dayOffset = 0) {
-    const [y, m, d] = dateKey.split("-").map(Number);
-    return new Date(y, m - 1, d + dayOffset, 12);
-  }
-  function dateKeyFromOffset(baseKey, dayOffset) {
-    return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
-  }
   function* outcomesBackFrom(todayKey, firstDayKey, outcomeOn) {
     for (let offset = 0; ; offset -= 1) {
       const dayKey = dateKeyFromOffset(todayKey, offset);
@@ -3605,7 +3628,6 @@ var HuntCore = (() => {
     return `${percent}%`;
   }
   var HABIT_WEEK_STRIP_DAYS = 7;
-  var WEEKDAY_SHORT2 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var OUTCOME_NAME = {
     open: "Open",
     met: "Met",
@@ -3617,7 +3639,7 @@ var HuntCore = (() => {
       const day = dateFromKey(lastKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
       const dayKey = toLocalDateKey(day.getTime());
       const outcome = outcomeOn(dayKey);
-      const short = WEEKDAY_SHORT2[day.getDay()];
+      const short = WEEKDAY_SHORT[day.getDay()];
       const when = `${short} ${day.getDate()}${dayKey === todayKey ? " (today)" : ""}`;
       return {
         dayKey,
@@ -3769,6 +3791,16 @@ var HuntCore = (() => {
       yield weekOutcomeOn(week);
     }
   }
+  function* habitUnitOutcomesBackFrom(habit, todayKey, firstDayKey, { dayOutcomeOn, weekOutcomeOn }) {
+    let lastWeek = "";
+    for (let day = todayKey; day >= firstDayKey; day = dateKeyFromOffset(day, -1)) {
+      if (!isPerWeekFrequency(habitFrequencyOn(habit, day))) yield dayOutcomeOn(day);
+      else if (habitWeekStart(day) !== lastWeek) {
+        lastWeek = habitWeekStart(day);
+        yield weekOutcomeOn(day);
+      }
+    }
+  }
 
   // src/lib/habitDay.ts
   var DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -3852,7 +3884,7 @@ var HuntCore = (() => {
           const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
           let rate;
           let score;
-          const units = () => weekly ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn) : outcomesBackFrom(todayKey, firstDay, outcomeOn);
+          const units = () => habitUnitOutcomesBackFrom(habit, todayKey, firstDay, { dayOutcomeOn: outcomeOn, weekOutcomeOn });
           const week = weekly ? weekOn(todayKey) : null;
           const doneToday = outcomeOn(todayKey) === "met";
           const unitStart = frequencyUnitStart(habit, todayKey);
@@ -3882,6 +3914,12 @@ var HuntCore = (() => {
   function habitWantsDayTask(summary) {
     return summary.askedToday && summary.skipState !== "skipped";
   }
+  function habitRowMode(habit, summary) {
+    if (summary.skipState === "skipped") return { mode: "skipped", focusable: false };
+    if (!summary.askedToday) return { mode: "unasked", focusable: false };
+    const rules = habitKindRules(habit);
+    return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday };
+  }
   function habitTodayTally(habits, summaryFor, _todayKey) {
     let done = 0;
     let asked = 0;
@@ -3900,16 +3938,6 @@ var HuntCore = (() => {
   var SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
   function isSafeSyncId(value, maxLength = MAX_ENTITY_ID_LENGTH) {
     return typeof value === "string" && value.length > 0 && value.length <= maxLength && SAFE_ID_CHARS_RE.test(value);
-  }
-
-  // src/lib/textLimits.ts
-  function clampLength(text, max) {
-    if (text.length <= max) return text;
-    const last = text.charCodeAt(max - 1);
-    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
-  }
-  function clampTitle(title, max) {
-    return clampLength(title.trim(), max);
   }
 
   // src/lib/checklist.ts
@@ -4900,6 +4928,11 @@ var HuntCore = (() => {
     if (kind === "count") return { tick: "+1", taskId };
     return null;
   }
+  function isSlipCheckIn(reminder, habits) {
+    if (reminder.kind !== "habit") return false;
+    const habit = (habits != null ? habits : []).find((h) => h.id === reminder.itemId);
+    return habit !== void 0 && habitKindOf(habit) === "avoid";
+  }
 
   // src/lib/reminderPlan.ts
   var REMINDER_PLAN_AHEAD_MS = 7 * 24 * 60 * 6e4;
@@ -4910,7 +4943,9 @@ var HuntCore = (() => {
     const due = dueReminders({ ...sources, snoozes }, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
     const reminders = due.slice(0, REMINDER_PLAN_MAX).map((r) => {
       const action = reminderAction(r, sources.habits);
-      return action ? { ...r, action } : r;
+      const planned = action ? { ...r, action } : { ...r };
+      if (isSlipCheckIn(r, sources.habits)) planned.checkIn = true;
+      return planned;
     });
     return { version: 1, reminders, snoozes };
   }
@@ -7742,13 +7777,13 @@ var HuntCore = (() => {
     function completeTaskDirect(taskId) {
       // An Avoid Habit's day is not ticked: every "complete" path logs a Slip, as a Day Widget tap does.
       const avoidTask = state.tasks.find(x => x.id === taskId);
-      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+      if (avoidTask && habitOfTaskByKind(avoidTask, "avoid")) {
         editHabitSlip(avoidTask.habitId, avoidTask.scheduledDate || toLocalDateKey(), "log");
         return;
       }
       // A Count Habit's day is counted, not ticked: every "complete" path adds one (shared +1 rule).
       const countTask = state.tasks.find(x => x.id === taskId);
-      if (countTask && countHabitOfTask(countTask)) {
+      if (countTask && habitOfTaskByKind(countTask, "count")) {
         logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), "+1");
         return;
       }
@@ -7788,7 +7823,7 @@ var HuntCore = (() => {
 
     function reopenTaskDirect(taskId) {
       const avoidTask = state.tasks.find(x => x.id === taskId);
-      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+      if (avoidTask && habitOfTaskByKind(avoidTask, "avoid")) {
         // An Avoid Habit's day is reopened by clearing its Slips.
         playClickSound();
         avoidTask.status = "queued";
@@ -7799,7 +7834,7 @@ var HuntCore = (() => {
         return;
       }
       const countTask = state.tasks.find(x => x.id === taskId);
-      if (countTask && countHabitOfTask(countTask)) {
+      if (countTask && habitOfTaskByKind(countTask, "count")) {
         // A Count Habit's day is reopened by clearing its total.
         logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), 0);
         return;
@@ -8519,14 +8554,19 @@ var HuntCore = (() => {
       commitLocalChange();
     }
 
+    // The edit a List or Checklist row's control asks for (applyListEdit / applyChecklistEdit): a rename
+    // carries the text, a move the index (both arrive as strings from jsArg), the others the item only.
+    function itemEditOf(kind, itemId, arg) {
+      return kind === "rename" ? { kind, id: itemId, text: String(arg) }
+        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
+        : { kind, id: itemId };
+    }
+
     // One item edit, Clear ticked or Untick all through the shared rule; a refused one just redraws.
     function editListItems(listId, kind, itemId, arg) {
       const l = findList(listId);
       if (!l) return;
-      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
-        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
-        : { kind, id: itemId };
-      const next = applyListEdit(l, edit);
+      const next = applyListEdit(l, itemEditOf(kind, itemId, arg));
       if (!next) { renderApp(); return; }
       if (kind === "toggle" || kind === "clearTicked" || kind === "untickAll") playClickSound();
       l.items = next;
@@ -8591,10 +8631,7 @@ var HuntCore = (() => {
     function editTaskChecklist(taskId, kind, itemId, arg) {
       const t = state.tasks.find(x => x.id === taskId);
       if (!t) return;
-      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
-        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
-        : { kind, id: itemId };
-      const next = applyChecklistEdit(t, edit);
+      const next = applyChecklistEdit(t, itemEditOf(kind, itemId, arg));
       if (next) {
         t.checklist = next;
         t.updatedAt = nextStamp(t);
@@ -9448,6 +9485,8 @@ var HuntCore = (() => {
     let selectedHabitQuestId = null;
     // The Frequency being edited in an open Habit sheet (chosen weekdays may still be empty).
     let habitFrequencyDraft = { type: "everyDay" };
+    // The Kind of the Habit in that sheet: an Avoid Habit is judged day by day, so its picker has no "Times a week".
+    let habitFrequencyKind = "check";
 
     function habitFrequencyPickerHtml() {
       const chosen = habitFrequencyDraft.type === "weekdays" ? habitFrequencyDraft.weekdays : null;
@@ -9469,11 +9508,14 @@ var HuntCore = (() => {
         </div>
         <div style="margin:-8px 0 16px;font-size:12px;color:var(--dim);">Per week, Monday to Sunday</div>` : "";
       const daily = !chosen && times === null;
+      const perWeekPill = HuntCore.habitKindRules({ kind: habitFrequencyKind }).allowsPerWeek
+        ? `<button class="sheet-pill ${times !== null ? "selected" : ""}" aria-label="Times a week" aria-pressed="${times !== null}" onclick="setHabitFrequencyType('perWeek')">Times a week</button>`
+        : "";
       return `
         <div class="sheet-pill-group" role="group" aria-label="Habit frequency">
           <button class="sheet-pill ${daily ? "selected" : ""}" aria-label="Every day" aria-pressed="${daily}" onclick="setHabitFrequencyType('everyDay')">Every day</button>
           <button class="sheet-pill ${chosen ? "selected" : ""}" aria-label="Chosen days" aria-pressed="${!!chosen}" onclick="setHabitFrequencyType('weekdays')">Chosen days</button>
-          <button class="sheet-pill ${times !== null ? "selected" : ""}" aria-label="Times a week" aria-pressed="${times !== null}" onclick="setHabitFrequencyType('perWeek')">Times a week</button>
+          ${perWeekPill}
         </div>
         ${weekdays}${timesRow}`;
     }
@@ -9516,9 +9558,9 @@ var HuntCore = (() => {
       renderHabitFrequencyPicker(named ? named.name : null);
     }
 
-    // The draft as a valid Frequency, or null (no weekday chosen yet): the picker is flagged then.
+    // The draft as a valid Frequency the sheet's Kind may use, or null (no weekday chosen): the picker is flagged.
     function habitFrequencyFromDraft() {
-      const frequency = HuntCore.parseHabitFrequency(habitFrequencyDraft);
+      const frequency = HuntCore.parseHabitFrequencyFor({ kind: habitFrequencyKind }, habitFrequencyDraft);
       if (!frequency) flagInvalidField(document.querySelector('#habitFrequencyPicker [aria-label="Chosen days"]'));
       return frequency;
     }
@@ -9526,6 +9568,7 @@ var HuntCore = (() => {
     function openNewHabitSheet(preselectQuestId) {
       playClickSound();
       selectedHabitKind = "check";
+      habitFrequencyKind = "check";
       const activeQuests = activeQuestsList();
       selectedHabitQuestId = preselectQuestId !== undefined
         ? preselectQuestId
@@ -9629,17 +9672,30 @@ var HuntCore = (() => {
       playClickSound();
       const h = asArray(state.habits).find(x => x.id === habitId);
       if (!h) return;
-      selectedHabitQuestId = h.questId || null;
-      habitFrequencyDraft = habitFrequencyOn(h, toLocalDateKey());
-
+      startHabitEdit(h);
       showSheet("habit:" + h.id, `
           ${sheetHeaderHtml("Edit Daily Habit")}
+          ${habitEditorHtml(h)}
+      `);
+    }
 
+    // Loads `h` into the editor's drafts (Quest, Frequency and the Kind it may use).
+    function startHabitEdit(h) {
+      selectedHabitQuestId = h.questId || null;
+      habitFrequencyDraft = habitFrequencyOn(h, toLocalDateKey());
+      habitFrequencyKind = habitKindOf(h);
+    }
+
+    // The one Habit editor, in its own sheet (the card's ⋯) and in the detail sheet's Edit tab: title,
+    // notes, the Kind read-only with a Count Habit's target and unit, the Frequency, the end date, the
+    // reminders, the Quest, Skip today, Delete and Save (saveHabitEdits). Call startHabitEdit(h) first.
+    function habitEditorHtml(h) {
+      return `
           <input id="editHabitTitleInput" class="sheet-input" value="${escapeHtml(h.title)}" aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveHabitEdits(${jsArg(h.id)})" />
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
 
           <div class="sheet-label">Kind</div>
-          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${{ count: "Count Habit", avoid: "Avoid Habit" }[habitKindOf(h)] || "Check Habit"}</div>
+          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${escapeHtml(HuntCore.habitKindRules(h).label)}</div>
           ${habitKindOf(h) === "count" ? `
             <div style="display:flex;gap:8px;">
               <input id="editHabitTargetInput" class="sheet-input" inputmode="decimal" value="${escapeHtml(formatCountAmount(countTargetOf(h)))}" placeholder="Daily target" aria-label="Daily target" style="flex:1;min-width:0;" />
@@ -9672,8 +9728,7 @@ var HuntCore = (() => {
           <div class="sheet-footer-row" style="margin-top:8px;">
             <button class="danger-outline-btn" onclick="deleteHabitItem(${jsArg(h.id)})">Delete Habit</button>
             <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
-          </div>
-      `);
+          </div>`;
     }
 
     // The sheet's optional end date (GLOSSARY: Ended Habit). After it the Habit leaves Today and moves
@@ -10004,9 +10059,11 @@ var HuntCore = (() => {
       return true;
     }
 
-    // Habit detail sheet: one tab per view of the Habit (Calendar, Statistics; Edit joins
-    // HABIT_DETAIL_TABS). The month grid is the shared HuntCore.habitMonth, the same as the desktop's.
-    const HABIT_DETAIL_TABS = [{ id: "calendar", label: "Calendar" }, { id: "statistics", label: "Statistics" }];
+    // Habit detail sheet: one tab per view of the Habit (Calendar, Statistics, Edit). The month grid is
+    // the shared HuntCore.habitMonth, the same as the desktop's; Edit is the Habit editor (habitEditorHtml).
+    const HABIT_DETAIL_TABS = [
+      { id: "calendar", label: "Calendar" }, { id: "statistics", label: "Statistics" }, { id: "edit", label: "Edit" }
+    ];
     const HABIT_OUTCOME_LABEL = { met: "Met", missed: "Missed", skipped: "Skipped", open: "Open" };
     let habitDetail = null; // { habitId, tab, monthKey, dayKey, statsMonthKey, statsYear }
 
@@ -10024,6 +10081,8 @@ var HuntCore = (() => {
       if (!habitDetail || habitDetail.tab === tabId) return;
       playClickSound();
       habitDetail.tab = tabId;
+      const h = asArray(state.habits).find(x => x.id === habitDetail.habitId);
+      if (tabId === "edit" && h) startHabitEdit(h);
       renderHabitDetailSheet();
     }
 
@@ -10166,17 +10225,19 @@ var HuntCore = (() => {
           <div id="habitPanel-statistics" role="tabpanel" aria-labelledby="habitTab-statistics" style="--habit-hex:${hex};">
             ${habitStatisticsHtml(h, summary, todayKey)}
           </div>` : "";
+      const edit = habitDetail.tab === "edit" ? `
+          <div id="habitPanel-edit" role="tabpanel" aria-labelledby="habitTab-edit">${habitEditorHtml(h)}</div>` : "";
       showSheet("habitDetail:" + h.id, `
           ${sheetHeaderHtml(escapeHtml(h.title))}
           <div class="habit-tabs" role="tablist" aria-label="Habit views">${tabs}</div>
-          ${statistics}
+          ${statistics}${edit}
           ${habitDetail.tab !== "calendar" ? "" : `<div id="habitPanel-calendar" role="tabpanel" aria-labelledby="habitTab-calendar" style="--habit-hex:${hex};">
             <div class="habit-cal-head">
               <button class="habit-cal-nav pressable" aria-label="Previous month" ${month.prevMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.prevMonthKey || "")})">‹</button>
               <div class="habit-cal-title" aria-live="polite">${habitDetailMonthName(month.monthKey, true)}</div>
               <button class="habit-cal-nav pressable" aria-label="Next month" ${month.nextMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.nextMonthKey || "")})">›</button>
             </div>
-            <div class="habit-cal-grid" aria-hidden="true">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(x => `<span class="habit-cal-wd">${x}</span>`).join("")}</div>
+            <div class="habit-cal-grid" aria-hidden="true">${HuntCore.HABIT_WEEKDAYS.map(d => `<span class="habit-cal-wd">${d.label}</span>`).join("")}</div>
             <div class="habit-cal-grid">${cells}</div>
             <ul class="habit-cal-legend" aria-label="Legend">${legend}</ul>
             <div class="habit-cal-daybox${isCount ? " count" : ""}">${dayBox}</div>
@@ -10268,11 +10329,11 @@ var HuntCore = (() => {
     // AVOID HABITS: "Kept so far" until a Slip is logged (shared Slip rule)
     // =========================================================================
 
-    // The Avoid Habit a day Task belongs to, or null for any other Task.
-    function avoidHabitOfTask(task) {
+    // The Habit of Kind `kind` ("count", "avoid") a day Task belongs to, or null for any other Task.
+    function habitOfTaskByKind(task, kind) {
       if (!task || !task.habitId) return null;
       const h = asArray(state.habits).find(x => x.id === task.habitId);
-      return h && habitKindOf(h) === "avoid" ? h : null;
+      return h && habitKindOf(h) === kind ? h : null;
     }
 
     // Logs a Slip on an Avoid Habit's `dateKey` ("log"), or undoes the newest one ("undo"). The
@@ -10309,13 +10370,6 @@ var HuntCore = (() => {
       const title = escapeHtml(h.title);
       const edit = slips > 0 ? "undo" : "log";
       return `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="editHabitSlip(${jsArg(h.id)}, toLocalDateKey(), ${jsArg(edit)})" aria-label="${slips > 0 ? "Undo Slip" : "Log a Slip"} on ${title}">${slips > 0 ? "Undo Slip" : "Log a Slip"}</button>`;
-    }
-
-    // The Count Habit a day Task belongs to, or null for any other Task.
-    function countHabitOfTask(task) {
-      if (!task || !task.habitId) return null;
-      const h = asArray(state.habits).find(x => x.id === task.habitId);
-      return h && habitKindOf(h) === "count" ? h : null;
     }
 
     // Writes a Count Habit's total for `dateKey`: "+1" adds one, a number sets it exactly. The day's
@@ -10423,6 +10477,10 @@ var HuntCore = (() => {
       }
       const fields = document.getElementById("newHabitCountFields");
       if (fields) fields.hidden = kind !== "count";
+      habitFrequencyKind = kind;
+      // An Avoid Habit is judged day by day: a "Times a week" choice falls back to every day.
+      if (!HuntCore.isFrequencyAllowedFor({ kind }, habitFrequencyDraft)) habitFrequencyDraft = { type: "everyDay" };
+      renderHabitFrequencyPicker(null);
     }
 
     // Render Compact Queue Row Card (#02+)
@@ -10434,9 +10492,9 @@ var HuntCore = (() => {
       const delta = isRunningHere && af.sessionStartedAt ? Math.max(0, Math.floor((Date.now() - af.sessionStartedAt) / 1000)) : 0;
       const totalSec = (task.accumulatedSeconds || 0) + delta;
       const title = escapeHtml(task.title);
-      const countHabit = countHabitOfTask(task);
+      const countHabit = habitOfTaskByKind(task, "count");
       // An Avoid Habit's day reads "Kept so far" and logs a Slip from its own labelled button, never a tick.
-      const avoidHabit = avoidHabitOfTask(task);
+      const avoidHabit = habitOfTaskByKind(task, "avoid");
 
       return `
         <div class="queue-item-card" data-flip-task-id="${escapeHtml(task.id)}">
@@ -11228,6 +11286,8 @@ var HuntCore = (() => {
           const hHex = ACCENT_HEX[hq ? hq.accentColor : "cyan"];
           const isRunningHero = af && af.activeTaskId === heroTask.id && af.isRunning;
           const hSec = (heroTask.accumulatedSeconds || 0) + (isRunningHero ? liveDelta : 0);
+          // An Avoid Habit's day logs a Slip from its own labelled button, never from the tick.
+          const heroAvoid = habitOfTaskByKind(heroTask, "avoid");
 
           heroHtml = `
             <div class="spotlight-card" data-flip-task-id="${escapeHtml(heroTask.id)}" style="border-color:${accentAlpha(hHex, 0.267)};">
@@ -11252,9 +11312,9 @@ var HuntCore = (() => {
                   <span>${isRunningHero ? "Open Focus" : "Start Focus"}</span>
                   ${hSec > 0 || isRunningHero ? `<span style="font-family:var(--font-mono);font-size:12px;opacity:0.8;" data-task-timer="${escapeHtml(heroTask.id)}" data-prefix="· ">· ${formatChrono(hSec)}</span>` : ""}
                 </button>
-                <button class="btn-complete-circle pressable" onclick="completeTaskDirect(${jsArg(heroTask.id)})" aria-label="Complete ${escapeHtml(heroTask.title)}">
+                ${heroAvoid ? avoidSlipButtonHtml(heroAvoid, habitDaySlips(heroTask)) : `<button class="btn-complete-circle pressable" onclick="completeTaskDirect(${jsArg(heroTask.id)})" aria-label="Complete ${escapeHtml(heroTask.title)}">
                   ${SVG_CHECK}
-                </button>
+                </button>`}
               </div>
             </div>
           `;
@@ -12385,19 +12445,20 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + currentHabits.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, skipState, week, todayTask } = habitDays.summaryFor(h.id);
-            // An N per week Habit is set aside (and judged) by its whole Habit Week.
-            const skippedToday = skipState === "skipped";
+            const summary = habitDays.summaryFor(h.id);
+            const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, week, todayTask } = summary;
+            // The shared row rule (the desktop's too): a Count Habit logs +1 / an exact total, an Avoid
+            // Habit a Slip from its own button (never a tick); an N per week Habit is set aside by its week.
+            const row = HuntCore.habitRowMode(h, summary);
+            const skippedToday = row.mode === "skipped";
             const period = week ? "this week" : "today";
             const title = escapeHtml(h.title);
             const frequencyLabel = escapeHtml(habitFrequencyLabel(habitFrequencyOn(h, todayKey)));
-            // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
-            const isCount = habitKindOf(h) === "count" && asked && !skippedToday;
-            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
-            const isAvoid = habitKindOf(h) === "avoid" && asked && !skippedToday;
+            const isCount = row.mode === "count";
+            const isAvoid = row.mode === "slip";
             const slips = habitDaySlips(todayTask);
             const stripHtml = habitStripHtml(todayKey, outcomeOn, hex, todayKey);
-            const successRate = habitSuccessRateLabel(habitDays.summaryFor(h.id).successRate());
+            const successRate = habitSuccessRateLabel(summary.successRate());
 
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
@@ -12430,7 +12491,7 @@ var HuntCore = (() => {
                   ${skippedToday
                     ? `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, false)" aria-label="Undo skip: ${title}">Undo skip</button>`
                     : isAvoid ? avoidSlipButtonHtml(h, slips)
-                    : asked && !doneToday ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
+                    : row.focusable ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
                   <button class="more-dots-btn" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">${SVG_MORE}</button>
                 </div>
               </div>

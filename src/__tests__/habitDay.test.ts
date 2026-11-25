@@ -1,8 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { habitTaskId, toLocalDateKey } from "@/lib/dateUtils";
 import type { Task } from "@/lib/domainTypes";
-import { completionDateKey, summarizeHabitDays } from "@/lib/habitDay";
+import { completionDateKey, habitRowMode, summarizeHabitDays } from "@/lib/habitDay";
 import { computeActivityHeatmap } from "@/lib/reviewAnalytics";
+
+describe("habitRowMode (how a Habit card's row logs today, on both apps)", () => {
+  const today = { askedToday: true, skipState: "open" as const, doneToday: false };
+
+  it("logs by the Habit's Kind on a day it asks for: a tick, +1 / a total, or a Slip", () => {
+    expect(habitRowMode({}, today)).toEqual({ mode: "tick", focusable: true });
+    expect(habitRowMode({ kind: "count" }, today)).toEqual({ mode: "count", focusable: true });
+    expect(habitRowMode({ kind: "avoid" }, today)).toEqual({ mode: "slip", focusable: false });
+  });
+
+  it("is set aside on a Skipped day and plain on a day not asked for, whatever the Kind", () => {
+    for (const kind of ["check", "count", "avoid"] as const) {
+      expect(habitRowMode({ kind }, { ...today, skipState: "skipped" })).toEqual({ mode: "skipped", focusable: false });
+      expect(habitRowMode({ kind }, { ...today, askedToday: false })).toEqual({ mode: "unasked", focusable: false });
+    }
+  });
+
+  it("offers no focus once today is done", () => {
+    expect(habitRowMode({ kind: "count" }, { ...today, doneToday: true })).toEqual({ mode: "count", focusable: false });
+  });
+});
 
 function at(dateKey: string, hh: number, mm = 0): number {
   const [y, m, d] = dateKey.split("-").map(Number);

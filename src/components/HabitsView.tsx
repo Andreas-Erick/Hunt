@@ -1,25 +1,24 @@
 "use client";
 
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
-import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { habitDayAmount, habitDaySlips, habitKindOf } from "@/lib/habitKind";
+import { habitDayAmount, habitDaySlips, habitKindRules } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import * as Avoid from "./AvoidHabitControls";
-import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
+import { NewHabitQuestPicker } from "./HabitQuestPicker";
 import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
-import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
+import { habitRowMode, habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import { isEndedHabit } from "@/lib/habitEnd";
-import { habitFrequencyLabel, habitFrequencyOn, sameHabitFrequency } from "@/lib/habitFrequency";
+import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
-import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitTodayCheck } from "./HabitCardParts";
@@ -27,25 +26,16 @@ import { HabitSkipToday } from "./HabitDayStrip";
 import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
-import { HabitEndDateField } from "./HabitEndDateField";
-import { HabitReminderBadge, HabitReminderTimes } from "./HabitReminderTimes";
+import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitReminderBadge } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
 
-const DISCARD_PROMPT = "Discard unsaved changes?";
 const EVERY_DAY: HabitFrequency = { type: "everyDay" };
-
-function confirmDiscard(dirty: boolean): boolean {
-  return !dirty || window.confirm(DISCARD_PROMPT);
-}
-
-/** Discard guard for leaving the Habits view with an unsaved habit edit. */
-const confirmLeaveDirty = () => confirmDiscard(true);
 
 export function HabitsView() {
   const {
     createHabit,
-    updateHabit,
     deleteHabit,
     materializeDailyHabits,
     ensureHabitTaskForDay,
@@ -55,7 +45,6 @@ export function HabitsView() {
   } = useCommandStore(
     useShallow((s) => ({
       createHabit: s.createHabit,
-      updateHabit: s.updateHabit,
       deleteHabit: s.deleteHabit,
       materializeDailyHabits: s.materializeDailyHabits,
       ensureHabitTaskForDay: s.ensureHabitTaskForDay,
@@ -79,29 +68,22 @@ export function HabitsView() {
     void materializeDailyHabits(todayKey);
   }, [materializeDailyHabits, todayKey]);
 
-  const ids = useId();
-
   // New Habit form state
   const [newTitle, setNewTitle] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const newKind = Count.useNewHabitKind();
-  const editKind = Count.useHabitKindEdit();
   // The Count Habit whose exact-entry form is open (one at a time).
   const [amountHabitId, setAmountHabitId] = useState<string | null>(null);
-  const [newFrequency, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
+  const [newFrequencyChoice, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
+  // An Avoid Habit never asks N times a week: the form falls back to every day for it.
+  const newFrequency = isFrequencyAllowedFor(newKind, newFrequencyChoice) ? newFrequencyChoice : EVERY_DAY;
   const [questChoice, setQuestChoice] = useState<string | null | undefined>(undefined);
   const addingRef = useRef(false);
 
-  // Inline Edit drawer (one habit at a time)
-  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  // Inline Edit drawer (one habit at a time), and whether it holds unsaved edits.
+  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
+  const [editDirty, setEditDirty] = useState(false);
   const [detailHabitId, setDetailHabitId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-  const [editQuestId, setEditQuestId] = useState<string | null>(null);
-  const [editFrequency, setEditFrequency] = useState<HabitFrequency>(EVERY_DAY);
-  const [editEndDate, setEditEndDate] = useState(""); // "" = no end date
-  const [savingEdit, setSavingEdit] = useState(false);
-  const savingEditRef = useRef(false);
   const editToggleRef = useRef<HTMLButtonElement | null>(null);
 
   const questMap = useMemo(() => {
@@ -146,17 +128,6 @@ export function HabitsView() {
     [habits, habitDays, todayKey]
   );
 
-  const editIsDirty = () =>
-    editingHabit !== null &&
-    (editTitle !== editingHabit.title ||
-      editNotes !== (editingHabit.notes ?? "") ||
-      editQuestId !== editingHabit.questId ||
-      editKind.isDirty(editingHabit) ||
-      editEndDate !== (editingHabit.endDate ?? "") ||
-      !sameHabitFrequency(editFrequency, habitFrequencyOn(editingHabit, todayKey)));
-
-  useDiscardGuard(editIsDirty(), confirmLeaveDirty);
-
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const title = newTitle.trim();
@@ -188,57 +159,18 @@ export function HabitsView() {
 
   const startEdit = (habit: Habit, toggle: HTMLButtonElement) => {
     hudAudio.playClick();
-    if (!confirmDiscard(editIsDirty())) return;
-    if (editingHabit?.id === habit.id) {
-      setEditingHabit(null);
-      return;
-    }
+    if (!confirmDiscardHabitEdit(editingHabitId !== null && editDirty)) return;
+    setEditDirty(false);
     editToggleRef.current = toggle;
-    setEditingHabit(habit);
-    setEditTitle(habit.title);
-    setEditNotes(habit.notes ?? "");
-    setEditQuestId(habit.questId);
-    editKind.load(habit);
-    setEditFrequency(habitFrequencyOn(habit, todayKey));
-    setEditEndDate(habit.endDate ?? "");
+    setEditingHabitId((cur) => (cur === habit.id ? null : habit.id));
   };
 
-  const closeEdit = () => {
-    setEditingHabit(null);
-    editToggleRef.current?.focus();
-  };
-
-  const cancelEdit = () => {
-    if (confirmDiscard(editIsDirty())) closeEdit();
-  };
-
-  const saveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingHabit || savingEditRef.current) return;
-    const title = editTitle.trim();
-    if (!title || !isHabitFrequencyValid(editFrequency)) return;
-    savingEditRef.current = true;
-    setSavingEdit(true);
-    hudAudio.playClick();
-    const habitId = editingHabit.id;
+  // Closes the drawer of `habitId` (a late save of a drawer since closed leaves the open one alone).
+  const closeEdit = (habitId: string) => {
     const toggle = editToggleRef.current;
-    try {
-      const saved = await updateHabit(habitId, {
-        title,
-        notes: editNotes,
-        questId: editQuestId,
-        frequency: editFrequency,
-        ...editKind.changes(editingHabit),
-        endDate: editEndDate || null,
-      });
-      if (saved) {
-        setEditingHabit((cur) => (cur?.id === habitId ? null : cur));
-        if (editToggleRef.current === toggle) toggle?.focus();
-      }
-    } finally {
-      savingEditRef.current = false;
-      setSavingEdit(false);
-    }
+    setEditingHabitId((cur) => (cur === habitId ? null : cur));
+    setEditDirty(false);
+    if (toggle?.closest("[data-habit-id]")?.getAttribute("data-habit-id") === habitId) toggle.focus();
   };
 
   const handleToggleToday = async (habit: Habit) => {
@@ -269,9 +201,6 @@ export function HabitsView() {
     hudAudio.playLockOn();
     await initializeFocus(todayTask.id);
   };
-
-  const editTitleId = `${ids}-edit-title`;
-  const editNotesId = `${ids}-edit-notes`;
 
   return (
     <div className="mx-auto max-w-[1120px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
@@ -339,6 +268,7 @@ export function HabitsView() {
             label="Frequency for new habit"
             value={newFrequency}
             onChange={setNewFrequency}
+            allowPerWeek={habitKindRules(newKind).allowsPerWeek}
           />
         </div>
 
@@ -381,13 +311,13 @@ export function HabitsView() {
             const summary = habitDays.summaryFor(habit.id);
             const { doneToday, todayTask, askedToday } = summary;
             const skippedToday = summary.skipState === "skipped";
-            const isEditing = editingHabit?.id === habit.id;
+            const isEditing = editingHabitId === habit.id;
             const weekly = summary.week !== null;
-            // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
-            const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
+            // A Count Habit logs +1 / an exact total, an Avoid Habit a Slip (never a tick) on a day it asks for.
+            const row = habitRowMode(habit, summary);
+            const isCount = row.mode === "count";
             const todayAmount = habitDayAmount(todayTask);
-            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
-            const isAvoid = habitKindOf(habit) === "avoid" && askedToday && !skippedToday;
+            const isAvoid = row.mode === "slip";
 
             return (
               <div
@@ -444,7 +374,7 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {askedToday && !doneToday && !skippedToday && habitKindOf(habit) !== "avoid" && (
+                      {row.focusable && (
                         <button
                           type="button"
                           onClick={() => void handleFocusToday(habit)}
@@ -522,93 +452,14 @@ export function HabitsView() {
                 </div>
 
                 <HeightReveal show={isEditing}>
-                  <form
-                    aria-label={`Edit habit ${habit.title}`}
-                    onSubmit={saveEdit}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        e.stopPropagation();
-                        cancelEdit();
-                      }
-                    }}
-                    className="border-t border-white/[0.06] bg-sunken px-6 py-4 space-y-3"
-                  >
-                    <div>
-                      <label
-                        htmlFor={editTitleId}
-                        className="mb-1 block text-xs text-neutral-400"
-                      >
-                        Habit Title
-                      </label>
-                      <input
-                        id={editTitleId}
-                        type="text"
-                        required
-                        autoFocus
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor={editNotesId} className="mb-1 block text-xs text-neutral-400">Default Notes</label>
-                      <input
-                        id={editNotesId}
-                        type="text"
-                        value={editNotes}
-                        onChange={(e) => setEditNotes(e.target.value)}
-                        placeholder="Optional reminder copied to each day's task..."
-                        className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent focus:outline-none"
-                      />
-                    </div>
-
-                    {editKind.fields(habit)}
-
-                    <div>
-                      <span className="mb-1 block text-xs text-neutral-400">
-                        Frequency (applies from today)
-                      </span>
-                      <HabitFrequencyPicker
-                        label="Habit frequency"
-                        value={editFrequency}
-                        onChange={setEditFrequency}
-                      />
-                    </div>
-                    <HabitEndDateField value={editEndDate} onChange={setEditEndDate} />
-
-                    <HabitReminderTimes habitId={habit.id} habitTitle={habit.title} times={habit.reminderTimes} />
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                      <EditHabitQuestPicker quests={activeQuests} questId={editQuestId} onSelect={setEditQuestId} />
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          className="min-h-8 coarse:min-h-11 rounded-lg px-3 py-1.5 text-xs text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={
-                            savingEdit ||
-                            !editTitle.trim() ||
-                            !isHabitFrequencyValid(editFrequency)
-                          }
-                          aria-busy={savingEdit}
-                          className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-50"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Save</span>
-                        </button>
-                      </div>
-                    </div>
-                  </form>
+                  <div className="border-t border-white/[0.06] bg-sunken px-6 py-4">
+                    <HabitEditForm habit={habit} todayKey={todayKey} quests={activeQuests} onDirtyChange={setEditDirty}
+                      onSaved={() => closeEdit(habit.id)} onCancel={() => closeEdit(habit.id)} />
+                  </div>
                 </HeightReveal>
                 {detailHabitId === habit.id && (
-                  <HabitDetail habit={habit} todayKey={todayKey} summary={summary} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                  <HabitDetail habit={habit} todayKey={todayKey} summary={summary} metClass={style.bg} quests={activeQuests}
+                    onClose={() => setDetailHabitId(null)} />
                 )}
               </div>
             );

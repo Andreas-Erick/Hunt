@@ -91,6 +91,29 @@ export function AvoidRowSlip({ title, onSlip }: { title: string; onSlip: () => v
   );
 }
 
+/**
+ * A task row's tick (`children`), or on an Avoid Habit's day "Kept so far" and
+ * a labelled Log a Slip button in its place (AvoidRowSlip), for the lists that
+ * show day Tasks outside Today: Plan the Week and the Quest panel. The Slip
+ * goes through the store's complete action, whose shared rule logs it.
+ */
+export function TickOrSlip({
+  task,
+  children,
+}: {
+  task: Pick<Task, "id" | "title" | "habitId">;
+  children: React.ReactNode;
+}) {
+  const completeTaskById = useCommandStore((s) => s.completeTaskById);
+  const avoidDay = useIsAvoidDay(task);
+  if (!avoidDay) return <>{children}</>;
+  const slip = () => {
+    hudAudio.playClick();
+    void completeTaskById(task.id);
+  };
+  return <AvoidRowSlip title={task.title} onSlip={slip} />;
+}
+
 /** Logs or undoes a Slip on an Avoid Habit's `todayKey` through the store, with a click. */
 export function useEditHabitSlip(todayKey: string) {
   const editHabitSlip = useCommandStore((s) => s.editHabitSlip);

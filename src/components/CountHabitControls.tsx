@@ -10,13 +10,11 @@ import {
   formatCountAmount,
   habitDayAmount,
   habitKindOf,
+  habitKindRules,
   parseCountAmount,
 } from "@/lib/habitKind";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
-
-/** A Habit Kind as the edit form names it (read-only: the Kind never changes). */
-const HABIT_KIND_LABEL: Record<HabitKind, string> = { check: "Check Habit", count: "Count Habit", avoid: "Avoid Habit" };
 
 /** How long a press on +1 is held before it opens exact entry instead. */
 export const LONG_PRESS_MS = 500;
@@ -38,6 +36,7 @@ export function useNewHabitKind() {
   const [unit, setUnit] = useState("");
   const countTarget = typedTarget(target);
   return {
+    kind,
     valid: kind !== "count" || countTarget !== null,
     fields: () => (kind === "count" ? { kind, target: countTarget ?? undefined, unit } : { kind }),
     reset: () => {
@@ -63,17 +62,14 @@ export function useNewHabitKind() {
 
 /**
  * The habit edit form's Kind section: the Kind shown read-only (it never
- * changes), and a Count Habit's target and unit, which can.
+ * changes), and a Count Habit's target and unit, which can; they start from
+ * `initial`'s.
  */
-export function useHabitKindEdit() {
-  const [target, setTarget] = useState("");
-  const [unit, setUnit] = useState("");
+export function useHabitKindEdit(initial: Habit) {
+  const [target, setTarget] = useState(() => formatCountAmount(countTargetOf(initial)));
+  const [unit, setUnit] = useState(initial.unit ?? "");
   const isCount = (h: Habit) => habitKindOf(h) === "count";
   return {
-    load: (h: Habit) => {
-      setTarget(formatCountAmount(countTargetOf(h)));
-      setUnit(h.unit ?? "");
-    },
     isDirty: (h: Habit) =>
       isCount(h) && (target !== formatCountAmount(countTargetOf(h)) || unit !== (h.unit ?? "")),
     changes: (h: Habit): Partial<Habit> => {
@@ -86,7 +82,7 @@ export function useHabitKindEdit() {
         <div>
           <span className="mb-1 block text-xs text-neutral-400">Kind</span>
           <span className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] px-3 text-xs text-neutral-300">
-            {HABIT_KIND_LABEL[habitKindOf(h)]}
+            {habitKindRules(h).label}
           </span>
         </div>
         {isCount(h) && (

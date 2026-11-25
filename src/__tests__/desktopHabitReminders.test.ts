@@ -102,4 +102,16 @@ describe("desktop Habit reminders", () => {
     shown[0].note.onclick?.();
     expect(useCommandStore.getState().activeView).toBe("habits");
   });
+
+  it("asks an Avoid Habit's check-in whether there was a Slip, and opens Habits when clicked", async () => {
+    await db.habits.put(habit({ kind: "avoid", title: "No alcohol" }));
+    useCommandStore.setState({ activeView: "command" });
+    stop = startDesktopReminders();
+    await waitPastReminder();
+    await vi.waitFor(() => expect(shown).toHaveLength(1));
+    expect(shown[0].options?.body).toBe("Check-in: did you slip? Log a Slip in Hunt · 09:30");
+    vi.spyOn(window, "focus").mockImplementation(() => {});
+    shown[0].note.onclick?.();
+    expect(useCommandStore.getState().activeView).toBe("habits");
+  });
 });

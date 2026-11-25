@@ -44,9 +44,11 @@ final class ReminderPlan {
         /** On a snoozed reminder, the original's key and fire time; null otherwise. */
         final String snoozeOfKey;
         final long snoozeOfFireAt;
+        /** An Avoid Habit's check-in (HuntCore's isSlipCheckIn): its text asks whether there was a Slip. */
+        final boolean checkIn;
 
         Entry(String key, String kind, String itemId, String title, String dateKey, long fireAt,
-              String actionTick, String actionTaskId, String snoozeOfKey, long snoozeOfFireAt) {
+              String actionTick, String actionTaskId, String snoozeOfKey, long snoozeOfFireAt, boolean checkIn) {
             this.key = key;
             this.kind = kind;
             this.itemId = itemId;
@@ -57,6 +59,7 @@ final class ReminderPlan {
             this.actionTaskId = actionTaskId;
             this.snoozeOfKey = snoozeOfKey;
             this.snoozeOfFireAt = snoozeOfFireAt;
+            this.checkIn = checkIn;
         }
 
         /** The original reminder's key: this one's, or the one it snoozes. */
@@ -80,6 +83,7 @@ final class ReminderPlan {
                         .put("title", title).put("dateKey", dateKey).put("fireAt", fireAt);
                 if (actionTick != null) o.put("action", new JSONObject().put("tick", actionTick).put("taskId", actionTaskId));
                 if (snoozeOfKey != null) o.put("snoozeOf", new JSONObject().put("key", snoozeOfKey).put("fireAt", snoozeOfFireAt));
+                if (checkIn) o.put("checkIn", true);
                 return o;
             } catch (JSONException e) {
                 throw new IllegalStateException(e); // only put() with a null key throws
@@ -181,7 +185,8 @@ final class ReminderPlan {
             snoozeOfFireAt = snoozeOf.optLong("fireAt", 0L);
         }
         return new Entry(key, o.optString("kind", ""), itemId, o.optString("title", ""),
-                o.optString("dateKey", ""), ((Number) fireAt).longValue(), tick, taskId, snoozeOfKey, snoozeOfFireAt);
+                o.optString("dateKey", ""), ((Number) fireAt).longValue(), tick, taskId, snoozeOfKey, snoozeOfFireAt,
+                o.optBoolean("checkIn", false));
     }
 
     /**
@@ -197,7 +202,7 @@ final class ReminderPlan {
             Entry r = s.reminder;
             if (judgedSnoozes.contains(snoozeId(r.baseKey(), s.until))) continue;
             out.add(new Entry(r.baseKey() + "~" + s.until, r.kind, r.itemId, r.title, r.dateKey, s.until,
-                    r.actionTick, r.actionTaskId, r.baseKey(), r.baseFireAt()));
+                    r.actionTick, r.actionTaskId, r.baseKey(), r.baseFireAt(), r.checkIn));
             added = true;
         }
         return added ? of(out, judgedSnoozes) : this;

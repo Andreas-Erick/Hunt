@@ -25,3 +25,8 @@ export function isSafeSyncId(
     SAFE_ID_CHARS_RE.test(value)
   );
 }
+
+/** A synced row's link to another entity (a Quest, a Task): its id when safe, else null. */
+export function entityIdOrNull(value: unknown): string | null {
+  return isSafeSyncId(value) ? value : null;
+}

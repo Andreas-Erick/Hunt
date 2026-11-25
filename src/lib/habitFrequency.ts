@@ -1,5 +1,7 @@
 import type { Habit, HabitFrequency, HabitFrequencyChange, Weekday } from "./domainTypes";
+import { WEEKDAY_SHORT } from "./dateKeys";
 import { isHabitEndedOn } from "./habitEnd";
+import { habitKindRules } from "./habitKind";
 
 /**
  * SHARED Frequency rules (GLOSSARY: Frequency). A Habit stores its Frequency
@@ -17,7 +19,6 @@ const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Monday first, the order of a Habit Week. */
 const WEEK_ORDER: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0];
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 type FrequencySource = Readonly<Pick<Partial<Habit>, "frequencyHistory">>;
 type ScheduleSource = Readonly<Pick<Partial<Habit>, "frequencyHistory" | "endDate" | "endedSpans">>;
@@ -78,6 +79,14 @@ function normalizedFrequency(frequency: HabitFrequency): HabitFrequency {
 /** Most times per Habit Week an N per week Frequency can ask for. */
 export const MAX_TIMES_PER_WEEK = 7;
 
+/**
+ * Whether a Habit of this Kind may use `frequency`: an Avoid Habit is judged
+ * day by day, so it asks every day or on chosen weekdays, never N per week.
+ */
+export function isFrequencyAllowedFor(habit: { readonly kind?: unknown }, frequency: HabitFrequency): boolean {
+  return frequency.type !== "perWeek" || habitKindRules(habit).allowsPerWeek;
+}
+
 /** Whether a Frequency asks N times per Habit Week (judged by the week, not the day). */
 export function isPerWeekFrequency(
   frequency: HabitFrequency
@@ -136,13 +145,23 @@ export function parseHabitFrequency(raw: unknown): HabitFrequency | null {
   return null;
 }
 
+/** A valid Frequency the Habit's Kind may use (isFrequencyAllowedFor) from untrusted input, or null. */
+export function parseHabitFrequencyFor(habit: { readonly kind?: unknown }, raw: unknown): HabitFrequency | null {
+  const frequency = parseHabitFrequency(raw);
+  return frequency && isFrequencyAllowedFor(habit, frequency) ? frequency : null;
+}
+
 /**
  * Sync boundary: a new, valid Frequency history from untrusted input, or
  * undefined when nothing valid is left (the row then reads as every day).
  * Changes with a bad date or an unknown or empty Frequency are dropped; a day
- * keeps its last change; the newest MAX_FREQUENCY_CHANGES are kept.
+ * keeps its last change; the newest MAX_FREQUENCY_CHANGES are kept. A change
+ * the Habit's Kind may not use (isFrequencyAllowedFor) is dropped too.
  */
-export function sanitizeHabitFrequencyHistory(raw: unknown): HabitFrequencyChange[] | undefined {
+export function sanitizeHabitFrequencyHistory(
+  raw: unknown,
+  habit: { readonly kind?: unknown } = {}
+): HabitFrequencyChange[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const byDay = new Map<string, HabitFrequency>();
   for (const entry of raw.slice(-MAX_FREQUENCY_CHANGES * 4)) {
@@ -150,6 +169,7 @@ export function sanitizeHabitFrequencyHistory(raw: unknown): HabitFrequencyChang
     const { effectiveFrom } = entry;
     const frequency = parseHabitFrequency(entry.frequency);
     if (typeof effectiveFrom !== "string" || !DATE_KEY_RE.test(effectiveFrom) || !frequency) continue;
+    if (!isFrequencyAllowedFor(habit, frequency)) continue;
     byDay.set(effectiveFrom, frequency);
   }
   const history = Array.from(byDay, ([effectiveFrom, frequency]) => ({ effectiveFrom, frequency }))

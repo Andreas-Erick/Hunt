@@ -18,7 +18,7 @@ export {
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
+export { completionDateKey, habitRowMode, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export { habitSuccessRate, habitSuccessRateLabel, habitWeekStrip } from "../lib/habitInsight";
 export {
@@ -27,6 +27,7 @@ export {
   formatCountAmount,
   habitDayAmount,
   habitKindOf,
+  habitKindRules,
   isCountTarget,
   MAX_COUNT_UNIT_LENGTH,
   parseCountAmount,
@@ -56,9 +57,11 @@ export {
   HABIT_WEEKDAYS,
   habitFrequencyLabel,
   habitFrequencyOn,
+  isFrequencyAllowedFor,
   isHabitScheduledOn,
   MAX_TIMES_PER_WEEK,
   parseHabitFrequency,
+  parseHabitFrequencyFor,
   sameHabitFrequency,
   withHabitFrequency,
 } from "../lib/habitFrequency";
