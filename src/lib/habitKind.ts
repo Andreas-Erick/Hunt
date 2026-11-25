@@ -1,17 +1,18 @@
 import type { Habit, HabitKind, Task } from "./domainTypes";
 
 /**
- * SHARED Habit Kind rules (GLOSSARY: Habit Kind, Count Habit): which Kinds
- * exist, how a stored row reads, and how a Count Habit's fields are validated
- * at the sync boundary (syncTypes) and shown. Pure, and imports no rule
- * module, so syncTypes and the Outcome rule can both use it. Writing a Count
- * day's total is habitCount.ts.
+ * SHARED Habit Kind rules (GLOSSARY: Habit Kind, Count Habit, Avoid Habit):
+ * which Kinds exist, how a stored row reads, and how Count and Avoid fields
+ * are validated at the sync boundary (syncTypes) and shown. Pure, and imports
+ * no rule module, so syncTypes and the Outcome rule can both use it. Writing a
+ * Count day's total is habitCount.ts; logging a Slip is habitAvoid.ts.
  */
 
 /** Every Habit Kind this build knows. */
 const HABIT_KIND_TABLE: Record<HabitKind, true> = {
   check: true,
   count: true,
+  avoid: true,
 };
 
 /** Largest Count target or day total kept; larger ones are cut to it. */
@@ -69,6 +70,27 @@ export function sanitizeCountDayFields(raw: Record<string, unknown>): Partial<Ta
     out.countTickedAt = tickedAt;
   }
   return out;
+}
+
+/** Most Slips kept on one Avoid Habit day; more are cut to it. */
+export const MAX_SLIPS = 1000;
+
+/** An Avoid Habit day's Slips: its stored count (a whole number), 0 when none was logged. */
+export function habitDaySlips(task: Readonly<Pick<Partial<Task>, "slips">> | undefined): number {
+  const slips = task?.slips;
+  return typeof slips === "number" && Number.isInteger(slips) && slips > 0 ? Math.min(slips, MAX_SLIPS) : 0;
+}
+
+/** Sync boundary: a day Task row's valid Slip count from `raw` (a whole number >= 1; a huge one is cut). */
+export function sanitizeSlipFields(raw: Record<string, unknown>): Partial<Task> {
+  const slips = typeof raw.slips === "number" ? habitDaySlips({ slips: raw.slips }) : 0;
+  return slips > 0 ? { slips } : {};
+}
+
+/** An Avoid Habit day as its row shows it: "Kept so far" with no Slip, else "1 Slip", "2 Slips". */
+export function avoidDayLabel(slips: number): string {
+  if (!(slips > 0)) return "Kept so far";
+  return slips === 1 ? "1 Slip" : `${slips} Slips`;
 }
 
 /** A Count Habit's target: its stored target when positive, else 1. */

@@ -7,8 +7,11 @@ import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { writeHabitSlip, type SlipEdit } from "./localHabitAvoid";
 import { correctHabitDay, ensureHabitTaskForDay, habitWeekTasks, setHabitDaySkipped } from "./localHabitDays";
 import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
+import { withHabitEndDate } from "./habitEnd";
+import { isDateKey } from "./syncValues";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -415,8 +418,9 @@ async function deleteQuest(questId: string): Promise<void> {
 
 /** A new habit: every day unless `frequency` says otherwise; a Check Habit unless its Kind says Count. */
 export type NewHabit = { title: string; notes?: string; questId: string | null; frequency?: HabitFrequency } & NewHabitKind;
-/** Habit fields the edit form can change (never the Kind); a new `frequency` applies from today (withHabitFrequency). */
-export type HabitChanges = Partial<Omit<NewHabit, "kind">>;
+/** Habit fields the edit form can change (never the Kind); a new `frequency` applies from today (withHabitFrequency),
+ * a new `endDate` (null clears it) ends or restarts the Habit (withHabitEndDate). */
+export type HabitChanges = Partial<Omit<NewHabit, "kind">> & { endDate?: string | null };
 
 /** Adds a habit at the end, with today's instance when its Frequency asks for today (unless tombstoned).
  * False for an empty title, an invalid Frequency (no weekday chosen) or a Count Habit with no target. */
@@ -470,6 +474,10 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
       const frequency = parseHabitFrequency(changes.frequency);
       if (!frequency) return false;
       patch.frequencyHistory = withHabitFrequency(row, frequency, todayKey);
+    }
+    if (changes.endDate !== undefined) {
+      if (changes.endDate !== null && !isDateKey(changes.endDate)) return false;
+      Object.assign(patch, withHabitEndDate(row, changes.endDate, todayKey));
     }
     await db.habits.update(habitId, { ...patch, updatedAt: nextStamp(row) });
 
@@ -553,6 +561,8 @@ export const localStore = {
   ensureHabitTaskForDay,
   /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
   logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
+  /** An Avoid Habit's day: logs a Slip, or undoes the newest one (writeHabitSlip). */
+  editHabitSlip: async (habitId: string, dateKey: string, edit: SlipEdit) => changed(await writeHabitSlip(habitId, dateKey, edit)),
   setHabitDaySkipped,
   correctHabitDay,
   deleteTimeLog,

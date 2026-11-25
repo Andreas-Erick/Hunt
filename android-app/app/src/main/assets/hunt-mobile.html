@@ -791,6 +791,15 @@
     .task-check-ring.count-plus.done {
       color: rgb(var(--c-on-accent));
     }
+    /* An Avoid Habit's mark where other rows have their tick: not a target (a Slip has its own button). */
+    .avoid-mark {
+      pointer-events: none;
+      color: var(--text-2);
+      border-style: dashed;
+    }
+    .avoid-mark.slipped {
+      color: var(--rose);
+    }
     .count-progress {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -3220,6 +3229,7 @@ var HuntCore = (() => {
     applyChecklistEdit: () => applyChecklistEdit,
     applyListEdit: () => applyListEdit,
     applyPendingTicks: () => applyPendingTicks,
+    avoidDayLabel: () => avoidDayLabel,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
     buildList: () => buildList,
@@ -3236,12 +3246,16 @@ var HuntCore = (() => {
     correctHabitDayRow: () => correctHabitDayRow,
     countProgressLabel: () => countProgressLabel,
     countTargetOf: () => countTargetOf,
+    dateKeyFromOffset: () => dateKeyFromOffset,
     dueReminders: () => dueReminders,
     formatCountAmount: () => formatCountAmount,
     formatCountTotal: () => formatCountTotal,
     fromFocusSession: () => fromFocusSession,
+    habitDayActions: () => habitDayActions,
     habitDayAmount: () => habitDayAmount,
     habitDayOutcome: () => habitDayOutcome,
+    habitDaySlips: () => habitDaySlips,
+    habitEndDateLabel: () => habitEndDateLabel,
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
     habitKindOf: () => habitKindOf,
@@ -3260,6 +3274,7 @@ var HuntCore = (() => {
     habitWeekStrip: () => habitWeekStrip,
     habitYearTotals: () => habitYearTotals,
     isCountTarget: () => isCountTarget,
+    isEndedHabit: () => isEndedHabit,
     isHabitScheduledOn: () => isHabitScheduledOn,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -3268,6 +3283,7 @@ var HuntCore = (() => {
     isTaskVisibleToday: () => isTaskVisibleToday,
     listItemsOf: () => listItemsOf,
     listProgress: () => listProgress,
+    logHabitSlip: () => logHabitSlip,
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
     missingHabitRows: () => missingHabitRows,
@@ -3289,8 +3305,103 @@ var HuntCore = (() => {
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
     transitionFocus: () => transitionFocus,
+    undoHabitSlip: () => undoHabitSlip,
+    withHabitEndDate: () => withHabitEndDate,
     withHabitFrequency: () => withHabitFrequency
   });
+
+  // src/lib/habitKind.ts
+  var HABIT_KIND_TABLE = {
+    check: true,
+    count: true,
+    avoid: true
+  };
+  var MAX_COUNT_AMOUNT = 1e6;
+  var MAX_COUNT_UNIT_LENGTH = 40;
+  function isHabitKind(value) {
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(HABIT_KIND_TABLE, value);
+  }
+  function habitKindOf(habit) {
+    const kind = habit == null ? void 0 : habit.kind;
+    return isHabitKind(kind) ? kind : "check";
+  }
+  function isCountAmount(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  }
+  var MAX_SLIPS = 1e3;
+  function habitDaySlips(task) {
+    const slips = task == null ? void 0 : task.slips;
+    return typeof slips === "number" && Number.isInteger(slips) && slips > 0 ? Math.min(slips, MAX_SLIPS) : 0;
+  }
+  function avoidDayLabel(slips) {
+    if (!(slips > 0)) return "Kept so far";
+    return slips === 1 ? "1 Slip" : `${slips} Slips`;
+  }
+  function countTargetOf(habit) {
+    const target = habit.target;
+    return typeof target === "number" && Number.isFinite(target) && target > 0 ? Math.min(target, MAX_COUNT_AMOUNT) : 1;
+  }
+  function habitDayAmount(task) {
+    const amount = task == null ? void 0 : task.amount;
+    return typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : 0;
+  }
+  function cleanCountAmount(amount) {
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    return Math.round(Math.min(amount, MAX_COUNT_AMOUNT) * 100) / 100;
+  }
+  function formatCountAmount(amount) {
+    return String(cleanCountAmount(amount));
+  }
+  function countProgressLabel(habit, amount) {
+    const unit = typeof habit.unit === "string" ? habit.unit.trim() : "";
+    const label = `${formatCountAmount(amount)} / ${formatCountAmount(countTargetOf(habit))}`;
+    return unit ? `${label} ${unit}` : label;
+  }
+  function parseCountAmount(text) {
+    const trimmed = String(text != null ? text : "").trim().replace(",", ".");
+    if (!/^\d+(\.\d+)?$|^\.\d+$/.test(trimmed)) return null;
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? cleanCountAmount(value) : null;
+  }
+  function isCountTarget(value) {
+    return isCountAmount(value) && value > 0 && value <= MAX_COUNT_AMOUNT;
+  }
+
+  // src/lib/habitEnd.ts
+  var MAX_ENDED_SPANS = 100;
+  function shiftDateKey(dateKey, days) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const date = new Date(y, m - 1, d + days, 12);
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${mm}-${dd}`;
+  }
+  function isHabitEndedOn(habit, dayKey) {
+    var _a;
+    if (habit.endDate && dayKey > habit.endDate) return true;
+    return ((_a = habit.endedSpans) != null ? _a : []).some((span) => span.from <= dayKey && dayKey <= span.to);
+  }
+  function isEndedHabit(habit, todayKey) {
+    return Boolean(habit.endDate) && habit.endDate < todayKey;
+  }
+  function withHabitEndDate(habit, endDate, todayKey) {
+    var _a;
+    const spans = [...(_a = habit.endedSpans) != null ? _a : []];
+    const restarts = isEndedHabit(habit, todayKey) && (endDate === null || endDate >= todayKey);
+    if (restarts) {
+      const from = shiftDateKey(habit.endDate, 1);
+      const to = shiftDateKey(todayKey, -1);
+      if (from <= to) spans.push({ from, to });
+    }
+    const kept = spans.slice(-MAX_ENDED_SPANS);
+    return { endDate: endDate != null ? endDate : void 0, endedSpans: kept.length > 0 ? kept : void 0 };
+  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function habitEndDateLabel(dateKey, todayKey) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const year = dateKey.slice(0, 4) === todayKey.slice(0, 4) ? "" : ` ${y}`;
+    return `${d} ${MONTHS[m - 1]}${year}`;
+  }
 
   // src/lib/habitFrequency.ts
   var EVERY_DAY = { type: "everyDay" };
@@ -3310,6 +3421,7 @@ var HuntCore = (() => {
     return inForce;
   }
   function isHabitScheduledOn(habit, dayKey) {
+    if (isHabitEndedOn(habit, dayKey)) return false;
     const frequency = habitFrequencyOn(habit, dayKey);
     return frequency.type !== "weekdays" || frequency.weekdays.includes(weekdayOfKey(dayKey));
   }
@@ -3365,61 +3477,21 @@ var HuntCore = (() => {
     return null;
   }
 
-  // src/lib/habitKind.ts
-  var HABIT_KIND_TABLE = {
-    check: true,
-    count: true
-  };
-  var MAX_COUNT_AMOUNT = 1e6;
-  var MAX_COUNT_UNIT_LENGTH = 40;
-  function isHabitKind(value) {
-    return typeof value === "string" && Object.prototype.hasOwnProperty.call(HABIT_KIND_TABLE, value);
-  }
-  function habitKindOf(habit) {
-    const kind = habit == null ? void 0 : habit.kind;
-    return isHabitKind(kind) ? kind : "check";
-  }
-  function isCountAmount(value) {
-    return typeof value === "number" && Number.isFinite(value) && value >= 0;
-  }
-  function countTargetOf(habit) {
-    const target = habit.target;
-    return typeof target === "number" && Number.isFinite(target) && target > 0 ? Math.min(target, MAX_COUNT_AMOUNT) : 1;
-  }
-  function habitDayAmount(task) {
-    const amount = task == null ? void 0 : task.amount;
-    return typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : 0;
-  }
-  function cleanCountAmount(amount) {
-    if (!Number.isFinite(amount) || amount <= 0) return 0;
-    return Math.round(Math.min(amount, MAX_COUNT_AMOUNT) * 100) / 100;
-  }
-  function formatCountAmount(amount) {
-    return String(cleanCountAmount(amount));
-  }
-  function countProgressLabel(habit, amount) {
-    const unit = typeof habit.unit === "string" ? habit.unit.trim() : "";
-    const label = `${formatCountAmount(amount)} / ${formatCountAmount(countTargetOf(habit))}`;
-    return unit ? `${label} ${unit}` : label;
-  }
-  function parseCountAmount(text) {
-    const trimmed = String(text != null ? text : "").trim().replace(",", ".");
-    if (!/^\d+(\.\d+)?$|^\.\d+$/.test(trimmed)) return null;
-    const value = Number(trimmed);
-    return Number.isFinite(value) ? cleanCountAmount(value) : null;
-  }
-  function isCountTarget(value) {
-    return isCountAmount(value) && value > 0 && value <= MAX_COUNT_AMOUNT;
-  }
-
   // src/lib/habitOutcome.ts
   function habitDayOutcome({ habit, dayKey, dayTask, todayKey }) {
     if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
+    if (habitKindOf(habit) === "avoid") return avoidDayOutcome(dayKey, dayTask, todayKey);
     const met = habitKindOf(habit) === "count" ? habitDayAmount(dayTask) >= countTargetOf(habit) : (dayTask == null ? void 0 : dayTask.status) === "completed";
     if (met) return "met";
     if (dayTask == null ? void 0 : dayTask.skipped) return "skipped";
     if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
     return habitFrequencyOn(habit, dayKey).type === "perWeek" ? null : "missed";
+  }
+  function avoidDayOutcome(dayKey, dayTask, todayKey) {
+    if (dayTask == null ? void 0 : dayTask.skipped) return "skipped";
+    if (habitDaySlips(dayTask) > 0) return "missed";
+    if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
+    return "met";
   }
   function habitStreakOf(outcomes) {
     let streak = 0;
@@ -3447,7 +3519,7 @@ var HuntCore = (() => {
     return Boolean(task.habitId) && task.status === "queued" && habitDayOutcome({ habit: {}, dayKey: (_a = task.scheduledDate) != null ? _a : "", dayTask: task, todayKey }) === "missed";
   }
   function isOpenTask(task, todayKey) {
-    return (task.status === "queued" || task.status === "active") && !(task.habitId && task.skipped) && !isMissedHabitTask(task, todayKey);
+    return (task.status === "queued" || task.status === "active") && !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) && !isMissedHabitTask(task, todayKey);
   }
   function toLocalDateKey(timestamp = Date.now()) {
     const d = new Date(timestamp);
@@ -3512,9 +3584,9 @@ var HuntCore = (() => {
     missed: "Missed",
     skipped: "Skipped"
   };
-  function habitWeekStrip(todayKey, outcomeOn) {
+  function habitWeekStrip(lastKey, outcomeOn, todayKey = lastKey) {
     return Array.from({ length: HABIT_WEEK_STRIP_DAYS }, (_, idx) => {
-      const day = dateFromKey(todayKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
+      const day = dateFromKey(lastKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
       const dayKey = toLocalDateKey(day.getTime());
       const outcome = outcomeOn(dayKey);
       const short = WEEKDAY_SHORT2[day.getDay()];
@@ -3786,6 +3858,7 @@ var HuntCore = (() => {
     let done = 0;
     let asked = 0;
     for (const habit of habits) {
+      if (habitKindOf(habit) === "avoid") continue;
       const summary = summaryFor(habit.id);
       if (!habitWantsDayTask(summary)) continue;
       asked += 1;
@@ -4278,9 +4351,12 @@ var HuntCore = (() => {
     return { ...todayTask, status: "archived" };
   }
   function habitTodayTaskAfterEdit(before, after, todayTask, todayKey, now = Date.now()) {
-    var _a, _b;
-    const frequencyChanged = JSON.stringify((_a = before.frequencyHistory) != null ? _a : []) !== JSON.stringify((_b = after.frequencyHistory) != null ? _b : []);
-    const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+    const scheduleOf = (h) => {
+      var _a, _b, _c;
+      return JSON.stringify([(_a = h.frequencyHistory) != null ? _a : [], (_b = h.endDate) != null ? _b : null, (_c = h.endedSpans) != null ? _c : []]);
+    };
+    const scheduleChanged = scheduleOf(before) !== scheduleOf(after);
+    const task = scheduleChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
     if (!task) return null;
     const next = { ...task };
     if (next.status === "queued" || next.status === "active") {
@@ -4326,6 +4402,18 @@ var HuntCore = (() => {
   }
   function addHabitDayCount(task, habit, at) {
     return setHabitDayAmount(task, habit, habitDayAmount(task) + 1, at);
+  }
+
+  // src/lib/habitAvoid.ts
+  function logHabitSlip(task, at) {
+    return { ...task, slips: Math.min(habitDaySlips(task) + 1, MAX_SLIPS), updatedAt: nextStamp(task, at) };
+  }
+  function undoHabitSlip(task, at) {
+    const row = { ...task, updatedAt: nextStamp(task, at) };
+    const left = habitDaySlips(task) - 1;
+    if (left > 0) row.slips = left;
+    else delete row.slips;
+    return row;
   }
 
   // src/lib/habitSkip.ts
@@ -4567,15 +4655,16 @@ var HuntCore = (() => {
   }
 
   // src/lib/widgetSnapshot.ts
-  var WIDGET_SNAPSHOT_VERSION = 2;
+  var WIDGET_SNAPSHOT_VERSION = 3;
   var WIDGET_SNAPSHOT_DAYS = 8;
   function futureTasks(state, dateKey) {
     var _a;
     return ((_a = state.tasks) != null ? _a : []).filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey)).sort(compareRank);
   }
   function todayTasks(state, todayKey) {
-    var _a;
-    return ((_a = state.tasks) != null ? _a : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    var _a, _b;
+    const endedIds = new Set(((_a = state.habits) != null ? _a : []).filter((h) => isEndedHabit(h, todayKey)).map((h) => h.id));
+    return ((_b = state.tasks) != null ? _b : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).filter((t) => !t.habitId || !endedIds.has(t.habitId)).sort(compareRank);
   }
   function buildWidgetSnapshot(state, todayKey, look) {
     var _a, _b, _c, _d, _e, _f, _g;
@@ -4597,6 +4686,7 @@ var HuntCore = (() => {
       const habit = habitOf.get(t.habitId);
       row.habitKind = habitKindOf(habit);
       if (habit && row.habitKind === "count") row.progress = countProgressLabel(habit, habitDayAmount(t));
+      if (row.habitKind === "avoid") row.progress = avoidDayLabel(habitDaySlips(t));
       return row;
     };
     const noData = !((_e = state.quests) != null ? _e : []).length && !((_f = state.tasks) != null ? _f : []).length && !((_g = state.habits) != null ? _g : []).length;
@@ -4620,7 +4710,7 @@ var HuntCore = (() => {
   // src/lib/pendingTicks.ts
   var DATE_KEY_RE3 = /^\d{4}-\d{2}-\d{2}$/;
   function isWellFormed(tick) {
-    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE3.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0 && (tick.kind === void 0 || tick.kind === "+1");
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE3.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0 && (tick.kind === void 0 || tick.kind === "+1" || tick.kind === "slip");
   }
   function habitRowFor(state, tick) {
     var _a;
@@ -4633,13 +4723,15 @@ var HuntCore = (() => {
     if (((_a = state.activeFocus) == null ? void 0 : _a.activeTaskId) === task.id) return "in-focus";
     return null;
   }
+  var TICK_KIND_OF = { check: void 0, count: "+1", avoid: "slip" };
   function applyTick(state, task, tick) {
     var _a, _b, _c;
     const habit = task.habitId ? ((_a = state.habits) != null ? _a : []).find((h) => h.id === task.habitId) : void 0;
-    const isCount = !!habit && habitKindOf(habit) === "count";
-    if (tick.kind === "+1" !== isCount) return "wrong-kind";
-    if (!habit || !isCount) return (_b = doneSkipReason(state, task)) != null ? _b : completeTaskRow(task, tick.tickedAt);
+    const habitKind = habit ? habitKindOf(habit) : "check";
+    if (tick.kind !== TICK_KIND_OF[habitKind]) return "wrong-kind";
+    if (!habit || habitKind === "check") return (_b = doneSkipReason(state, task)) != null ? _b : completeTaskRow(task, tick.tickedAt);
     if (task.status === "archived") return "archived";
+    if (habitKind === "avoid") return habitDaySlips(task) > 0 ? "already-slipped" : logHabitSlip(task, tick.tickedAt);
     if (((_c = task.countTickedAt) != null ? _c : 0) >= tick.tickedAt) return "already-counted";
     return { ...addHabitDayCount(task, habit, tick.tickedAt), countTickedAt: tick.tickedAt };
   }
@@ -4724,6 +4816,11 @@ var HuntCore = (() => {
       nextMonthKey: shown < lastMonth ? shiftMonthKey(shown, 1) : null
     };
   }
+  function habitDayActions(habit, outcome) {
+    const actions = habitKindOf(habit) === "avoid" ? [{ mark: "slip", label: "Log a Slip" }, ...outcome === "missed" ? [{ mark: "unslip", label: "Undo Slip" }] : []] : [outcome === "met" ? { mark: "none", label: "Untick" } : { mark: "met", label: "Tick" }];
+    actions.push(outcome === "skipped" ? { mark: "none", label: "Undo skip" } : { mark: "skipped", label: "Skip" });
+    return actions;
+  }
   function habitWeekSkipMark(habit, dayKey, mark, outcome) {
     if (!isPerWeekFrequency(habitFrequencyOn(habit, dayKey))) return null;
     if (mark === "skipped") return true;
@@ -4737,9 +4834,21 @@ var HuntCore = (() => {
     const row = setHabitDayAmount(task, habit, mark === "met" ? Math.max(amount, target) : 0, at);
     return { ...row, completedAt: row.completedAt, skipped: mark === "skipped" ? true : void 0 };
   }
+  function correctAvoidDayRow(task, mark, at) {
+    const slips = habitDaySlips(task);
+    const skipped = Boolean(task.skipped);
+    if (mark === "slip") return logHabitSlip(task, at);
+    if (mark === "unslip") return slips > 0 ? { slips: void 0, ...undoHabitSlip(task, at) } : task;
+    if (mark === "met") return slips > 0 || skipped ? { ...task, slips: void 0, skipped: void 0, updatedAt: nextStamp(task, at) } : task;
+    if (skipped === (mark === "skipped")) return task;
+    return { ...task, skipped: mark === "skipped" ? true : void 0, updatedAt: nextStamp(task, at) };
+  }
   function correctHabitDayRow(task, mark, at, habit) {
     if (task.status === "active") return task;
-    if (habit && habitKindOf(habit) === "count") return correctCountDayRow(task, habit, mark, at);
+    const kind = habitKindOf(habit);
+    if (kind === "avoid") return correctAvoidDayRow(task, mark, at);
+    if (mark === "slip" || mark === "unslip") return task;
+    if (kind === "count") return correctCountDayRow(task, habit != null ? habit : {}, mark, at);
     const met = task.status === "completed";
     const skipped = !met && Boolean(task.skipped);
     if (mark === "met" && met || mark === "skipped" && skipped || mark === "none" && !met && !skipped) {
@@ -4796,6 +4905,8 @@ var HuntCore = (() => {
     var countProgressLabel = HuntCore.countProgressLabel;
     var formatCountAmount = HuntCore.formatCountAmount;
     var parseCountAmount = HuntCore.parseCountAmount;
+    var avoidDayLabel = HuntCore.avoidDayLabel; // "Kept so far", "1 Slip"
+    var habitDaySlips = HuntCore.habitDaySlips;
     var isHabitScheduledOn = HuntCore.isHabitScheduledOn;
     var habitTodayTally = HuntCore.habitTodayTally;
     var habitFrequencyOn = HuntCore.habitFrequencyOn;
@@ -4855,6 +4966,7 @@ var HuntCore = (() => {
     // Crisp Vector SVG Icons
     const SVG_PLAY = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
     const SVG_PAUSE = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+    const SVG_SHIELD = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
     const SVG_CHECK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
     const SVG_MORE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>`;
     const SVG_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`;
@@ -7448,6 +7560,12 @@ var HuntCore = (() => {
     let lastDirectCompleteAt = -Infinity;
 
     function completeTaskDirect(taskId) {
+      // An Avoid Habit's day is not ticked: every "complete" path logs a Slip, as a Day Widget tap does.
+      const avoidTask = state.tasks.find(x => x.id === taskId);
+      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+        editHabitSlip(avoidTask.habitId, avoidTask.scheduledDate || toLocalDateKey(), "log");
+        return;
+      }
       // A Count Habit's day is counted, not ticked: every "complete" path adds one (shared +1 rule).
       const countTask = state.tasks.find(x => x.id === taskId);
       if (countTask && countHabitOfTask(countTask)) {
@@ -7489,6 +7607,17 @@ var HuntCore = (() => {
     }
 
     function reopenTaskDirect(taskId) {
+      const avoidTask = state.tasks.find(x => x.id === taskId);
+      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+        // An Avoid Habit's day is reopened by clearing its Slips.
+        playClickSound();
+        avoidTask.status = "queued";
+        delete avoidTask.completedAt;
+        delete avoidTask.slips;
+        avoidTask.updatedAt = nextStamp(avoidTask, Date.now());
+        commitLocalChange();
+        return;
+      }
       const countTask = state.tasks.find(x => x.id === taskId);
       if (countTask && countHabitOfTask(countTask)) {
         // A Count Habit's day is reopened by clearing its total.
@@ -9233,6 +9362,7 @@ var HuntCore = (() => {
           <div class="sheet-pill-group" role="radiogroup" aria-label="Habit Kind">
             <button class="sheet-pill selected" role="radio" aria-checked="true" data-habit-kind="check" onclick="selectHabitKind(this, 'check')">Check</button>
             <button class="sheet-pill" role="radio" aria-checked="false" data-habit-kind="count" onclick="selectHabitKind(this, 'count')">Count</button>
+            <button class="sheet-pill" role="radio" aria-checked="false" data-habit-kind="avoid" onclick="selectHabitKind(this, 'avoid')">Avoid</button>
           </div>
           <div id="newHabitCountFields" hidden>
             <div style="display:flex;gap:8px;">
@@ -9274,7 +9404,7 @@ var HuntCore = (() => {
         flagInvalidField(tEl);
         return;
       }
-      const kind = selectedHabitKind === "count" ? "count" : "check";
+      const kind = selectedHabitKind === "count" || selectedHabitKind === "avoid" ? selectedHabitKind : "check";
       const targetEl = document.getElementById("newHabitTargetInput");
       const unitEl = document.getElementById("newHabitUnitInput");
       const target = kind === "count" ? parseCountAmount(targetEl ? targetEl.value : "") : null;
@@ -9329,7 +9459,7 @@ var HuntCore = (() => {
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
 
           <div class="sheet-label">Kind</div>
-          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${habitKindOf(h) === "count" ? "Count Habit" : "Check Habit"}</div>
+          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${{ count: "Count Habit", avoid: "Avoid Habit" }[habitKindOf(h)] || "Check Habit"}</div>
           ${habitKindOf(h) === "count" ? `
             <div style="display:flex;gap:8px;">
               <input id="editHabitTargetInput" class="sheet-input" inputmode="decimal" value="${escapeHtml(formatCountAmount(countTargetOf(h)))}" placeholder="Daily target" aria-label="Daily target" style="flex:1;min-width:0;" />
@@ -9338,6 +9468,8 @@ var HuntCore = (() => {
           ` : ""}
           <div class="sheet-label">Frequency · applies from today</div>
           <div id="habitFrequencyPicker">${habitFrequencyPickerHtml()}</div>
+
+          ${habitEndDateFieldHtml(h)}
 
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -9360,6 +9492,114 @@ var HuntCore = (() => {
             <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
           </div>
       `);
+    }
+
+    // The sheet's optional end date (GLOSSARY: Ended Habit). After it the Habit leaves Today and moves
+    // to the Ended section; clearing or moving it restarts the Habit (the shared withHabitEndDate rule).
+    function habitEndDateFieldHtml(h) {
+      return `
+          <div class="sheet-label">End date · optional</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <input id="editHabitEndDateInput" type="date" class="sheet-input" style="margin:0;flex:1;min-width:0;" value="${escapeHtml(h.endDate || "")}" aria-label="End date" />
+            <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 14px;flex-shrink:0;" onclick="clearHabitEndDateInput()" aria-label="Clear end date">Clear</button>
+          </div>`;
+    }
+
+    function clearHabitEndDateInput() {
+      playClickSound();
+      const el = document.getElementById("editHabitEndDateInput");
+      if (el) el.value = "";
+    }
+
+    // Writes a Habit's end fields (withHabitEndDate) onto `h`, dropping the ones left empty.
+    function applyHabitEndDate(h, endDate, todayKey) {
+      const end = HuntCore.withHabitEndDate(h, endDate, todayKey);
+      if (end.endDate) h.endDate = end.endDate; else delete h.endDate;
+      if (end.endedSpans) h.endedSpans = end.endedSpans; else delete h.endedSpans;
+    }
+
+    // Today's day Task follows a Habit edit (shared rule): set aside, brought back or kept aligned.
+    function syncHabitTodayTask(prev, h, todayKey, now) {
+      const todayId = habitTaskId(h.id, todayKey);
+      const todayTask = HuntCore.habitTodayTaskAfterEdit(prev, h, state.tasks.find(t => t.id === todayId), todayKey, now);
+      if (todayTask && !asArray(state.deletedTaskIds).includes(todayId)) {
+        state.tasks = state.tasks.filter(t => t.id !== todayId).concat(todayTask).sort(compareRank);
+      }
+    }
+
+    // An Ended Habit's Restart: its end date is cleared, and the days it spent Ended are kept as a
+    // stretch with no Outcome, so they never count against its Streak.
+    function restartHabit(habitId) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h || !h.endDate) return;
+      playClickSound();
+      const now = Date.now();
+      const todayKey = toLocalDateKey(now);
+      const prev = cloneJson(h);
+      applyHabitEndDate(h, null, todayKey);
+      h.updatedAt = nextStamp(h, now);
+      syncHabitTodayTask(prev, h, todayKey, now);
+      commitLocalChange();
+      showToast("Habit restarted");
+    }
+
+    // A Habit card's week strip (shared habitWeekStrip): the 7 days ending `lastKey` (today, or an
+    // Ended Habit's end date), each Outcome in its own shape so it reads without colour.
+    function habitStripHtml(lastKey, outcomeOn, hex, todayKey) {
+      return habitWeekStrip(lastKey, outcomeOn, todayKey).map(day => {
+        const kind = day.outcome || "none";
+        const mark = day.outcome === "met"
+          ? `<span class="habit-strip-mark met" style="background:${hex};color:rgb(0 0 0 / 0.82);"><svg data-glyph="met" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>`
+          : day.outcome === "missed"
+          ? `<span class="habit-strip-mark missed"><svg data-glyph="missed" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>`
+          : `<span class="habit-strip-mark ${kind}"></span>`;
+        return `<li aria-label="${escapeHtml(day.label)}" data-outcome="${escapeHtml(kind)}">${mark}<span class="habit-strip-day${day.dayKey === todayKey ? " today" : ""}" aria-hidden="true">${escapeHtml(day.weekday)}</span></li>`;
+      }).join("");
+    }
+
+    let endedHabitsOpen = false;
+
+    function toggleEndedHabits() {
+      playClickSound();
+      endedHabitsOpen = !endedHabitsOpen;
+      renderApp();
+    }
+
+    // The Habits screen's collapsed "Ended" section: each Ended Habit with its last week up to the
+    // end date, its final Streak and Success Rate. A tap opens its sheet (move the end date, or delete it).
+    function endedHabitsHtml(ended, habitDays, todayKey) {
+      if (ended.length === 0) return "";
+      const cards = endedHabitsOpen ? ended.map(h => {
+        const q = state.quests.find(x => x.id === h.questId);
+        const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
+        const { streak, streakUnit, outcomeOn, successRate } = habitDays.summaryFor(h.id);
+        const rate = habitSuccessRateLabel(successRate());
+        const title = escapeHtml(h.title);
+        return `
+              <div class="queue-item-card" data-ended-habit="${escapeHtml(h.id)}" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;opacity:0.85;">
+                <div class="card-edge-bar" style="background:${hex};opacity:0.45;"></div>
+                <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">
+                  <div class="queue-item-title" style="color:var(--text-2);">${title}</div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:-2px;">Ended ${escapeHtml(HuntCore.habitEndDateLabel(h.endDate, todayKey))} · ${escapeHtml(q ? q.title : "Other work")}</div>
+                  <div class="queue-item-sub" style="margin-top:8px;flex-wrap:wrap;gap:6px;">
+                    <ul class="habit-strip" aria-label="Last 7 days">${habitStripHtml(h.endDate, outcomeOn, hex, todayKey)}</ul>
+                    ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;" aria-label="Streak ${streak} ${streakUnit === "week" ? "weeks" : "days"}">${streak}${streakUnit === "week" ? "w" : "d"}</span>` : ""}
+                    ${rate !== null ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;" aria-label="Success Rate ${rate}">${rate}</span>` : ""}
+                  </div>
+                </div>
+                <div class="queue-item-right">
+                  <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="restartHabit(${jsArg(h.id)})" aria-label="Restart habit ${title}">Restart</button>
+                </div>
+              </div>`;
+      }).join("") : "";
+      return `
+          <div style="margin-top:18px;">
+            <button class="text-action pressable" style="min-height:var(--touch-min);display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:calc(0.12em * var(--label-track));text-transform:var(--label-case);margin:0 -8px;" onclick="toggleEndedHabits()" aria-expanded="${endedHabitsOpen}" aria-label="Ended habits (${ended.length})">
+              <span aria-hidden="true" style="display:inline-block;transition:transform 150ms ease-out;transform:rotate(${endedHabitsOpen ? 90 : 0}deg);">›</span>
+              <span>Ended (${ended.length})</span>
+            </button>
+            ${endedHabitsOpen ? `<div class="habits-grid ended-habits" style="margin-top:10px;">${cards}</div>` : ""}
+          </div>`;
     }
 
     // The sheet's "Skip today" row: only for a scheduled day still waiting to be done (not ticked,
@@ -9390,6 +9630,12 @@ var HuntCore = (() => {
       }
       const frequency = habitFrequencyFromDraft();
       if (!frequency) return;
+      const endEl = document.getElementById("editHabitEndDateInput");
+      const endDate = endEl ? endEl.value : (h.endDate || "");
+      if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        flagInvalidField(endEl);
+        return;
+      }
       playClickSound();
       const now = Date.now();
       const todayKey = toLocalDateKey(now);
@@ -9419,15 +9665,12 @@ var HuntCore = (() => {
       // A Frequency change applies from today; earlier days keep the Frequency they had.
       const frequencyHistory = HuntCore.withHabitFrequency(h, frequency, todayKey);
       if (frequencyHistory.length > 0 || h.frequencyHistory) h.frequencyHistory = frequencyHistory;
+      // Ending, moving or clearing the end date (a restart keeps the days it spent Ended).
+      if (endDate !== (h.endDate || "")) applyHabitEndDate(h, endDate || null, todayKey);
       closeSheet();
       if (JSON.stringify(h) === before) return;
       h.updatedAt = nextStamp(h, now);
-      // Today's day Task follows the edit (shared rule): set aside, brought back or kept aligned.
-      const todayId = habitTaskId(h.id, todayKey);
-      const todayTask = HuntCore.habitTodayTaskAfterEdit(prev, h, state.tasks.find(t => t.id === todayId), todayKey, now);
-      if (todayTask && !asArray(state.deletedTaskIds).includes(todayId)) {
-        state.tasks = state.tasks.filter(t => t.id !== todayId).concat(todayTask).sort(compareRank);
-      }
+      syncHabitTodayTask(prev, h, todayKey, now);
       commitLocalChange();
       showToast("Habit saved");
     }
@@ -9676,8 +9919,7 @@ var HuntCore = (() => {
       const dayBox = chosen ? `
           <div style="font-size:14px;color:var(--white);">${dayName(chosen)} · <span style="color:var(--muted);">${HABIT_OUTCOME_LABEL[chosen.outcome] || ""}</span></div>${weekLine}
           <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-            ${chosen.outcome === "met" ? action("none", "Untick") : action("met", "Tick")}
-            ${chosen.outcome === "skipped" ? action("none", "Undo skip") : action("skipped", "Skip")}
+            ${HuntCore.habitDayActions(h, chosen.outcome).map(a => action(a.mark, a.label)).join("")}
           </div>${totalForm}`
         : `<div style="font-size:12px;color:var(--muted);line-height:1.4;">Choose a day to tick, untick or Skip it. A Skipped day neither breaks nor adds to the streak.</div>`;
       const legend = [["met", "Met"], ["missed", "Missed"], ["skipped", "Skipped"], ["open", "Open"], ["", "No Outcome"]]
@@ -9748,7 +9990,7 @@ var HuntCore = (() => {
       if (next !== t) {
         playClickSound();
         Object.assign(t, next);
-        ["skipped", "completedAt"].forEach(k => { if (t[k] === undefined) delete t[k]; });
+        ["skipped", "completedAt", "slips"].forEach(k => { if (t[k] === undefined) delete t[k]; });
         commitLocalChange();
       }
       renderHabitDetailSheet();
@@ -9786,6 +10028,53 @@ var HuntCore = (() => {
     // =========================================================================
     // COUNT HABITS: +1, a held press for an exact total (shared Count rule)
     // =========================================================================
+
+    // =========================================================================
+    // AVOID HABITS: "Kept so far" until a Slip is logged (shared Slip rule)
+    // =========================================================================
+
+    // The Avoid Habit a day Task belongs to, or null for any other Task.
+    function avoidHabitOfTask(task) {
+      if (!task || !task.habitId) return null;
+      const h = asArray(state.habits).find(x => x.id === task.habitId);
+      return h && habitKindOf(h) === "avoid" ? h : null;
+    }
+
+    // Logs a Slip on an Avoid Habit's `dateKey` ("log"), or undoes the newest one ("undo"). The
+    // day's Task is created first when missing (as logHabitCount does).
+    function editHabitSlip(habitId, dateKey, edit) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h || habitKindOf(h) !== "avoid") return;
+      const tid = habitTaskId(habitId, dateKey);
+      let t = state.tasks.find(x => x.id === tid);
+      if (edit === "undo" && !(t && habitDaySlips(t) > 0)) return;
+      if (!t) {
+        state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
+        t = buildHabitTaskRow(h, dateKey);
+        state.tasks.push(t);
+        state.tasks.sort(compareRank);
+      }
+      const now = Date.now();
+      const next = edit === "log" ? HuntCore.logHabitSlip(t, now) : HuntCore.undoHabitSlip(t, now);
+      playClickSound();
+      const firstRects = captureTaskFlipRects();
+      for (const k of Object.keys(t)) if (!(k in next)) delete t[k];
+      Object.assign(t, next);
+      commitLocalChange();
+      playTaskFlipGlide(firstRects, tid);
+    }
+
+    // The Avoid mark where other rows have their tick: not a target.
+    function avoidMarkHtml(slipped) {
+      return `<span class="task-check-ring avoid-mark ${slipped ? "slipped" : ""}" style="margin-top:2px;" aria-hidden="true">${SVG_SHIELD}</span>`;
+    }
+
+    // An Avoid Habit's one action for `dateKey`: Log a Slip while it has none, Undo Slip once it has.
+    function avoidSlipButtonHtml(h, slips) {
+      const title = escapeHtml(h.title);
+      const edit = slips > 0 ? "undo" : "log";
+      return `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="editHabitSlip(${jsArg(h.id)}, toLocalDateKey(), ${jsArg(edit)})" aria-label="${slips > 0 ? "Undo Slip" : "Log a Slip"} on ${title}">${slips > 0 ? "Undo Slip" : "Log a Slip"}</button>`;
+    }
 
     // The Count Habit a day Task belongs to, or null for any other Task.
     function countHabitOfTask(task) {
@@ -9911,12 +10200,14 @@ var HuntCore = (() => {
       const totalSec = (task.accumulatedSeconds || 0) + delta;
       const title = escapeHtml(task.title);
       const countHabit = countHabitOfTask(task);
+      // An Avoid Habit's day reads "Kept so far" and logs a Slip from its own labelled button, never a tick.
+      const avoidHabit = avoidHabitOfTask(task);
 
       return `
         <div class="queue-item-card" data-flip-task-id="${escapeHtml(task.id)}">
           <div class="card-edge-bar" style="background:${hex};"></div>
 
-          ${countHabit ? countPlusButtonHtml(countHabit, false, hex) : `
+          ${avoidHabit ? avoidMarkHtml(false) : countHabit ? countPlusButtonHtml(countHabit, false, hex) : `
           <button class="task-check-ring" onclick="completeTaskDirect(${jsArg(task.id)})" aria-label="Complete ${title}">
             ${SVG_CHECK}
           </button>`}
@@ -9931,15 +10222,16 @@ var HuntCore = (() => {
               </span>
               ${task.habitId ? `<span style="font-size:10px;color:var(--dim);padding:1px 6px;border-radius:999px;border:1px solid var(--border);flex-shrink:0;">Daily</span>` : ""}
               ${countHabit ? `<span class="count-progress">${escapeHtml(countProgressLabel(countHabit, habitDayAmount(task)))}</span>` : ""}
+              ${avoidHabit ? `<span class="count-progress">${escapeHtml(avoidDayLabel(habitDaySlips(task)))}</span>` : ""}
               ${checklistBadgeHtml(task)}
             </div>
           </div>
 
           <div class="queue-item-right">
-            <button class="mini-play-btn" onclick="initializeFocus(${jsArg(task.id)})" aria-label="${isRunningHere ? "Open focus on" : "Start focus on"} ${title}">
+            ${avoidHabit && !isRunningHere ? avoidSlipButtonHtml(avoidHabit, habitDaySlips(task)) : `<button class="mini-play-btn" onclick="initializeFocus(${jsArg(task.id)})" aria-label="${isRunningHere ? "Open focus on" : "Start focus on"} ${title}">
               ${totalSec > 0 || isRunningHere ? `<span data-task-timer="${escapeHtml(task.id)}" data-prefix="">${formatChrono(totalSec)}</span>` : ""}
               ${SVG_PLAY}
-            </button>
+            </button>`}
             <button class="more-dots-btn" onclick="openTaskInspectorSheet(${jsArg(task.id)})" aria-label="Task options for ${title}">
               ${SVG_MORE}
             </button>
@@ -11823,6 +12115,9 @@ var HuntCore = (() => {
       // =====================================================================
       else if (activeView === "habits") {
         const habitsList = asArray(state.habits).slice().sort(compareRank);
+        // An Ended Habit (past its end date) leaves the list for the collapsed Ended section.
+        const endedHabits = habitsList.filter(h => HuntCore.isEndedHabit(h, todayKey));
+        const currentHabits = habitsList.filter(h => !endedHabits.includes(h));
 
         const habitDays = summarizeHabitDays(state.tasks, todayKey, habitsList);
         // Only Habits asked of today (scheduled by their Frequency, not Skipped) count toward "done today".
@@ -11852,7 +12147,7 @@ var HuntCore = (() => {
             "No daily habits yet",
             "Create a recurring routine and it will appear in Today's queue every day.",
             [{ label: "+ New Habit", primary: true, onclick: "openNewHabitSheet()" }]
-          ) : `<div class="habits-grid">` + habitsList.map(h => {
+          ) : `<div class="habits-grid">` + currentHabits.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
             const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, skipState, week, todayTask } = habitDays.summaryFor(h.id);
@@ -11863,21 +12158,16 @@ var HuntCore = (() => {
             const frequencyLabel = escapeHtml(habitFrequencyLabel(habitFrequencyOn(h, todayKey)));
             // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
             const isCount = habitKindOf(h) === "count" && asked && !skippedToday;
-            const stripHtml = habitWeekStrip(todayKey, outcomeOn).map(day => {
-              const kind = day.outcome || "none";
-              const mark = day.outcome === "met"
-                ? `<span class="habit-strip-mark met" style="background:${hex};color:rgb(0 0 0 / 0.82);"><svg data-glyph="met" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>`
-                : day.outcome === "missed"
-                ? `<span class="habit-strip-mark missed"><svg data-glyph="missed" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>`
-                : `<span class="habit-strip-mark ${kind}"></span>`;
-              return `<li aria-label="${escapeHtml(day.label)}" data-outcome="${escapeHtml(kind)}">${mark}<span class="habit-strip-day${day.dayKey === todayKey ? " today" : ""}" aria-hidden="true">${escapeHtml(day.weekday)}</span></li>`;
-            }).join("");
+            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
+            const isAvoid = habitKindOf(h) === "avoid" && asked && !skippedToday;
+            const slips = habitDaySlips(todayTask);
+            const stripHtml = habitStripHtml(todayKey, outcomeOn, hex, todayKey);
             const successRate = habitSuccessRateLabel(habitDays.summaryFor(h.id).successRate());
 
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
                 <div class="card-edge-bar" style="background:${hex};"></div>
-                ${isCount ? countPlusButtonHtml(h, doneToday, hex) : `
+                ${isAvoid ? avoidMarkHtml(slips > 0) : isCount ? countPlusButtonHtml(h, doneToday, hex) : `
                 ${asked ? `<button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">` : `<button class="task-check-ring" style="margin-top:2px;" disabled aria-label="${week ? "Not asked again this week" : "Not scheduled today"}: ${title}">`}
                   ${SVG_CHECK}
                 </button>`}
@@ -11893,6 +12183,7 @@ var HuntCore = (() => {
                     </span>
                     <span style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;max-width:100%;">
                       ${isCount ? `<span class="count-progress">${escapeHtml(countProgressLabel(h, habitDayAmount(todayTask)))}</span>` : ""}
+                      ${isAvoid ? `<span class="count-progress"${slips > 0 ? ` style="color:var(--rose);"` : ""}>${escapeHtml(avoidDayLabel(slips))}</span>` : ""}
                       <ul class="habit-strip" aria-label="Last 7 days">${stripHtml}</ul>
                       ${week ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;">${week.met} / ${week.target} this week</span>` : ""}
                       ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;" aria-label="Streak ${streak} ${streakUnit === "week" ? "weeks" : "days"}">${streak}${streakUnit === "week" ? "w" : "d"}</span>` : ""}
@@ -11903,12 +12194,13 @@ var HuntCore = (() => {
                 <div class="queue-item-right">
                   ${skippedToday
                     ? `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, false)" aria-label="Undo skip: ${title}">Undo skip</button>`
+                    : isAvoid ? avoidSlipButtonHtml(h, slips)
                     : asked && !doneToday ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
                   <button class="more-dots-btn" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">${SVG_MORE}</button>
                 </div>
               </div>
             `;
-          }).join("") + `</div>`}
+          }).join("") + `</div>` + endedHabitsHtml(endedHabits, habitDays, todayKey)}
         `;
       }
 

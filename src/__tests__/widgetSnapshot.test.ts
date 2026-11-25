@@ -82,8 +82,16 @@ describe("buildWidgetSnapshot (Day Widget, today view)", () => {
     expect(rows[0]).toMatchObject({ title: "Meditate", habit: true, tickable: true });
   });
 
-  it("is version 2: a Count Habit row taps +1, which a version-1 widget would read as done", () => {
-    expect(WIDGET_SNAPSHOT_VERSION).toBe(2);
+  it("is version 3: an Avoid Habit row taps a Slip, which an older widget would read as done", () => {
+    expect(WIDGET_SNAPSHOT_VERSION).toBe(3);
+  });
+
+  it("shows an Avoid Habit row as Kept so far, and leaves a day that has a Slip out", () => {
+    const dry: Habit = { ...habit, id: "dry", title: "No alcohol", kind: "avoid" };
+    const [row] = buildWidgetSnapshot(state({ habits: [dry] }), TODAY, "neon").days[0].today;
+    expect(row).toMatchObject({ id: "habtsk-2026-11-22-dry", habitKind: "avoid", progress: "Kept so far", tickable: true });
+    const slipped = task("habtsk-2026-11-22-dry", { habitId: "dry", scheduledDate: TODAY, slips: 1 });
+    expect(buildWidgetSnapshot(state({ habits: [dry], tasks: [slipped] }), TODAY, "neon").days[0].today).toEqual([]);
   });
 
   it("gives each Habit row its Kind, and a Count Habit row its progress, n / target", () => {

@@ -93,14 +93,16 @@ final class UndoWindow {
      * Tasks of `dateKey` the Day Widget's list leaves out: those waiting in the Pending Tick
      * queue for that day, and those whose window has ended but are not queued yet. Both are
      * keyed {@link TickKeys#taskDay}, so a tick hides its Task only on the day it was for. Tasks
-     * still in their window stay listed (drawn as "✓ Done · Undo"). A Count row's +1 never hides
-     * it: `queuedKeys` holds done ticks only, and +1 windows are counted instead
-     * ({@link #pendingPlus}).
+     * still in their window stay listed (drawn as "✓ Done · Undo"). An Avoid row's Slip hides it
+     * as a done tick does. A Count row's +1 never hides it: `queuedKeys` holds no +1 ticks, and
+     * +1 windows are counted instead ({@link #pendingPlus}).
      */
     static Set<String> hiddenTaskIds(Set<String> queuedKeys, Map<String, ?> held, String dateKey, long now) {
         Set<String> hidden = new HashSet<>();
         for (String k : held.keySet()) {
-            if (dateKey.equals(TickKeys.dateKeyOf(k)) && TickKeys.kindOf(k).isEmpty()) hidden.add(TickKeys.taskIdOf(k));
+            if (dateKey.equals(TickKeys.dateKeyOf(k)) && !TickKeys.PLUS_ONE.equals(TickKeys.kindOf(k))) {
+                hidden.add(TickKeys.taskIdOf(k));
+            }
         }
         hidden.removeAll(openTaskIds(held, dateKey, now));
         hidden.addAll(taskIdsOn(queuedKeys, dateKey));

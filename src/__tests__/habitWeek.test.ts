@@ -146,6 +146,37 @@ describe("Partial Weeks and whole-week Skip", () => {
   });
 });
 
+describe("Habit Weeks cut by an end date or a restart (Ended Habits)", () => {
+  it("ends a Habit Week cut by the end date Skipped (a Partial Week), even with N ticks", () => {
+    // Ended on Wednesday 05-06: the week of 05-04 is only partly asked for.
+    const h = habit({ endDate: "2026-05-06" });
+    const s = summary([ticked("2026-05-04"), ticked("2026-05-05"), ticked("2026-05-06")], h);
+    expect(s.weekOutcomeOn("2026-05-04")).toBe("skipped");
+    expect(s.outcomeOn("2026-05-07")).toBeNull();
+    // The weeks after the end have no Outcome at all.
+    expect(s.weekOutcomeOn(TODAY)).toBeNull();
+    expect(s.week).toBeNull();
+    const short = summary([ticked("2026-05-04")], h);
+    expect(short.weekOutcomeOn("2026-05-04")).toBe("skipped");
+  });
+
+  it("ends a Habit Week cut by a restart span Skipped, and gives a wholly Ended week no Outcome", () => {
+    // Ended Wed 05-06..Fri 05-08, then restarted: the week of 05-04 is Partial.
+    const cut = habit({ endedSpans: [{ from: "2026-05-06", to: "2026-05-08" }] });
+    const s = summary([...metWeek("2026-04-27"), ticked("2026-05-04")], cut);
+    expect(s.weekOutcomeOn("2026-05-04")).toBe("skipped");
+    expect(s.weekOutcomeOn("2026-04-27")).toBe("met");
+    expect(s.weekOutcomeOn(TODAY)).toBe("open");
+    // The gap is not counted against the Habit: the Streak carries over the Skipped week.
+    expect(s.streak).toBe(1);
+    // A whole week spent Ended is not a Habit Week of the Habit.
+    const gap = habit({ endedSpans: [{ from: "2026-05-04", to: "2026-05-10" }] });
+    const g = summary(metWeek("2026-04-27"), gap);
+    expect(g.weekOutcomeOn("2026-05-04")).toBeNull();
+    expect(g.streak).toBe(1);
+  });
+});
+
 /** Three ticks from the Monday `monday` (a May or April date with room for three days). */
 const metWeek = (monday: string) =>
   [0, 1, 2].map((i) => ticked(`${monday.slice(0, 8)}${String(Number(monday.slice(8)) + i).padStart(2, "0")}`));

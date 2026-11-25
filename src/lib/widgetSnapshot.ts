@@ -1,7 +1,8 @@
 import { dateKeyFromOffset, isOpenTask, isTaskVisibleToday } from "./dateUtils";
 import type { Habit, HabitKind, QuestAccent, Task } from "./domainTypes";
-import { countProgressLabel, habitDayAmount, habitKindOf } from "./habitKind";
+import { avoidDayLabel, countProgressLabel, habitDayAmount, habitDaySlips, habitKindOf } from "./habitKind";
 import type { Look } from "./lookPreference";
+import { isEndedHabit } from "./habitEnd";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 import { missingHabitRows } from "./taskQueue";
@@ -17,8 +18,10 @@ import type { WidgetStatsEntry } from "./widgetStats";
  * field (more days, a `future` view per day, `stats`) keeps the version: the
  * widget ignores fields it does not know. Version 2: a Count Habit row's tap
  * means +1 (`habitKind`), which a version-1 widget would queue as done.
+ * Version 3: an Avoid Habit row's tap logs a Slip, which an older widget would
+ * queue as done.
  */
-export const WIDGET_SNAPSHOT_VERSION = 2;
+export const WIDGET_SNAPSHOT_VERSION = 3;
 
 /**
  * Days in a snapshot: today to today + 7. The ‹ › arrows reach today + 6; the
@@ -43,10 +46,14 @@ export interface WidgetTaskRow {
   habit: boolean;
   /**
    * A Habit row's Habit Kind (absent on other Tasks). A tick on a "count" row
-   * is queued as a `+1` Pending Tick, any other as done.
+   * is queued as a `+1` Pending Tick, on an "avoid" row as a `slip`, any other
+   * as done.
    */
   habitKind?: HabitKind;
-  /** A Count Habit row's progress, ready to draw: "2 / 3 miles". */
+  /**
+   * Ready to draw: a Count Habit row's progress ("2 / 3 miles"), an Avoid Habit
+   * row's state ("Kept so far"; a day with a Slip is not listed).
+   */
   progress?: string;
 }
 
@@ -87,12 +94,16 @@ function futureTasks(state: SyncPayload, dateKey: string): Task[] {
  * Today's list as the app's Today view shows it: open Tasks visible today
  * (overdue and unscheduled roll in, Habits only on their own day) in rank
  * order, with today's Habits filled in by their fixed ids when Hunt has not
- * created the rows yet. Pure: `state` is not modified.
+ * created the rows yet. A day Task of an Ended Habit is left out even when it
+ * exists (made on another device before the end date synced). Pure: `state` is
+ * not modified.
  */
 function todayTasks(state: SyncPayload, todayKey: string): Task[] {
+  const endedIds = new Set((state.habits ?? []).filter((h) => isEndedHabit(h, todayKey)).map((h) => h.id));
   return (state.tasks ?? [])
     .concat(missingHabitRows(state, todayKey))
     .filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey))
+    .filter((t) => !t.habitId || !endedIds.has(t.habitId))
     .sort(compareRank);
 }
 
@@ -126,6 +137,7 @@ export function buildWidgetSnapshot(
     const habit = habitOf.get(t.habitId);
     row.habitKind = habitKindOf(habit);
     if (habit && row.habitKind === "count") row.progress = countProgressLabel(habit, habitDayAmount(t));
+    if (row.habitKind === "avoid") row.progress = avoidDayLabel(habitDaySlips(t));
     return row;
   };
   const noData =

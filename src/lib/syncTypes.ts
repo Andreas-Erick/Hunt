@@ -1,8 +1,9 @@
 import type { ActiveFocusState, Habit, List, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
-import { sanitizeCountDayFields, sanitizeHabitKindFields } from "./habitKind";
+import { sanitizeCountDayFields, sanitizeHabitKindFields, sanitizeSlipFields } from "./habitKind";
 import { sanitizeChecklist } from "./checklist";
 import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
+import { sanitizeHabitEnd } from "./habitEnd";
 import { copyScalarExtras } from "./syncRowExtras";
 import { MAX_SYNC_LISTS, sanitizeList } from "./lists";
 import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
@@ -316,11 +317,11 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
   "scheduledDate", "skipped", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
-  "amount", "countTickedAt",
+  "amount", "countTickedAt", "slips",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
-  "kind", "target", "unit",
+  "kind", "target", "unit", "endDate", "endedSpans",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -431,7 +432,7 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;
-  copyScalarExtras(Object.assign(task, sanitizeCountDayFields(raw)), raw, TASK_FIELDS);
+  copyScalarExtras(Object.assign(task, sanitizeCountDayFields(raw), sanitizeSlipFields(raw)), raw, TASK_FIELDS);
   return task as Task;
 }
 
@@ -454,7 +455,7 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
   const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
   if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
-  copyScalarExtras(Object.assign(habit, sanitizeHabitKindFields(raw)), raw, HABIT_FIELDS);
+  copyScalarExtras(Object.assign(habit, sanitizeHabitKindFields(raw), sanitizeHabitEnd(raw)), raw, HABIT_FIELDS);
   return habit as Habit;
 }
 

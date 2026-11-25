@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Habit } from "@/lib/domainTypes";
 import {
   habitMonth,
+  habitDayActions,
   habitStartKey,
   habitWeekSkipMark,
   type HabitCalendarDay,
@@ -239,24 +240,17 @@ export function HabitCalendar({
               </div>
             )}
             <div className="mt-2 flex flex-wrap gap-2">
-              {chosen.outcome === "met" ? (
-                <button type="button" onClick={() => mark(chosen, "none")} aria-label={`Untick ${dayName(chosen)}`} className={ACTION_BUTTON}>
-                  Untick
+              {habitDayActions(habit, chosen.outcome).map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={() => mark(chosen, a.mark)}
+                  aria-label={`${a.label} ${dayName(chosen)}`}
+                  className={ACTION_BUTTON}
+                >
+                  {a.label}
                 </button>
-              ) : (
-                <button type="button" onClick={() => mark(chosen, "met")} aria-label={`Tick ${dayName(chosen)}`} className={ACTION_BUTTON}>
-                  Tick
-                </button>
-              )}
-              {chosen.outcome === "skipped" ? (
-                <button type="button" onClick={() => mark(chosen, "none")} aria-label={`Undo skip ${dayName(chosen)}`} className={ACTION_BUTTON}>
-                  Undo skip
-                </button>
-              ) : (
-                <button type="button" onClick={() => mark(chosen, "skipped")} aria-label={`Skip ${dayName(chosen)}`} className={ACTION_BUTTON}>
-                  Skip
-                </button>
-              )}
+              ))}
             </div>
             {isCount && (
               <DayTotalForm

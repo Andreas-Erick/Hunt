@@ -131,6 +131,26 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       target: 12.5,
       unit: "glasses of sparkling mineral water",
     },
+    {
+      // An Ended Habit (ended three days ago): the collapsed Ended section on both apps.
+      id: "habit-ended",
+      title: `${LONG_QUEST_TITLE}${LONG_QUEST_TITLE}`,
+      notes: "",
+      questId: "quest-slot-0",
+      rank: 3000,
+      createdAt: now - 20 * DAY_MS,
+      endDate: dateKey(now - 3 * DAY_MS),
+    },
+    // An Avoid Habit: its mark, "Kept so far" and the "Log a Slip" button must fit beside a long title.
+    {
+      id: "habit-avoid",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 4000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "avoid",
+    },
   ];
 
   // A Count day over its target two days ago, so the Statistics chart and yearly totals have a value.

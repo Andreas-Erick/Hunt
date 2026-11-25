@@ -151,6 +151,20 @@ describe("desktop Habit detail: Calendar tab", () => {
     expect(await within(dialog).findByRole("button", { name: /^10 November: (?!Skipped)/ })).toBeInTheDocument();
   });
 
+  it("on an Avoid Habit, a past day offers Log a Slip and Undo Slip instead of Tick / Untick", async () => {
+    await db.habits.update("h1", { kind: "avoid" });
+    const dialog = await openDetail();
+    const tid = habitTaskId("h1", "2026-11-12");
+    fireEvent.click(within(dialog).getByRole("button", { name: "12 November: Met" }));
+    expect(within(dialog).queryByRole("button", { name: /^(Tick|Untick) / })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Log a Slip 12 November" }));
+    await waitFor(async () => expect((await db.tasks.get(tid))?.slips).toBe(1));
+    expect(await within(dialog).findByRole("button", { name: "12 November: Missed" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Undo Slip 12 November" }));
+    await waitFor(async () => expect((await db.tasks.get(tid))?.slips).toBeUndefined());
+    expect(await within(dialog).findByRole("button", { name: "12 November: Met" })).toBeInTheDocument();
+  });
+
   it("closes on Escape", async () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });

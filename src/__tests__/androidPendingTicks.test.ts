@@ -61,6 +61,23 @@ describe.skipIf(!hasJdk)("PendingTicks, run on the JDK", () => {
     expect(lines[5]).toBe("[2026-11-22|t-done] {2026-11-22|t-jog=2}");
   }, 60_000);
 
+  it("queues a Slip on an Avoid Habit row once per Task and day, with its kind, hiding the row like a done tick", () => {
+    const slip = (taskId: string, at: number) =>
+      `{ PendingTicks.Queued r = PendingTicks.append(dir, "${taskId}", "2026-11-22", ${at}L, TickKeys.SLIP); System.out.println(r); }`;
+    const lines = probe(
+      [
+        slip("t-dry", 1000),
+        slip("t-dry", 2000), // one Slip already decides the day
+        printFile,
+        "PendingTicks.Listing l = PendingTicks.queued(dir);",
+        "System.out.println(new TreeSet<>(l.keys) + \" \" + new TreeMap<>(l.plusCounts));",
+      ].join("\n"),
+    );
+    expect(lines.slice(0, 2)).toEqual(["ADDED", "ALREADY_QUEUED"]);
+    expect(JSON.parse(lines[2])).toEqual([{ taskId: "t-dry", dateKey: "2026-11-22", tickedAt: 1000, kind: "slip" }]);
+    expect(lines[3]).toBe("[2026-11-22|t-dry] {}");
+  }, 60_000);
+
   it("never writes over a queue it could not parse, and says the tick is still pending", () => {
     expect(probe([write("{not json"), append("t-1", 1000), printFile].join("\n"))).toEqual([
       "UNREADABLE false",

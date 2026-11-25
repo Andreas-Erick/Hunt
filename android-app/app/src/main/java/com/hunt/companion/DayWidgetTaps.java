@@ -63,8 +63,9 @@ final class DayWidgetTaps {
         boolean opened = true;
         JSONObject row = taskId != null && dateKey != null ? tickableRow(ctx, taskId, dateKey) : null;
         if (row != null) {
-            // The snapshot's Habit Kind decides what the tap means: one more on a Count row, done otherwise.
-            String kind = SelectedDay.isCountRow(row) ? TickKeys.PLUS_ONE : "";
+            // The snapshot's Habit Kind decides what the tap means: one more on a Count row, a Slip on
+            // an Avoid row, done otherwise.
+            String kind = SelectedDay.tickKindOf(row);
             opened = DayWidgetUndo.open(ctx, taskId, dateKey, tickedAt, kind);
         }
         DayWidgetProvider.refreshAll(ctx); // draws the Undo row, or redraws a stale list the tap came from

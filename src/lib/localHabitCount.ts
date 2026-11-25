@@ -3,6 +3,7 @@ import { habitTaskId } from "./dateUtils";
 import type { Habit, HabitKind, Task } from "./domainTypes";
 import { addHabitDayCount, setHabitDayAmount } from "./habitCount";
 import { habitKindOf, isCountTarget, MAX_COUNT_UNIT_LENGTH } from "./habitKind";
+import { avoidCompletedRow, avoidReopenedRow } from "./localHabitAvoid";
 import { hasLocalTaskTombstone } from "./syncTombstones";
 import { buildHabitTaskRow, completeTaskRow, nextStamp } from "./taskQueue";
 
@@ -40,33 +41,46 @@ export function countFieldChanges(row: Habit, changes: Partial<Pick<Habit, "targ
   return patch;
 }
 
+/** The Habit a day Task belongs to, or undefined. Inside a transaction over habits. */
+async function habitOf(task: Task): Promise<Habit | undefined> {
+  return task.habitId ? await db.habits.get(task.habitId) : undefined;
+}
+
 /** The Count Habit a day Task belongs to, or undefined. Inside a transaction over habits. */
 async function countHabitOf(task: Task): Promise<Habit | undefined> {
-  const habit = task.habitId ? await db.habits.get(task.habitId) : undefined;
+  const habit = await habitOf(task);
   return habit && habitKindOf(habit) === "count" ? habit : undefined;
+}
+
+/** True for an Avoid Habit's day Task. Inside a transaction over habits. */
+async function isAvoidDay(task: Task): Promise<boolean> {
+  return task.habitId ? habitKindOf(await habitOf(task)) === "avoid" : false;
 }
 
 /**
  * The row "complete this Task" writes. A Count Habit's day is not ticked but
  * counted: one more (the shared +1 rule), completing it once its total reaches
  * the target, so a tick from any list keeps the total and the Outcome in step.
- * Its Focus ends either way, so a day in Focus is counted as an open one.
- * Inside a transaction over tasks and habits.
+ * Its Focus ends either way, so a day in Focus is counted as an open one. An
+ * Avoid Habit's day logs a Slip instead (avoidCompletedRow). Inside a
+ * transaction over tasks and habits.
  */
 export async function completedRow(row: Task, completedAt: number): Promise<Task> {
+  if (await isAvoidDay(row)) return avoidCompletedRow(row, completedAt);
   const habit = await countHabitOf(row);
   if (!habit) return completeTaskRow(row, completedAt);
   return addHabitDayCount(row.status === "active" ? { ...row, status: "queued" } : row, habit, completedAt);
 }
 
-/** Reopens a Task; a Count Habit's day is reopened by clearing its total. False when it is gone. */
+/** Reopens a Task; a Count Habit's day by clearing its total, an Avoid Habit's its Slips. False when it is gone. */
 export function reopenTaskRow(taskId: string): Promise<boolean> {
   return db.transaction("rw", db.tasks, db.habits, async () => {
     const row = await db.tasks.get(taskId);
     if (!row) return false;
     const habit = await countHabitOf(row);
     const now = Date.now();
-    if (habit) await db.tasks.put(setHabitDayAmount(row, habit, 0, now));
+    if (await isAvoidDay(row)) await db.tasks.put(avoidReopenedRow(row, now));
+    else if (habit) await db.tasks.put(setHabitDayAmount(row, habit, 0, now));
     else await db.tasks.update(taskId, { status: "queued", completedAt: undefined, updatedAt: nextStamp(row, now) });
     return true;
   });

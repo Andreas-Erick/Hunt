@@ -145,6 +145,21 @@ describe("phone Habit detail: Calendar tab on an N per week Habit", () => {
   });
 });
 
+describe("phone Habit detail: Calendar tab on an Avoid Habit", () => {
+  it("a past day offers Log a Slip and Undo Slip instead of Tick / Untick", () => {
+    const p = load([], { kind: "avoid" });
+    click(p, inSheet(p, "12 November: Met"));
+    expect(inSheet(p, "Tick 12 November")).toBeNull();
+    click(p, inSheet(p, "Log a Slip 12 November"));
+    expect(row(p, "2026-11-12")?.slips).toBe(1);
+    expect(inSheet(p, "12 November: Missed")).not.toBeNull();
+    click(p, inSheet(p, "Undo Slip 12 November"));
+    expect(row(p, "2026-11-12")).not.toHaveProperty("slips");
+    expect(inSheet(p, "12 November: Met")).not.toBeNull();
+    expect(pageErrors(p)).toEqual([]);
+  });
+});
+
 describe("phone Habit detail: Calendar tab on a Count Habit", () => {
   it("Tick sets the day's total to the target, Untick and Skip clear it, and a day takes an exact total", () => {
     const p = load([dayRow("2026-11-12", { amount: 1 })], COUNT);

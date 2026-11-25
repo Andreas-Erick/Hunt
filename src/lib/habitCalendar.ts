@@ -2,7 +2,8 @@ import { toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { completeTaskRow, nextStamp } from "./taskQueue";
 import { setHabitDayAmount } from "./habitCount";
-import { countTargetOf, habitDayAmount, habitKindOf } from "./habitKind";
+import { countTargetOf, habitDayAmount, habitDaySlips, habitKindOf } from "./habitKind";
+import { logHabitSlip, undoHabitSlip } from "./habitAvoid";
 import type { HabitOutcome } from "./habitOutcome";
 import { habitFrequencyOn, isPerWeekFrequency } from "./habitFrequency";
 import type { HabitWeek } from "./habitWeek";
@@ -103,8 +104,35 @@ export function habitMonth({
   };
 }
 
-/** What a habit day is corrected to from the calendar: ticked, set aside, or neither. */
-export type HabitDayMark = "met" | "skipped" | "none";
+/**
+ * What a habit day is corrected to from the calendar: ticked, set aside, or
+ * neither; on an Avoid Habit's day also a Slip logged or undone.
+ */
+export type HabitDayMark = "met" | "skipped" | "none" | "slip" | "unslip";
+
+/** One button of the calendar's day panel. */
+export interface HabitDayAction {
+  mark: HabitDayMark;
+  /** Its visible text ("Tick"); the button's name adds the day ("Tick 12 November"). */
+  label: string;
+}
+
+/**
+ * SHARED day panel of the calendar, by Habit Kind: the corrections a chosen day
+ * with `outcome` offers. Tick or Untick (an Avoid Habit has no tick: Log a
+ * Slip, and Undo Slip on a slipped day instead), then Skip or Undo skip.
+ */
+export function habitDayActions(
+  habit: Readonly<Pick<Partial<Habit>, "kind">>,
+  outcome: HabitOutcome | null
+): HabitDayAction[] {
+  const actions: HabitDayAction[] =
+    habitKindOf(habit) === "avoid"
+      ? [{ mark: "slip", label: "Log a Slip" }, ...(outcome === "missed" ? [{ mark: "unslip" as const, label: "Undo Slip" }] : [])]
+      : [outcome === "met" ? { mark: "none", label: "Untick" } : { mark: "met", label: "Tick" }];
+  actions.push(outcome === "skipped" ? { mark: "none", label: "Undo skip" } : { mark: "skipped", label: "Skip" });
+  return actions;
+}
 
 /**
  * SHARED routing of a calendar mark on an N per week Habit's day: Skip (true)
@@ -144,10 +172,27 @@ function correctCountDayRow(
 }
 
 /**
- * SHARED "correct a habit day" rule: the day Task `task` ticked (Met), set
- * aside (Skipped) or neither, stamped newer at `at`. Skipping a ticked day
- * unticks it. On a Count Habit's day (pass `habit`) ticking sets the total to
- * at least the target, and unticking or Skipping clears it to 0. Returns
+ * An Avoid Habit day corrected by its Slips (habitAvoid.ts): a Slip logged or
+ * undone, Met by clearing every Slip, Skipped or back with its Slips kept. It
+ * has no unticked state: "none" only undoes a Skip.
+ */
+function correctAvoidDayRow(task: Task, mark: HabitDayMark, at: number): Task {
+  const slips = habitDaySlips(task);
+  const skipped = Boolean(task.skipped);
+  if (mark === "slip") return logHabitSlip(task, at);
+  if (mark === "unslip") return slips > 0 ? { slips: undefined, ...undoHabitSlip(task, at) } : task;
+  if (mark === "met") return slips > 0 || skipped ? { ...task, slips: undefined, skipped: undefined, updatedAt: nextStamp(task, at) } : task;
+  if (skipped === (mark === "skipped")) return task;
+  return { ...task, skipped: mark === "skipped" ? true : undefined, updatedAt: nextStamp(task, at) };
+}
+
+/**
+ * SHARED "correct a habit day" rule, by Habit Kind: the day Task `task` ticked
+ * (Met), set aside (Skipped) or neither, stamped newer at `at`. Skipping a ticked
+ * day unticks it. On a Count Habit's day (pass `habit`) ticking sets the total
+ * to at least the target, and unticking or Skipping clears it to 0. On an
+ * Avoid Habit's day "slip" / "unslip" log or undo a Slip, Met clears them, and
+ * "none" only undoes a Skip; other Kinds ignore the Slip marks. Returns
  * `task` itself when the day already reads that way, or while a focus runs on
  * it, so callers write nothing. Pure: `task` is not modified. Cleared fields
  * stay as explicit undefined so a Dexie update drops them.
@@ -156,10 +201,13 @@ export function correctHabitDayRow(
   task: Task,
   mark: HabitDayMark,
   at: number,
-  habit?: Readonly<Pick<Partial<Habit>, "kind" | "target">>
+  habit?: Readonly<Partial<Habit>>
 ): Task {
   if (task.status === "active") return task;
-  if (habit && habitKindOf(habit) === "count") return correctCountDayRow(task, habit, mark, at);
+  const kind = habitKindOf(habit);
+  if (kind === "avoid") return correctAvoidDayRow(task, mark, at);
+  if (mark === "slip" || mark === "unslip") return task;
+  if (kind === "count") return correctCountDayRow(task, habit ?? {}, mark, at);
   const met = task.status === "completed";
   const skipped = !met && Boolean(task.skipped);
   if ((mark === "met" && met) || (mark === "skipped" && skipped) || (mark === "none" && !met && !skipped)) {

@@ -1,6 +1,7 @@
-import type { Habit, Task } from "./domainTypes";
+import type { Habit, HabitKind, Task } from "./domainTypes";
 import { addHabitDayCount } from "./habitCount";
-import { habitKindOf } from "./habitKind";
+import { logHabitSlip } from "./habitAvoid";
+import { habitDaySlips, habitKindOf } from "./habitKind";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 import { completeTaskRow, missingHabitRows } from "./taskQueue";
@@ -18,10 +19,10 @@ export interface PendingTick {
   tickedAt: number;
   /**
    * What the tap meant: absent for "done" (a Check Habit or plain Task), "+1"
-   * for one more on a Count Habit's day. The shell writes it from the row's
-   * Habit Kind in the Widget Snapshot.
+   * for one more on a Count Habit's day, "slip" for a Slip on an Avoid Habit's
+   * day. The shell writes it from the row's Habit Kind in the Widget Snapshot.
    */
-  kind?: "+1";
+  kind?: "+1" | "slip";
 }
 
 /**
@@ -33,8 +34,11 @@ export interface PendingTick {
  *   the app (finishing it needs a TimeLog and a Focus transition);
  * - `already-counted`: this `+1` was applied before (the queue was read again
  *   before the shell removed it);
- * - `wrong-kind`: a `+1` on a row that is not a Count Habit's day, or a done
- *   tick on one that is.
+ * - `already-slipped`: the Avoid Habit's day already has a Slip (this one,
+ *   read again, or one logged elsewhere); the day is Missed either way;
+ * - `wrong-kind`: a tick whose kind does not match the row's Habit Kind (a
+ *   `+1` only on a Count Habit's day, a `slip` only on an Avoid Habit's, a
+ *   done tick on neither).
  */
 export type PendingTickSkipReason =
   | "missing"
@@ -42,6 +46,7 @@ export type PendingTickSkipReason =
   | "archived"
   | "in-focus"
   | "already-counted"
+  | "already-slipped"
   | "wrong-kind";
 
 export interface SkippedTick {
@@ -67,7 +72,7 @@ function isWellFormed(tick: PendingTick): boolean {
     typeof tick.tickedAt === "number" &&
     Number.isFinite(tick.tickedAt) &&
     tick.tickedAt > 0 &&
-    (tick.kind === undefined || tick.kind === "+1")
+    (tick.kind === undefined || tick.kind === "+1" || tick.kind === "slip")
   );
 }
 
@@ -92,8 +97,13 @@ function doneSkipReason(state: SyncPayload, task: Task): PendingTickSkipReason |
  * completes the Task through the shared complete-a-Task rule; a `+1` adds one
  * to a Count Habit day through the shared Count rule (also on a day already
  * Met, and in Focus, since counting ends no session) and records its tap time,
- * so the same `+1` read again is skipped.
+ * so the same `+1` read again is skipped; a `slip` logs a Slip on an Avoid
+ * Habit day through the shared Slip rule, once: one Slip already makes the day
+ * Missed, so a day that has one skips it.
  */
+/** The tick kind a row of each Habit Kind takes (a plain Task takes a done tick, as Check). */
+const TICK_KIND_OF: Record<HabitKind, PendingTick["kind"]> = { check: undefined, count: "+1", avoid: "slip" };
+
 function applyTick(
   state: SyncPayload,
   task: Task,
@@ -102,10 +112,11 @@ function applyTick(
   const habit: Habit | undefined = task.habitId
     ? (state.habits ?? []).find((h) => h.id === task.habitId)
     : undefined;
-  const isCount = !!habit && habitKindOf(habit) === "count";
-  if ((tick.kind === "+1") !== isCount) return "wrong-kind";
-  if (!habit || !isCount) return doneSkipReason(state, task) ?? completeTaskRow(task, tick.tickedAt);
+  const habitKind = habit ? habitKindOf(habit) : "check";
+  if (tick.kind !== TICK_KIND_OF[habitKind]) return "wrong-kind";
+  if (!habit || habitKind === "check") return doneSkipReason(state, task) ?? completeTaskRow(task, tick.tickedAt);
   if (task.status === "archived") return "archived";
+  if (habitKind === "avoid") return habitDaySlips(task) > 0 ? "already-slipped" : logHabitSlip(task, tick.tickedAt);
   if ((task.countTickedAt ?? 0) >= tick.tickedAt) return "already-counted";
   return { ...addHabitDayCount(task, habit, tick.tickedAt), countTickedAt: tick.tickedAt };
 }

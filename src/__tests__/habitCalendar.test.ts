@@ -206,6 +206,43 @@ describe("an N per week Habit's calendar (Skips act on the whole Habit Week)", (
   });
 });
 
+describe("correctHabitDayRow on an Avoid Habit day (judged by its Slips)", () => {
+  const AVOID = { id: "h1", kind: "avoid" as const, createdAt: 1 };
+  const avoidOutcome = (task: Task) =>
+    summarizeHabitDays([task], TODAY, [AVOID]).summaryFor("h1").outcomeOn("2026-11-10");
+
+  it("logs a Slip on a kept past day (Missed) and undoes it (Met again)", () => {
+    const slipped = correctHabitDayRow(dayTask(), "slip", 9_000, AVOID);
+    expect(slipped.slips).toBe(1);
+    expect(avoidOutcome(slipped)).toBe("missed");
+    const twice = correctHabitDayRow(slipped, "slip", 9_500, AVOID);
+    expect(twice.slips).toBe(2);
+    const undone = correctHabitDayRow(correctHabitDayRow(twice, "unslip", 9_600, AVOID), "unslip", 9_700, AVOID);
+    expect(undone.slips).toBeUndefined();
+    expect("slips" in undone).toBe(true);
+    expect(avoidOutcome(undone)).toBe("met");
+  });
+
+  it("Met clears every Slip; Skip and Undo skip set the day aside and back, Slips kept", () => {
+    const met = correctHabitDayRow(dayTask({ slips: 3 }), "met", 9_000, AVOID);
+    expect(met.slips).toBeUndefined();
+    expect(avoidOutcome(met)).toBe("met");
+    const skipped = correctHabitDayRow(dayTask({ slips: 1 }), "skipped", 9_000, AVOID);
+    expect(avoidOutcome(skipped)).toBe("skipped");
+    expect(skipped.slips).toBe(1);
+    expect(avoidOutcome(correctHabitDayRow(skipped, "none", 9_100, AVOID))).toBe("missed");
+  });
+
+  it("writes nothing when the day already reads that way, or for a Slip mark on another Kind", () => {
+    const kept = dayTask();
+    expect(correctHabitDayRow(kept, "met", 9_000, AVOID)).toBe(kept);
+    expect(correctHabitDayRow(kept, "none", 9_000, AVOID)).toBe(kept);
+    expect(correctHabitDayRow(kept, "unslip", 9_000, AVOID)).toBe(kept);
+    expect(correctHabitDayRow(kept, "slip", 9_000, { id: "h1" })).toBe(kept);
+    expect(correctHabitDayRow(kept, "slip", 9_000)).toBe(kept);
+  });
+});
+
 describe("habitStartKey (a Habit's first calendar day)", () => {
   it("is the local day the Habit was made, or today for a row without a usable createdAt", () => {
     expect(habitStartKey({ createdAt: new Date(2026, 10, 3, 9, 30).getTime() }, TODAY)).toBe("2026-11-03");

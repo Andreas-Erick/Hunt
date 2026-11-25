@@ -11,6 +11,7 @@
  */
 export {
   computeHabitStreak,
+  dateKeyFromOffset,
   habitTaskId,
   isMissedHabitTask,
   isOpenTask,
@@ -31,6 +32,9 @@ export {
   parseCountAmount,
 } from "../lib/habitKind";
 export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
+export { habitEndDateLabel, isEndedHabit, withHabitEndDate } from "../lib/habitEnd";
+export { avoidDayLabel, habitDaySlips } from "../lib/habitKind";
+export { logHabitSlip, undoHabitSlip } from "../lib/habitAvoid";
 export {
   applyChecklistEdit,
   canHoldChecklist,
@@ -87,7 +91,14 @@ export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnaps
 export { applyPendingTicks } from "../lib/pendingTicks";
 export { dueReminders, isReminderTime } from "../lib/reminders";
 export { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "../lib/reminderPlan";
-export { correctHabitDayRow, habitMonth, habitStartKey, habitWeekSkipMark, shiftMonthKey } from "../lib/habitCalendar";
+export {
+  correctHabitDayRow,
+  habitDayActions,
+  habitMonth,
+  habitStartKey,
+  habitWeekSkipMark,
+  shiftMonthKey,
+} from "../lib/habitCalendar";
 export {
   formatCountTotal,
   HABIT_SCORE_EXPLANATION,
