@@ -1,5 +1,6 @@
-import { computeHabitStreak, habitTaskId, toLocalDateKey } from "./dateUtils";
+import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
 import type { Task } from "./domainTypes";
+import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -37,13 +38,25 @@ export interface HabitDaySummary {
   todayTask: Task | undefined;
   /** Every day this habit was completed (completionDateKey). */
   completedDates: ReadonlySet<string>;
-  /** Consecutive completed days ending today (or yesterday while today is open). */
+  /** Met days in a row ending today, or yesterday while today is Open. */
   streak: number;
   /** Whether today's instance is completed. */
   doneToday: boolean;
+  /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
+  outcomeOn: (dayKey: string) => HabitOutcome | null;
 }
 
 const EMPTY_DATES: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Each day's Task of one habit, keyed by the day it counts for: a completed
+ * Task by completionDateKey (so a late tick lands on its scheduled day), any
+ * other by scheduledDate. A completed Task wins its day.
+ */
+function addDayTask(days: Map<string, Task>, task: Task, day: string): void {
+  const held = days.get(day);
+  if (!held || (held.status !== "completed" && task.status === "completed")) days.set(day, task);
+}
 
 /**
  * Per-habit day summary from the materialized habit tasks. Today's instance is
@@ -59,12 +72,18 @@ export function summarizeHabitDays(
 } {
   const todayByHabit = new Map<string, Task>();
   const datesByHabit = new Map<string, Set<string>>();
+  const dayTasksByHabit = new Map<string, Map<string, Task>>();
   for (const task of habitTasks) {
     const habitId = task.habitId;
     if (!habitId) continue;
     const canonical = task.id === habitTaskId(habitId, todayKey);
     if (canonical || (task.scheduledDate === todayKey && !todayByHabit.has(habitId))) {
       todayByHabit.set(habitId, task);
+    }
+    let dayTasks = dayTasksByHabit.get(habitId);
+    if (!dayTasks) {
+      dayTasks = new Map<string, Task>();
+      dayTasksByHabit.set(habitId, dayTasks);
     }
     const day = completionDateKey(task);
     if (day) {
@@ -74,6 +93,9 @@ export function summarizeHabitDays(
         datesByHabit.set(habitId, dates);
       }
       dates.add(day);
+      addDayTask(dayTasks, task, day);
+    } else if (task.scheduledDate) {
+      addDayTask(dayTasks, task, task.scheduledDate);
     }
   }
   const cache = new Map<string, HabitDaySummary>();
@@ -83,11 +105,15 @@ export function summarizeHabitDays(
       if (!summary) {
         const todayTask = todayByHabit.get(habitId);
         const completedDates = datesByHabit.get(habitId) ?? EMPTY_DATES;
+        const dayTasks = dayTasksByHabit.get(habitId);
+        const outcomeOn = (dayKey: string) =>
+          habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
         summary = {
           todayTask,
           completedDates,
-          streak: computeHabitStreak(completedDates, todayKey),
+          streak: habitStreakOn(todayKey, outcomeOn),
           doneToday: todayTask?.status === "completed",
+          outcomeOn,
         };
         cache.set(habitId, summary);
       }
