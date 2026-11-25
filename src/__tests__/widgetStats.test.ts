@@ -150,6 +150,16 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
     expect(today.streaks.map((s) => s.days)).toEqual(["med", "read", "run"].map((id) => summaryFor(id).streak));
   });
 
+  it("counts a Count Habit's Streak by its target: a day ticked below it is not Met", () => {
+    const jog: Habit = { ...habit("jog", "Jog", 100), kind: "count", target: 3 };
+    const tasks = [
+      { ...doneHabitDay("jog", "2026-11-21"), amount: 4 },
+      { ...doneHabitDay("jog", "2026-11-20"), amount: 1 }, // ticked on a device that knows no Kinds
+      { ...doneHabitDay("jog", "2026-11-19"), amount: 3 },
+    ];
+    expect(statsOf(state({ habits: [jog], tasks }))[0].streaks).toEqual([{ title: "Jog", days: 1 }]);
+  });
+
   it("rolls over for tomorrow: the week moves on a day, focus restarts at 0, streaks keep today's tick", () => {
     const habits = [habit("med", "Meditate", 100), habit("read", "Read", 200)];
     const tasks = [doneHabitDay("med", TODAY), doneHabitDay("med", "2026-11-21"), doneHabitDay("read", "2026-11-21")];
@@ -162,6 +172,34 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
       { title: "Meditate", days: 2 },
       { title: "Read", days: 0 },
     ]);
+  });
+
+  it("passes over the days a chosen-weekdays Habit is not asked for", () => {
+    // Sunday 22 Nov: Mon/Wed/Fri gym, Met Wed 18 and Fri 20; the weekend is not scheduled.
+    const gym: Habit = {
+      ...habit("gym", "Gym", 100),
+      frequencyHistory: [{ effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [1, 3, 5] } }],
+    };
+    const tasks = [doneHabitDay("gym", "2026-11-18"), doneHabitDay("gym", "2026-11-20")];
+    expect(statsOf(state({ habits: [gym], tasks }))[0].streaks).toEqual([{ title: "Gym", days: 2 }]);
+  });
+
+  it("counts an N per week Habit's streak in Habit Weeks, marked with the week unit", () => {
+    // Sunday 22 Nov: 2 times a week since Mon 2 Nov; Met the weeks of 2 and 9 Nov, 1 of 2 this week (Open).
+    const gym: Habit = {
+      ...habit("gym", "Gym", 100),
+      frequencyHistory: [{ effectiveFrom: "2026-11-02", frequency: { type: "perWeek", times: 2 } }],
+    };
+    const tasks = ["2026-11-02", "2026-11-05", "2026-11-10", "2026-11-14", "2026-11-17"].map((d) =>
+      doneHabitDay("gym", d)
+    );
+    const [today, tomorrow] = statsOf(state({ habits: [gym, habit("read", "Read", 200)], tasks }));
+    expect(today.streaks).toEqual([
+      { title: "Gym", days: 2, unit: "week" },
+      { title: "Read", days: 0 },
+    ]);
+    // Monday 23 Nov starts a new Habit Week; last week (1 of 2) ended Missed.
+    expect(tomorrow.streaks[0]).toEqual({ title: "Gym", days: 0, unit: "week" });
   });
 
   it("has no Quest rows and no streaks for a user without Quests or Habits", () => {

@@ -4,13 +4,13 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { reads } from "@/lib/reads";
 import { isMissedHabitTask, toLocalDateKey } from "@/lib/dateUtils";
+import type { ChecklistEdit } from "@/lib/checklist";
 import {
   fromFocusSession,
   toFocusSession,
   type ActiveFocusState,
   type FocusSession,
   type QuestAccent,
-  type Task,
 } from "@/lib/domainTypes";
 import {
   logDiagnostic,
@@ -22,7 +22,9 @@ import {
   localStore,
   onLocalChange,
   type HabitChanges,
+  type NewHabit,
   type QuestChanges,
+  type TaskChanges,
 } from "@/lib/localStore";
 import { SnapshotFormatError, importAndMergeSnapshotJson } from "@/lib/applySnapshot";
 import {
@@ -39,13 +41,11 @@ import {
   DEFAULT_SYNC_DEBOUNCE_MS,
   type SyncScheduler,
 } from "@/lib/syncScheduler";
-import {
-  compareRank,
-  isSafeSyncId,
-  MAX_ENTITY_ID_LENGTH,
-  type SyncPayload,
-} from "@/lib/syncTypes";
+import { compareRank, type SyncPayload } from "@/lib/syncTypes";
 import { pickNextFocusTask } from "@/lib/taskQueue";
+import { habitDayActions, type HabitDayActions } from "./habitDayActions";
+import { listActions, type ListActions } from "./listActions";
+import { mergePersistedFocus } from "./persistedFocus";
 
 export {
   orderAfterDrop,
@@ -54,7 +54,7 @@ export {
   sessionLogId,
 } from "@/lib/taskQueue";
 
-export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "telemetry" | "guide" | "log";
+export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "lists" | "telemetry" | "guide" | "log";
 
 export type SnapshotImportResult =
   | { ok: true; merged: SyncPayload }
@@ -69,9 +69,9 @@ export interface CompletedDirectiveFeedback {
   timestamp: number;
 }
 
-export type { HabitChanges, QuestChanges } from "@/lib/localStore";
+export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
-interface CommandStoreState {
+interface CommandStoreState extends HabitDayActions, ListActions {
   activeView: HudView;
   activeTaskId: string | null;
   isRunning: boolean;
@@ -147,15 +147,12 @@ interface CommandStoreState {
    * The title is trimmed and cut to MAX_TASK_TITLE_LENGTH; an empty one keeps
    * the old title. Resolves to false when the local write failed, true otherwise.
    */
-  updateTask: (
-    taskId: string,
-    updates: Partial<{
-      title: string;
-      notes: string;
-      questId: string | null;
-      scheduledDate: string;
-    }>
-  ) => Promise<boolean>;
+  updateTask: (taskId: string, updates: TaskChanges) => Promise<boolean>;
+  /**
+   * Applies one Checklist edit (shared rule: refused on a habit day Task).
+   * Resolves to true only when the Checklist changed and was saved.
+   */
+  editChecklist: (taskId: string, edit: ChecklistEdit) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<void>;
   /**
    * Puts the given tasks in this order by rewriting as FEW rows as possible
@@ -191,11 +188,7 @@ interface CommandStoreState {
 
   // Daily Habit CRUD & Materialization
   /** Resolves to false when the local write failed (actionError is then set), true otherwise. */
-  createHabit: (params: {
-    title: string;
-    notes?: string;
-    questId: string | null;
-  }) => Promise<boolean>;
+  createHabit: (params: NewHabit) => Promise<boolean>;
   updateHabit: (habitId: string, changes: HabitChanges) => Promise<boolean>;
   deleteHabit: (habitId: string) => Promise<void>;
   /**
@@ -204,12 +197,6 @@ interface CommandStoreState {
    * Returns the number of newly created tasks.
    */
   materializeDailyHabits: (dateKey?: string) => Promise<number>;
-  /**
-   * Today's (or `dateKey`'s) daily instance of one habit, materializing it first
-   * when missing. Undefined when the habit is gone, the instance is tombstoned,
-   * or the local write failed (actionError is then set).
-   */
-  ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
 
   // Time Log Operations
   /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -504,40 +491,6 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
   get().requestSync();
 }
 
-type PersistedFocusState = Pick<
-  CommandStoreState,
-  "activeView" | "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
->;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
-function isStamp(value: unknown): value is number {
-  return typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-}
-
-/**
- * Zero-trust rehydration: validates the persisted focus fields (an invalid or
- * missing one gets its default), enforces `isRunning ⇒ activeTaskId && sessionStartedAt`,
- * and always lands on the Home screen (`activeView: "command"`) when opening the app.
- * Nothing else is copied, so a corrupted or tampered entry can neither replace an
- * action nor feed NaN into a flush.
- */
-function sanitizePersistedFocus(persisted: Record<string, unknown>): PersistedFocusState {
-  const { activeTaskId, isRunning, sessionStartedAt, focusUpdatedAt } = persisted;
-  const taskId = isSafeSyncId(activeTaskId, MAX_ENTITY_ID_LENGTH) ? activeTaskId : null;
-  const startedAt = isStamp(sessionStartedAt) && sessionStartedAt > 0 ? sessionStartedAt : null;
-  return {
-    activeView: "command",
-    activeTaskId: taskId,
-    isRunning: isRunning === true && taskId !== null && startedAt !== null,
-    sessionStartedAt: startedAt,
-    focusUpdatedAt: isStamp(focusUpdatedAt) ? focusUpdatedAt : 0,
-  };
-}
-
 /** Single-flight guard for completeActiveTask (one store per page). */
 let completeInFlight: Promise<void> | null = null;
 
@@ -757,6 +710,14 @@ export const useCommandStore = create<CommandStoreState>()(
         updateTask: (taskId, updates) =>
           runAction(set, "updateTask", () => localStore.updateTask(taskId, updates)),
 
+        editChecklist: async (taskId, edit) => {
+          let applied = false;
+          const ok = await runAction(set, "editChecklist", async () => {
+            applied = await localStore.editChecklist(taskId, edit);
+          });
+          return ok && applied;
+        },
+
         deleteTask: async (taskId) => {
           await runAction(set, "deleteTask", async () => {
             const session = readStoreFocusSession(get());
@@ -796,8 +757,7 @@ export const useCommandStore = create<CommandStoreState>()(
           await runAction(set, "deleteQuest", () => localStore.deleteQuest(questId));
         },
 
-        createHabit: (params) =>
-          runAction(set, "createHabit", () => localStore.createHabit(params)),
+        createHabit: (params) => runAction(set, "createHabit", () => localStore.createHabit(params)),
 
         updateHabit: (habitId, changes) =>
           runAction(set, "updateHabit", () => localStore.updateHabit(habitId, changes)),
@@ -814,13 +774,8 @@ export const useCommandStore = create<CommandStoreState>()(
           return added;
         },
 
-        ensureHabitTaskForDay: async (habitId, dateKey) => {
-          let task: Task | undefined;
-          await runAction(set, "ensureHabitTaskForDay", async () => {
-            task = await localStore.ensureHabitTaskForDay(habitId, dateKey);
-          });
-          return task;
-        },
+        ...habitDayActions((name, action) => runAction(set, name, action)),
+        ...listActions((name, action) => runAction(set, name, action)),
 
         deleteTimeLog: async (logId) => {
           await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));
@@ -837,8 +792,7 @@ export const useCommandStore = create<CommandStoreState>()(
       }),
       // Hand-written merge (the default spreads every stored key over the
       // actions). No `version` bump: existing stored sessions keep loading.
-      merge: (persisted, current) =>
-        isRecord(persisted) ? { ...current, ...sanitizePersistedFocus(persisted) } : current,
+      merge: mergePersistedFocus,
     }
   )
 );

@@ -3,7 +3,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { MAX_LIST_TITLE_LENGTH, MAX_SYNC_LISTS } from "@/lib/lists";
 import {
+  MAX_CHECKLIST_ITEMS,
+  MAX_CHECKLIST_TEXT_LENGTH,
   MAX_ENTITY_ID_LENGTH,
   MAX_LOG_ID_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
@@ -116,6 +119,7 @@ describe("validateSyncPayload: structure", () => {
     ["quests not an array", rawPayload({ quests: "bad" })],
     ["tasks not an array", rawPayload({ tasks: {} })],
     ["timeLogs not an array", rawPayload({ timeLogs: null })],
+    ["lists not an array", rawPayload({ lists: {} })],
   ])("rejects %s", (_label, input) => {
     const check = validateSyncPayload(input);
     expect(check.valid).toBe(false);
@@ -407,6 +411,73 @@ describe("text fields", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Habit Kinds and Count Habit fields
+// ---------------------------------------------------------------------------
+
+describe("Habit Kind and Count fields", () => {
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: "hab-1763400000000-jog1",
+    title: "Jog",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOut = (raw: Row) => {
+    const [row] = validated(rawPayload({ habits: [raw] })).payload.habits ?? [];
+    return new Map<string, unknown>(Object.entries(row));
+  };
+
+  it("keeps an old Habit row without a Kind exactly as it was (it reads as Check)", () => {
+    const out = habitOut(habitRow());
+    expect(out.has("kind")).toBe(false);
+    expect(out.has("target")).toBe(false);
+  });
+
+  it("keeps a Count Habit's Kind, target and unit", () => {
+    const out = habitOut(habitRow({ kind: "count", target: 2.5, unit: "miles" }));
+    expect([out.get("kind"), out.get("target"), out.get("unit")]).toEqual(["count", 2.5, "miles"]);
+  });
+
+  it.each(["countdown", "__proto__", "", 3, null])("removes Kind %j that Hunt does not know", (kind) => {
+    expect(habitOut(habitRow({ kind })).has("kind")).toBe(false);
+  });
+
+  it.each([0, -1, Number.NaN, "3", null])("removes target %j that is not a positive number", (target) => {
+    expect(habitOut(habitRow({ kind: "count", target })).has("target")).toBe(false);
+  });
+
+  it("caps a huge target, cuts a long unit and removes a unit that is not text", () => {
+    expect(habitOut(habitRow({ target: 1e12 })).get("target")).toBe(1_000_000);
+    expect(habitOut(habitRow({ unit: "m".repeat(100) })).get("unit")).toBe("m".repeat(40));
+    expect(habitOut(habitRow({ unit: 7 })).has("unit")).toBe(false);
+  });
+
+  it("keeps a day Task's total and +1 tick time, removing invalid ones", () => {
+    const ok = sanitizeOne("task", taskRow({ amount: 2.5, countTickedAt: 1234 }));
+    expect([ok?.get("amount"), ok?.get("countTickedAt")]).toEqual([2.5, 1234]);
+    for (const amount of [-1, "2", Number.POSITIVE_INFINITY, null]) {
+      expect(sanitizeOne("task", taskRow({ amount }))?.has("amount"), String(amount)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ amount: 1e12 }))?.get("amount")).toBe(1_000_000);
+    expect(sanitizeOne("task", taskRow({ countTickedAt: -5 }))?.has("countTickedAt")).toBe(false);
+  });
+
+  it("keeps an Avoid Habit's Kind", () => {
+    expect(habitOut(habitRow({ kind: "avoid" })).get("kind")).toBe("avoid");
+  });
+
+  it("keeps a day Task's Slips as a whole number, removing invalid ones and capping a huge one", () => {
+    expect(sanitizeOne("task", taskRow({ slips: 2 }))?.get("slips")).toBe(2);
+    for (const slips of [0, -1, 1.5, "1", Number.NaN, null]) {
+      expect(sanitizeOne("task", taskRow({ slips }))?.has("slips"), String(slips)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ slips: 1e9 }))?.get("slips")).toBe(1000);
+  });
+});
+
 // Enums and dates
 // ---------------------------------------------------------------------------
 
@@ -443,6 +514,20 @@ describe("enums and dates", () => {
     expect(sanitizeOne("task", taskRow({ scheduledDate: "2024-02-29" }))?.get("scheduledDate")).toBe("2024-02-29");
   });
 
+  it("keeps a Skipped habit day's skipped: true and drops any other skipped value", () => {
+    expect(sanitizeOne("task", taskRow({ skipped: true }))?.get("skipped")).toBe(true);
+    for (const skipped of [false, "yes", "true", 1, {}, null]) {
+      expect(sanitizeOne("task", taskRow({ skipped }))?.has("skipped"), JSON.stringify(skipped)).toBe(false);
+    }
+  });
+
+  it("keeps a reminderTime only when it is a local 24-hour HH:MM", () => {
+    for (const reminderTime of ["9:30", "24:00", "09:30:00", "noon", 930, null, {}]) {
+      expect(sanitizeOne("task", taskRow({ reminderTime }))?.has("reminderTime"), String(reminderTime)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ reminderTime: "07:05" }))?.get("reminderTime")).toBe("07:05");
+  });
+
   it("recomputes an invalid log dateKey from endTime, else from startTime", () => {
     const end = 1_763_420_000_000;
     expect(sanitizeOne("log", logRow({ dateKey: "<b>", endTime: end }))?.get("dateKey")).toBe(localDateKey(end));
@@ -465,6 +550,104 @@ describe("enums and dates", () => {
 // ---------------------------------------------------------------------------
 // Unknown fields, nesting and prototype pollution
 // ---------------------------------------------------------------------------
+
+describe("a Task's Checklist", () => {
+  const item = (id: string, text: string, done = false) => ({ id, text, done });
+
+  it("keeps a well-formed Checklist, in order", () => {
+    const checklist = [item("chk-1", "Passport", true), item("chk-2", "Charger")];
+    expect(sanitizeOne("task", taskRow({ checklist }))?.get("checklist")).toEqual(checklist);
+  });
+
+  it("rejects a Checklist on a habit day Task", () => {
+    const row = taskRow({ id: "habtsk-2026-11-18-hab-1", habitId: "hab-1", checklist: [item("chk-1", "Warm up")] });
+    const task = sanitizeOne("task", row);
+    expect(task?.get("habitId")).toBe("hab-1");
+    expect(task?.has("checklist")).toBe(false);
+  });
+
+  it("drops a Checklist that is not a list, and items that cannot be legitimate", () => {
+    expect(sanitizeOne("task", taskRow({ checklist: "Passport" }))?.has("checklist")).toBe(false);
+    expect(sanitizeOne("task", taskRow({ checklist: { 0: item("chk-1", "a") } }))?.has("checklist")).toBe(false);
+    const kept = sanitizeOne("task", taskRow({
+      checklist: [
+        item("chk-1", "Passport"),
+        null,
+        "Charger",
+        { id: "<b>", text: "bad id", done: false },
+        { id: "chk-2", text: 7, done: false },
+        { id: "chk-3", text: "No done flag" },
+        { id: "chk-4", text: "Stringy done", done: "yes" },
+        item("chk-1", "Duplicate id"),
+        { ...item("chk-5", "Extra keys"), colour: "red", __proto__: { polluted: 1 } },
+      ],
+    }))?.get("checklist");
+    expect(kept).toEqual([
+      item("chk-1", "Passport"),
+      item("chk-3", "No done flag"),
+      item("chk-4", "Stringy done"),
+      item("chk-5", "Extra keys"),
+    ]);
+  });
+
+  it("cuts item text and keeps at most the first MAX_CHECKLIST_ITEMS items", () => {
+    const long = sanitizeOne("task", taskRow({ checklist: [item("chk-1", "x".repeat(MAX_CHECKLIST_TEXT_LENGTH + 9))] }));
+    expect((long?.get("checklist") as { text: string }[])[0].text).toHaveLength(MAX_CHECKLIST_TEXT_LENGTH);
+    const many = Array.from({ length: MAX_CHECKLIST_ITEMS + 5 }, (_, n) => item(`chk-${n}`, `Item ${n}`));
+    const capped = sanitizeOne("task", taskRow({ checklist: many }))?.get("checklist") as { id: string }[];
+    expect(capped).toHaveLength(MAX_CHECKLIST_ITEMS);
+    expect(capped[0].id).toBe("chk-0");
+  });
+
+  it("keeps an emptied Checklist, so a device's own write is never changed", () => {
+    expect(sanitizeOne("task", taskRow({ checklist: [] }))?.get("checklist")).toEqual([]);
+  });
+});
+
+describe("standalone Lists", () => {
+  const item = (id: string, text: string, done = false) => ({ id, text, done });
+  const listRow = (overrides: Row = {}): Row => ({
+    id: "list-1763400000000-abcd",
+    title: "Groceries",
+    items: [item("chk-1", "Milk", true), item("chk-2", "Bread")],
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+
+  it("keeps a well-formed List and its tombstones unchanged", () => {
+    const { payload, dropped } = validated(rawPayload({ lists: [listRow()], deletedListIds: ["list-9"] }));
+    expect(dropped).toBe(0);
+    expect(payload.lists).toEqual([listRow()]);
+    expect(payload.deletedListIds).toEqual(["list-9"]);
+  });
+
+  it("reads a payload from an older device without Lists as no Lists", () => {
+    const { payload } = validated({ quests: [], tasks: [], timeLogs: [] });
+    expect(payload.lists).toEqual([]);
+    expect(payload.deletedListIds).toEqual([]);
+  });
+
+  it("drops a List that cannot be legitimate, unsafe tombstones, and cuts the title", () => {
+    const { payload, dropped } = validated(rawPayload({
+      lists: [listRow(), listRow({ id: "<b>" }), listRow({ id: "list-2", title: 5 }), "x",
+        listRow({ id: "list-3", title: "t".repeat(MAX_LIST_TITLE_LENGTH + 4), items: [null, item("chk-1", "ok")] })],
+      deletedListIds: ["list-ok", "<script>", 4],
+    }));
+    expect(dropped).toBe(3);
+    expect(payload.lists?.map((l) => l.id)).toEqual(["list-1763400000000-abcd", "list-3"]);
+    expect(payload.lists?.[1].title).toHaveLength(MAX_LIST_TITLE_LENGTH);
+    expect(payload.lists?.[1].items).toEqual([item("chk-1", "ok")]);
+    expect(payload.deletedListIds).toEqual(["list-ok"]);
+  });
+
+  it(`accepts exactly ${MAX_SYNC_LISTS} Lists and rejects one more`, () => {
+    const rows = Array.from({ length: MAX_SYNC_LISTS + 1 }, (_, i) => listRow({ id: `list-${i}` }));
+    expect(validateSyncPayload(rawPayload({ lists: rows.slice(0, MAX_SYNC_LISTS) })).payload?.lists).toHaveLength(MAX_SYNC_LISTS);
+    expect(validateSyncPayload(rawPayload({ lists: rows })).valid).toBe(false);
+  });
+});
 
 describe("unknown fields, nesting and prototype keys", () => {
   it("keeps scalar unknown fields (questCodeSnapshot, code, archived) and drops objects and arrays", () => {
@@ -539,12 +722,14 @@ describe("seeded fuzz of row sanitizing", () => {
     ...MATRIX_INPUTS.map(([, value]) => value),
     "", "   ", "<script>alert(1)</script>", "x".repeat(300), "👨‍👩‍👧‍👦", true, false, [], {}, [[1]], { a: { b: 1 } },
     TASK_ID, QUEST_ID, "2026-11-18", "cyan", "slate", "completed", "__proto__", "x".repeat(129),
+    [{ id: "chk-1", text: "Passport", done: true }, { id: "chk-1", text: "dup", done: false }, { id: 3 }],
+    "09:30", "24:00",
   ];
   const FIELDS = [
     "id", "title", "notes", "description", "questId", "taskId", "status", "rank", "accumulatedSeconds",
     "scheduledDate", "createdAt", "updatedAt", "completedAt", "slotIndex", "accentColor", "accentColorSnapshot",
     "targetWeeklyHours", "startTime", "endTime", "durationSeconds", "dateKey", "taskTitleSnapshot",
-    "questCodeSnapshot", "extra", "constructor", "prototype",
+    "questCodeSnapshot", "checklist", "extra", "constructor", "prototype", "reminderTime",
   ];
   const isScalar = (v: unknown) =>
     v === null || typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
@@ -585,6 +770,7 @@ describe("seeded fuzz of row sanitizing", () => {
         expect(["queued", "active", "completed", "archived"], msg).toContain(t.status);
         expect(inRange(t.accumulatedSeconds, 0, 1e9), msg).toBe(true);
         expect(t.questId === null || isSafeSyncId(t.questId), msg).toBe(true);
+        expect(t.reminderTime === undefined || /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.reminderTime), msg).toBe(true);
       }
       for (const l of payload.timeLogs) {
         expect(isSafeSyncId(l.id, MAX_LOG_ID_LENGTH) && isSafeSyncId(l.taskId), msg).toBe(true);
@@ -592,8 +778,17 @@ describe("seeded fuzz of row sanitizing", () => {
         expect(l.dateKey, msg).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(["cyan", "emerald", "amber", "slate"], msg).toContain(l.accentColorSnapshot);
       }
+      for (const t of payload.tasks) {
+        if (t.checklist === undefined) continue;
+        expect(t.habitId, msg).toBeUndefined();
+        for (const i of t.checklist) {
+          expect(Object.keys(i).sort(), msg).toEqual(["done", "id", "text"]);
+          expect(isSafeSyncId(i.id) && typeof i.text === "string" && typeof i.done === "boolean", msg).toBe(true);
+        }
+      }
       for (const r of [...payload.quests, ...payload.tasks, ...payload.timeLogs]) {
         for (const [key, value] of Object.entries(r)) {
+          if (key === "checklist") continue; // a list of flat items, checked above
           expect(isScalar(value), `${msg} ${key}`).toBe(true);
           expect(["__proto__", "constructor", "prototype"], msg).not.toContain(key);
         }
@@ -715,5 +910,159 @@ describe("quest completion boundary validation", () => {
     expect(qs[4].completedAt).toBeUndefined();
     expect(qs[5].archived).toBeUndefined();
     expect(qs[5].completedAt).toBeUndefined();
+  });
+});
+
+describe("habit Frequency history", () => {
+  const HABIT_ID = "hab-1763400000000-a1b2";
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: HABIT_ID,
+    title: "Gym",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOf = (raw: Row) => validated(rawPayload({ habits: [raw] })).payload.habits?.[0];
+
+  it("keeps an old Habit row without a Frequency as it is (it reads as every day)", () => {
+    const habit = habitOf(habitRow());
+    expect(habit).toBeDefined();
+    expect(habit?.frequencyHistory).toBeUndefined();
+  });
+
+  it("keeps a valid history, weekdays ascending and unique, in date order", () => {
+    const history = [
+      { effectiveFrom: "2026-11-20", frequency: { type: "everyDay" } },
+      { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [5, 1, 3, 1] } },
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [1, 3, 5] } },
+      { effectiveFrom: "2026-11-20", frequency: { type: "everyDay" } },
+    ]);
+  });
+
+  it("drops changes with a bad date, an unknown or empty Frequency, or out-of-range weekdays", () => {
+    const history = [
+      { effectiveFrom: "2026-11-1", frequency: { type: "everyDay" } },
+      { effectiveFrom: "2026-11-02", frequency: { type: "hourly" } },
+      { effectiveFrom: "2026-11-03", frequency: { type: "weekdays", weekdays: [] } },
+      { effectiveFrom: "2026-11-04", frequency: { type: "weekdays", weekdays: [7, -1, 2.5, "1"] } },
+      { effectiveFrom: "2026-11-05", frequency: { type: "weekdays", weekdays: [0, 9], extra: { deep: 1 } } },
+      "2026-11-06",
+      null,
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-05", frequency: { type: "weekdays", weekdays: [0] } },
+    ]);
+    expect(habitOf(habitRow({ frequencyHistory: "every day" }))?.frequencyHistory).toBeUndefined();
+    expect(
+      habitOf(habitRow({ frequencyHistory: [{ effectiveFrom: "x", frequency: {} }] }))?.frequencyHistory
+    ).toBeUndefined();
+  });
+
+  it("keeps an N per week Frequency of 1 to 7 times and drops any other count", () => {
+    const history = [
+      { effectiveFrom: "2026-11-02", frequency: { type: "perWeek", times: 0 } },
+      { effectiveFrom: "2026-11-03", frequency: { type: "perWeek", times: 8 } },
+      { effectiveFrom: "2026-11-04", frequency: { type: "perWeek", times: 2.5 } },
+      { effectiveFrom: "2026-11-05", frequency: { type: "perWeek", times: "3" } },
+      { effectiveFrom: "2026-11-06", frequency: { type: "perWeek" } },
+      { effectiveFrom: "2026-11-09", frequency: { type: "perWeek", times: 3, extra: { deep: 1 } } },
+      { effectiveFrom: "2026-11-16", frequency: { type: "perWeek", times: 7 } },
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-09", frequency: { type: "perWeek", times: 3 } },
+      { effectiveFrom: "2026-11-16", frequency: { type: "perWeek", times: 7 } },
+    ]);
+  });
+
+  it("keeps at most the newest 100 changes, and validating its own output changes nothing", () => {
+    const history = Array.from({ length: 150 }, (_, i) => ({
+      effectiveFrom: localDateKey(new Date(2026, 0, 1 + i, 12).getTime()),
+      frequency: i % 2 ? { type: "everyDay" } : { type: "weekdays", weekdays: [i % 7] },
+    }));
+    const kept = habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory ?? [];
+    expect(kept).toHaveLength(100);
+    expect(kept[99].effectiveFrom).toBe(history[149].effectiveFrom);
+    const once = validated(rawPayload({ habits: [habitRow({ frequencyHistory: history })] })).payload;
+    const again = validated(JSON.parse(JSON.stringify(once)));
+    expect(again.dropped).toBe(0);
+    expect(syncContentKey(again.payload)).toBe(syncContentKey(once));
+  });
+});
+
+describe("habit end date (Ended Habits)", () => {
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: "hab-1763400000000-e1d2",
+    title: "Gym",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOf = (raw: Row) => validated(rawPayload({ habits: [raw] })).payload.habits?.[0];
+
+  it("keeps an old Habit row without an end date as it is (it never ends)", () => {
+    const habit = habitOf(habitRow());
+    expect(habit?.endDate).toBeUndefined();
+    expect(habit?.endedSpans).toBeUndefined();
+  });
+
+  it("keeps a valid end date and Ended stretches, in date order", () => {
+    const habit = habitOf(
+      habitRow({
+        endDate: "2026-11-30",
+        endedSpans: [
+          { from: "2026-11-10", to: "2026-11-12" },
+          { from: "2026-10-01", to: "2026-10-05" },
+        ],
+      })
+    );
+    expect(habit?.endDate).toBe("2026-11-30");
+    expect(habit?.endedSpans).toEqual([
+      { from: "2026-10-01", to: "2026-10-05" },
+      { from: "2026-11-10", to: "2026-11-12" },
+    ]);
+  });
+
+  it("drops a bad end date and bad or reversed Ended stretches", () => {
+    const habit = habitOf(
+      habitRow({
+        endDate: "30 Nov",
+        endedSpans: [
+          { from: "2026-11-12", to: "2026-11-10" },
+          { from: "2026-11-1", to: "2026-11-02" },
+          { from: "2026-11-03", to: "2026-11-04", extra: { deep: 1 } },
+          "2026-11-05",
+          null,
+        ],
+      })
+    );
+    expect(habit?.endDate).toBeUndefined();
+    expect(habit?.endedSpans).toEqual([{ from: "2026-11-03", to: "2026-11-04" }]);
+    expect(habitOf(habitRow({ endedSpans: "always" }))?.endedSpans).toBeUndefined();
+  });
+
+  it("keeps at most the newest 100 Ended stretches", () => {
+    const spans = Array.from({ length: 150 }, (_, i) => {
+      const day = localDateKey(new Date(2026, 0, 1 + i * 2, 12).getTime());
+      return { from: day, to: day };
+    });
+    const kept = habitOf(habitRow({ endedSpans: spans }))?.endedSpans ?? [];
+    expect(kept).toHaveLength(100);
+    expect(kept[99]).toEqual(spans[149]);
+  });
+
+  it("validating its own output changes nothing", () => {
+    const row = habitRow({ endDate: "2026-11-30", endedSpans: [{ from: "2026-11-10", to: "2026-11-12" }] });
+    const once = validated(rawPayload({ habits: [row] })).payload;
+    const again = validated(JSON.parse(JSON.stringify(once)));
+    expect(again.dropped).toBe(0);
+    expect(syncContentKey(again.payload)).toBe(syncContentKey(once));
   });
 });

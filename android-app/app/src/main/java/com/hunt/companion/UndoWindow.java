@@ -2,6 +2,7 @@ package com.hunt.companion;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,8 +57,11 @@ final class UndoWindow {
 
     /** Appends one ended window's tick to the Pending Tick queue. */
     interface Queue {
-        /** True when the tick is settled (queued, or never queueable) and its window may close. */
-        boolean settle(String taskId, String dateKey, long tickedAt);
+        /**
+         * True when the tick is settled (queued, or never queueable) and its window may close.
+         * {@code kind} is the window's tick kind ({@link TickKeys#kindOf}): "" for done, "+1".
+         */
+        boolean settle(String taskId, String dateKey, long tickedAt, String kind);
     }
 
     /** What {@link #commit} did: the windows to close, and how many ended ones it had to keep. */
@@ -77,7 +81,9 @@ final class UndoWindow {
         for (String key : due(held, now)) {
             Object v = held.get(key);
             long tickedAt = v instanceof Long ? (Long) v : now;
-            if (queue.settle(TickKeys.taskIdOf(key), TickKeys.dateKeyOf(key), tickedAt)) result.closed.add(key);
+            if (queue.settle(TickKeys.taskIdOf(key), TickKeys.dateKeyOf(key), tickedAt, TickKeys.kindOf(key))) {
+                result.closed.add(key);
+            }
             else result.heldBack++;
         }
         return result;
@@ -87,13 +93,53 @@ final class UndoWindow {
      * Tasks of `dateKey` the Day Widget's list leaves out: those waiting in the Pending Tick
      * queue for that day, and those whose window has ended but are not queued yet. Both are
      * keyed {@link TickKeys#taskDay}, so a tick hides its Task only on the day it was for. Tasks
-     * still in their window stay listed (drawn as "✓ Done · Undo").
+     * still in their window stay listed (drawn as "✓ Done · Undo"). An Avoid row's Slip hides it
+     * as a done tick does. A Count row's +1 never hides it: `queuedKeys` holds no +1 ticks, and
+     * +1 windows are counted instead ({@link #pendingPlus}).
      */
     static Set<String> hiddenTaskIds(Set<String> queuedKeys, Map<String, ?> held, String dateKey, long now) {
-        Set<String> hidden = heldTaskIds(held, dateKey);
+        Set<String> hidden = new HashSet<>();
+        for (String k : held.keySet()) {
+            if (dateKey.equals(TickKeys.dateKeyOf(k)) && !TickKeys.PLUS_ONE.equals(TickKeys.kindOf(k))) {
+                hidden.add(TickKeys.taskIdOf(k));
+            }
+        }
         hidden.removeAll(openTaskIds(held, dateKey, now));
         hidden.addAll(taskIdsOn(queuedKeys, dateKey));
         return hidden;
+    }
+
+    /**
+     * Count rows of `dateKey` -> the +1s on their way that the snapshot's progress does not hold
+     * yet: queued ones (`queuedPlus`, {@link TickKeys#taskDay} -> count) and ended windows not
+     * queued yet. A +1 still in its window is drawn as "+1 · Undo" and not counted.
+     */
+    static Map<String, Integer> pendingPlus(Map<String, Integer> queuedPlus, Map<String, ?> held, String dateKey, long now) {
+        Map<String, Integer> pending = new HashMap<>();
+        for (Map.Entry<String, Integer> e : queuedPlus.entrySet()) {
+            if (dateKey.equals(TickKeys.dateKeyOf(e.getKey()))) pending.merge(TickKeys.taskIdOf(e.getKey()), e.getValue(), Integer::sum);
+        }
+        for (Map.Entry<String, ?> e : held.entrySet()) {
+            String k = e.getKey();
+            Object v = e.getValue();
+            boolean ended = !(v instanceof Long) || isDue((Long) v, now);
+            if (ended && dateKey.equals(TickKeys.dateKeyOf(k)) && TickKeys.PLUS_ONE.equals(TickKeys.kindOf(k))) {
+                pending.merge(TickKeys.taskIdOf(k), 1, Integer::sum);
+            }
+        }
+        return pending;
+    }
+
+    /**
+     * Count rows of `dateKey` with a +1 window not yet queued. Such a row offers no tick until
+     * it is queued: its window key is taken, so a second tap would be lost.
+     */
+    static Set<String> heldPlusTaskIds(Map<String, ?> held, String dateKey) {
+        Set<String> ids = new HashSet<>();
+        for (String k : held.keySet()) {
+            if (dateKey.equals(TickKeys.dateKeyOf(k)) && TickKeys.PLUS_ONE.equals(TickKeys.kindOf(k))) ids.add(TickKeys.taskIdOf(k));
+        }
+        return ids;
     }
 
     /** Tasks of `dateKey` still in their window: drawn as "✓ Done · Undo". */

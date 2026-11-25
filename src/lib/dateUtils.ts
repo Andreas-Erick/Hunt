@@ -1,4 +1,9 @@
+import { dateFromKey, dateKeyFromOffset, toLocalDateKey } from "./dateKeys";
 import type { Quest, Task } from "./domainTypes";
+import { habitDaySlips } from "./habitKind";
+import { habitDayOutcome, habitStreakOf, type HabitOutcome } from "./habitOutcome";
+
+export { dateFromKey, dateKeyFromOffset, toLocalDateKey };
 
 /**
  * Deterministic Quest sort by slotIndex (0..2), breaking ties by createdAt then id.
@@ -31,24 +36,25 @@ export function habitTaskId(habitId: string, dateKey: string): string {
 /**
  * Whether an open task belongs in today's Home queue / Focus picker.
  * Regular tasks carry over if overdue (<= todayKey) or unscheduled; daily
- * habit instances show ONLY on their own day so missed habits never pile up.
+ * habit instances show ONLY on their own day so missed habits never pile up,
+ * and not at all once Skipped (a day set aside is not asked of the user).
  */
 export function isTaskVisibleToday(
-  task: Pick<Task, "scheduledDate" | "habitId">,
+  task: Pick<Task, "scheduledDate" | "habitId" | "skipped">,
   todayKey: string
 ): boolean {
   if (task.habitId) {
-    return task.scheduledDate === todayKey;
+    return task.scheduledDate === todayKey && !task.skipped;
   }
   return !task.scheduledDate || task.scheduledDate <= todayKey;
 }
 
 /**
- * A daily habit instance from a past day that was never done: a missed day.
+ * A queued habit day Task whose day's Outcome is Missed (habitDayOutcome).
  * It stays in the table as history (streaks, Review, its own Plan the week
  * column) but is never an open task on a later day. A dateless habit row is
  * not today's instance, so it counts as past. An 'active' instance (focus
- * still running across midnight) is not missed.
+ * still running across midnight) is Open, not Missed.
  */
 export function isMissedHabitTask(
   task: Pick<Task, "status" | "scheduledDate" | "habitId">,
@@ -57,48 +63,26 @@ export function isMissedHabitTask(
   return (
     Boolean(task.habitId) &&
     task.status === "queued" &&
-    (task.scheduledDate ?? "") < todayKey
+    habitDayOutcome({ habit: {}, dayKey: task.scheduledDate ?? "", dayTask: task, todayKey }) ===
+      "missed"
   );
 }
 
 /**
  * SHARED open-task rule for every list, count and picker of open work on
- * `todayKey`: queued or active, minus missed daily habit days.
+ * `todayKey`: queued or active, minus missed, Skipped and slipped habit days (a
+ * Skipped day is not asked of the user, and an Avoid Habit's day with a Slip is
+ * already Missed, so both leave Today and the Day Widget).
  */
 export function isOpenTask(
-  task: Pick<Task, "status" | "scheduledDate" | "habitId">,
+  task: Pick<Task, "status" | "scheduledDate" | "habitId" | "skipped" | "slips">,
   todayKey: string
 ): boolean {
   return (
     (task.status === "queued" || task.status === "active") &&
+    !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) &&
     !isMissedHabitTask(task, todayKey)
   );
-}
-
-/**
- * Formats a timestamp (ms) into local YYYY-MM-DD string
- */
-export function toLocalDateKey(timestamp: number = Date.now()): string {
-  const d = new Date(timestamp);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-/** Local date for a YYYY-MM-DD key, at noon (safe across DST changes). */
-export function dateFromKey(dateKey: string, dayOffset = 0): Date {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, m - 1, d + dayOffset, 12);
-}
-
-/**
- * The YYYY-MM-DD key `dayOffset` calendar days away from `baseKey`. Steps whole
- * calendar days from a noon anchor, so 23- and 25-hour DST days never skip or
- * repeat a key (unlike `now - n * 86_400_000`).
- */
-export function dateKeyFromOffset(baseKey: string, dayOffset: number): string {
-  return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
 }
 
 /**
@@ -119,21 +103,56 @@ export function msUntilNextLocalMidnight(nowMs: number = Date.now()): number {
   return Math.max(50, nextMidnight - nowMs);
 }
 
+/** `outcomeOn` for each day from `todayKey` back to `firstDayKey` (inclusive). */
+export function* outcomesBackFrom(
+  todayKey: string,
+  firstDayKey: string,
+  outcomeOn: (dayKey: string) => HabitOutcome | null
+): Generator<HabitOutcome | null> {
+  for (let offset = 0; ; offset -= 1) {
+    const dayKey = dateKeyFromOffset(todayKey, offset);
+    if (dayKey < firstDayKey) return;
+    yield outcomeOn(dayKey);
+  }
+}
+
 /**
- * Consecutive completed days for a habit ending on `todayKey` (or yesterday if
- * today is not yet completed, so a running streak does not drop to 0 at 8 AM).
+ * A Habit's Streak on `todayKey`, from its Outcome on each day (habitStreakOf),
+ * reading no further back than `firstDayKey`, the first day the Habit could
+ * have been Met. The bound ends the walk when unscheduled days (no Outcome)
+ * would otherwise be passed over forever.
+ */
+export function habitStreakOn(
+  todayKey: string,
+  outcomeOn: (dayKey: string) => HabitOutcome | null,
+  firstDayKey: string
+): number {
+  return habitStreakOf(outcomesBackFrom(todayKey, firstDayKey, outcomeOn));
+}
+
+const TICKED_DAY: Pick<Task, "status"> = { status: "completed" };
+
+/**
+ * The Streak of a daily Check Habit from the days it was Met: consecutive Met
+ * days ending today, or yesterday while today is Open.
  */
 export function computeHabitStreak(
   completedDates: ReadonlySet<string>,
   todayKey: string
 ): number {
-  let offset = completedDates.has(todayKey) ? 0 : -1;
-  let streak = 0;
-  while (completedDates.has(dateKeyFromOffset(todayKey, offset))) {
-    streak += 1;
-    offset -= 1;
-  }
-  return streak;
+  let firstDayKey = todayKey;
+  for (const dayKey of completedDates) if (dayKey < firstDayKey) firstDayKey = dayKey;
+  return habitStreakOn(
+    todayKey,
+    (dayKey) =>
+      habitDayOutcome({
+        habit: {},
+        dayKey,
+        dayTask: completedDates.has(dayKey) ? TICKED_DAY : undefined,
+        todayKey,
+      }),
+    firstDayKey
+  );
 }
 
 /** Whole, non-negative seconds; NaN, ±Infinity and non-numeric input become 0. */

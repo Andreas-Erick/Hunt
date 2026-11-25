@@ -8,13 +8,17 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * The Pending Tick queue (GLOSSARY.md, ADR-0006): Tasks ticked done on the Day Widget that Hunt
  * has not applied yet. The file is a JSON array of {"taskId", "dateKey", "tickedAt"} objects
- * (tickedAt in epoch ms). It is the only file the widget writes, and it only ever appends; the
+ * (tickedAt in epoch ms), plus "kind": "+1" on a Count Habit row's tap, which adds one instead
+ * of ticking the Task done, or "kind": "slip" on an Avoid Habit row's tap, which logs a Slip. It
+ * is the only file the widget writes, and it only ever appends; the
  * phone page reads it on start, applies the ticks through HuntCore and acknowledges them through
  * the bridge, which removes exactly the acknowledged entries, so a tick that arrives meanwhile
  * survives. No Hunt rule lives here: the queue holds what was tapped, HuntCore decides.
@@ -84,21 +88,29 @@ final class PendingTicks {
     }
 
     /**
-     * Widget: queues a tick. A second tap on the same Task and day is not queued twice. A queue
-     * that cannot be read is never written over. Any thread. A newly queued tick is announced to
-     * the listener (a running Hunt) once the file is written.
+     * Widget: queues a tick of `kind` ({@link TickKeys#kindOf}). A second done (or Slip) tap on
+     * the same Task and day is not queued twice; a "+1" on a Count Habit row is written with "kind":"+1"
+     * and queued once per tap (the same tap twice is still queued once), since each adds one. A
+     * queue that cannot be read is never written over. Any thread. A newly queued tick is
+     * announced to the listener (a running Hunt) once the file is written.
      */
-    static Queued append(File dir, String taskId, String dateKey, long tickedAt) {
+    static Queued append(File dir, String taskId, String dateKey, long tickedAt, String kind) {
         if (taskId == null || taskId.isEmpty() || dateKey == null || dateKey.isEmpty()) return Queued.REJECTED;
+        String k = kind == null ? "" : kind;
         Queued result;
         synchronized (HuntFiles.LOCK) {
-            result = appendLocked(dir, taskId, dateKey, tickedAt);
+            result = appendLocked(dir, taskId, dateKey, tickedAt, k);
         }
         if (result == Queued.ADDED) notifyTickQueued();
         return result;
     }
 
-    private static Queued appendLocked(File dir, String taskId, String dateKey, long tickedAt) {
+    /** {@link #append(File, String, String, long, String)} of a done tick. */
+    static Queued append(File dir, String taskId, String dateKey, long tickedAt) {
+        return append(dir, taskId, dateKey, tickedAt, "");
+    }
+
+    private static Queued appendLocked(File dir, String taskId, String dateKey, long tickedAt, String kind) {
         JSONArray queue;
         try {
             queue = readQueue(dir);
@@ -106,19 +118,22 @@ final class PendingTicks {
             Log.w(TAG, "Pending Tick queue " + HuntFiles.PENDING_TICKS_FILE + " is unreadable; the tick waits", e);
             return Queued.UNREADABLE;
         }
-        String wanted = TickKeys.taskDay(taskId, dateKey);
+        boolean plus = TickKeys.PLUS_ONE.equals(kind);
+        String wanted = plus ? TickKeys.ack(taskId, dateKey, tickedAt) : TickKeys.taskDay(taskId, dateKey);
         for (int i = 0; i < queue.length(); i++) {
             JSONObject t = queue.optJSONObject(i);
-            if (t != null && wanted.equals(TickKeys.taskDay(t.optString("taskId"), t.optString("dateKey")))) {
-                return Queued.ALREADY_QUEUED;
-            }
+            if (t == null || !kind.equals(t.optString("kind"))) continue;
+            String have = plus ? key(t) : TickKeys.taskDay(t.optString("taskId"), t.optString("dateKey"));
+            if (wanted.equals(have)) return Queued.ALREADY_QUEUED;
         }
         if (queue.length() >= MAX_TICKS) {
             Log.w(TAG, "Pending Tick queue is full; the tick waits until Hunt drains it");
             return Queued.FULL;
         }
         try {
-            queue.put(new JSONObject().put("taskId", taskId).put("dateKey", dateKey).put("tickedAt", tickedAt));
+            JSONObject tick = new JSONObject().put("taskId", taskId).put("dateKey", dateKey).put("tickedAt", tickedAt);
+            if (!kind.isEmpty()) tick.put("kind", kind);
+            queue.put(tick);
             HuntFiles.writeText(queueFile(dir), queue.toString());
             return Queued.ADDED;
         } catch (JSONException | IOException | RuntimeException e) {
@@ -203,8 +218,16 @@ final class PendingTicks {
 
     /** What the widget knows of the queue, for hiding queued Tasks ({@link #queued}). */
     static final class Listing {
-        /** {@link TickKeys#taskDay} of every queued tick: a Task is hidden only on the day it was ticked for. */
+        /**
+         * {@link TickKeys#taskDay} of every queued done or Slip tick: a Task is hidden only on the
+         * day it was ticked for.
+         */
         final Set<String> keys;
+        /**
+         * {@link TickKeys#taskDay} -> how many "+1" ticks are queued for that Count row. They never
+         * hide it; the row adds them to the progress it shows.
+         */
+        final Map<String, Integer> plusCounts = new HashMap<>();
         /**
          * False when the queue could not be read or parsed. The widget then offers no tick at all
          * until a read succeeds: an empty key set alone would show already-queued Tasks as
@@ -221,6 +244,7 @@ final class PendingTicks {
     /** Widget: the Task-day keys waiting in the queue, so the widget hides them right away. Any thread. */
     static Listing queued(File dir) {
         Set<String> keys = new HashSet<>();
+        Listing listing = new Listing(keys, true);
         synchronized (HuntFiles.LOCK) {
             JSONArray queue;
             try {
@@ -231,10 +255,13 @@ final class PendingTicks {
             }
             for (int i = 0; i < queue.length(); i++) {
                 JSONObject t = queue.optJSONObject(i);
-                if (t != null) keys.add(TickKeys.taskDay(t.optString("taskId"), t.optString("dateKey")));
+                if (t == null) continue;
+                String taskDay = TickKeys.taskDay(t.optString("taskId"), t.optString("dateKey"));
+                if (TickKeys.PLUS_ONE.equals(t.optString("kind"))) listing.plusCounts.merge(taskDay, 1, Integer::sum);
+                else keys.add(taskDay);
             }
         }
-        return new Listing(keys, true);
+        return listing;
     }
 
     /**

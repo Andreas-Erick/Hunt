@@ -11,18 +11,67 @@
  */
 export {
   computeHabitStreak,
+  dateKeyFromOffset,
   habitTaskId,
   isMissedHabitTask,
   isOpenTask,
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey } from "../lib/habitDay";
+export { completionDateKey, habitRowMode, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
+export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
+export { habitSuccessRate, habitSuccessRateLabel, habitWeekStrip } from "../lib/habitInsight";
+export {
+  countProgressLabel,
+  countTargetOf,
+  formatCountAmount,
+  habitDayAmount,
+  habitKindOf,
+  habitKindRules,
+  isCountTarget,
+  MAX_COUNT_UNIT_LENGTH,
+  parseCountAmount,
+} from "../lib/habitKind";
+export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
+export { habitEndDateLabel, isEndedHabit, withHabitEndDate } from "../lib/habitEnd";
+export { avoidDayLabel, habitDaySlips } from "../lib/habitKind";
+export { logHabitSlip, undoHabitSlip } from "../lib/habitAvoid";
+export {
+  applyChecklistEdit,
+  canHoldChecklist,
+  checklistOf,
+  checklistProgress,
+  newChecklistItemId,
+} from "../lib/checklist";
+export {
+  applyListEdit,
+  buildList,
+  cleanListTitle,
+  listItemsOf,
+  listProgress,
+  MAX_LIST_TITLE_LENGTH,
+  newListId,
+  sanitizeList,
+} from "../lib/lists";
+export {
+  HABIT_WEEKDAYS,
+  habitFrequencyLabel,
+  habitFrequencyOn,
+  isFrequencyAllowedFor,
+  isHabitScheduledOn,
+  MAX_TIMES_PER_WEEK,
+  parseHabitFrequency,
+  parseHabitFrequencyFor,
+  sameHabitFrequency,
+  withHabitFrequency,
+} from "../lib/habitFrequency";
+export { habitSkipRows } from "../lib/habitSkip";
 export {
   canonicalString,
   compareRank,
   isSafeSyncId,
   losingSessionEndAt,
+  MAX_CHECKLIST_TEXT_LENGTH,
   mergeSyncPayloads,
   sameContent,
   SYNCED_ENTITY_KEYS,
@@ -34,9 +83,31 @@ export {
   buildBurstLog,
   buildHabitTaskRow,
   completeTaskRow,
+  habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   pickNextFocusTask,
   sessionLogId,
+  skipHabitDayRow,
 } from "../lib/taskQueue";
 export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
 export { applyPendingTicks } from "../lib/pendingTicks";
+export { dueReminders, isReminderTime } from "../lib/reminders";
+export { MAX_HABIT_REMINDER_TIMES, sanitizeHabitReminderTimes } from "../lib/reminderTime";
+export { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "../lib/reminderPlan";
+export {
+  correctHabitDayRow,
+  habitDayActions,
+  habitMonth,
+  habitStartKey,
+  habitWeekSkipMark,
+  shiftMonthKey,
+} from "../lib/habitCalendar";
+export {
+  formatCountTotal,
+  HABIT_SCORE_EXPLANATION,
+  HABIT_SCORE_WEIGHT,
+  habitMonthAmounts,
+  habitScore,
+  habitYearTotals,
+} from "../lib/habitStats";

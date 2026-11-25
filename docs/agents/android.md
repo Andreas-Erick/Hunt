@@ -10,8 +10,9 @@ ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks).
 - **Hunt rules live in HuntCore, never in Java.** The page builds the
   Widget Snapshot (`src/lib/widgetSnapshot.ts`) and applies Pending
   Ticks (`src/lib/pendingTicks.ts`); Java only draws and queues.
-- **Only the bridge writes the state file.** Widget code appends to
-  the Pending Tick queue through `PendingTicks`; nothing else.
+- **Only the bridge writes the state file.** Widget code and a
+  reminder's Done / +1 (`ReminderActions`) append to the Pending Tick
+  queue through `PendingTicks.append`; nothing else.
 - **Every file read and write holds `HuntFiles.LOCK`** and writes go
   through `HuntFiles` (atomic, `AtomicFile`). A read error is not an
   empty file: never write over a file you could not read.
@@ -19,8 +20,19 @@ ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks).
   `DayWidgetService`, `StatsWidgetProvider` or `DayWidgetTapActivity`
   removes users' placed widgets. PendingIntent request codes live in
   `WidgetRequestCodes` and never change value.
-- **Permissions are pinned** to INTERNET, ACCESS_NETWORK_STATE and
-  VIBRATE (a test). Midnight refresh uses inexact `AlarmManager.set`.
+- **Permissions are pinned** to INTERNET, ACCESS_NETWORK_STATE,
+  VIBRATE and, for reminders, POST_NOTIFICATIONS,
+  SCHEDULE_EXACT_ALARM and RECEIVE_BOOT_COMPLETED (a test).
+  Midnight refresh uses inexact `AlarmManager.set`.
+- **Reminders only arm and post** (ADR-0007). The page hands the
+  bridge the Reminder Plan from HuntCore's `reminderPlan`; only
+  the bridge writes `hunt-reminder-plan.json`. `Reminders` posts
+  each key once and arms one exact alarm (inexact without the
+  grant); `ReminderAlarmReceiver` re-arms after boot, clock and
+  update. Request codes and the channel id never change.
+  Notification buttons go to `ReminderActionReceiver`: Done / +1
+  queue the plan entry's `action` tick, Snooze writes only the
+  shell's own `hunt-reminder-snoozes.json` (`ReminderSnoozes`).
 - **Same signing key, always.** A different cert forces an uninstall,
   which wipes on-phone data. Never `adb uninstall`; use `install -r`.
 - **Row taps go through `DayWidgetTapActivity`.** A broadcast receiver

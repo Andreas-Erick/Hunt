@@ -12,6 +12,7 @@ import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
 import { compareRank } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
+import { onOpenTaskRequest, revealWhenDrawn, takeOpenTaskRequest } from "@/lib/openItemRequest";
 import {
   COMPLETION_HIGHLIGHT_MS,
   captureTaskCompletionScene,
@@ -64,6 +65,19 @@ export function CommandCenterView() {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   // Notes toggle of the expanded task; Escape in the drawer returns focus here.
   const expandedToggleRef = useRef<HTMLButtonElement | null>(null);
+
+  // A reminder's click (openItemRequest) opens its Task's row here: drawer open, scrolled to, no filter.
+  useEffect(() => {
+    const open = () => {
+      const taskId = takeOpenTaskRequest();
+      if (!taskId) return;
+      setFilterQuestId("ALL");
+      setExpandedTaskId(taskId);
+      revealWhenDrawn("taskId", taskId);
+    };
+    open();
+    return onOpenTaskRequest(open);
+  }, []);
 
   // Recently completed task id for tactile arrival highlight & checkmark draw
   const [justCompletedId, flashJustCompleted] = useTransientHighlight(

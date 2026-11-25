@@ -28,11 +28,81 @@ export interface Quest {
   completedAt?: number;
 }
 
+/**
+ * How a Habit's day succeeds (GLOSSARY: Habit Kind). Chosen when the Habit is
+ * made and never changed. A row without one is a Check Habit.
+ */
+export type HabitKind = "check" | "count" | "avoid";
+
+/** A day of the week as Date#getDay counts it: 0 = Sunday … 6 = Saturday. */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
+ * Which days a Habit asks for (GLOSSARY: Frequency). Tagged by `type` so later
+ * Frequencies (N per Habit Week) join the union without reshaping stored rows.
+ */
+export type HabitFrequency =
+  | { type: "everyDay" }
+  | { type: "weekdays"; weekdays: Weekday[] } // non-empty, ascending, unique
+  | { type: "perWeek"; times: number }; // N times per Habit Week, an integer 1-7
+
+/** One Frequency change: `frequency` is in force from `effectiveFrom` (YYYY-MM-DD) on. */
+export interface HabitFrequencyChange {
+  effectiveFrom: string;
+  frequency: HabitFrequency;
+}
+
 export interface Habit {
   id: string;
   title: string;
   notes: string;
   questId: string | null; // null = Other / Maintenance work
+  rank: number;
+  createdAt: number;
+  updatedAt?: number;
+  /** Habit Kind; missing on rows made before Kinds existed, which read as "check". */
+  kind?: HabitKind;
+  /** Count Habit: the day's total that makes it Met (a positive number). */
+  target?: number;
+  /** Count Habit: what is counted, e.g. "miles" (may be empty). */
+  unit?: string;
+  /**
+   * Frequency changes, ascending by `effectiveFrom` (habitFrequency.ts). Days
+   * before the first change, and rows without the field, are every day.
+   */
+  frequencyHistory?: HabitFrequencyChange[];
+  /** The last day (YYYY-MM-DD) the Habit asks for; after it, it is an Ended Habit (habitEnd.ts). */
+  endDate?: string;
+  /**
+   * Earlier stretches the Habit was Ended, kept when it was restarted (its end date cleared or
+   * moved), ascending. Their days have no Outcome, so a restart never counts them against it.
+   */
+  endedSpans?: HabitEndedSpan[];
+  /** Local "HH:MM" times to remind on each Open scheduled day, ascending (ADR-0007). */
+  reminderTimes?: string[];
+}
+
+/** Days `from`..`to` (YYYY-MM-DD, inclusive) a restarted Habit spent Ended. */
+export interface HabitEndedSpan {
+  from: string;
+  to: string;
+}
+
+/** One item to tick inside a Task's Checklist. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * A standalone List: a name and items to tick, outside any Task. No date, no
+ * Quest, no focus time. Its items use the Checklist item shape and rules.
+ */
+export interface List {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
   rank: number;
   createdAt: number;
   updatedAt?: number;
@@ -50,9 +120,22 @@ export interface Task {
   accumulatedSeconds: number;
   scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
   habitId?: string; // Source Habit.id when materialized from a daily habit
+  /** A habit day set aside on purpose: its Outcome is Skipped (GLOSSARY). Habit day Tasks only. */
+  skipped?: boolean;
+  checklist?: ChecklistItem[]; // ordered; never on a habit day Task
+  reminderTime?: string; // Local "HH:MM" on a dated Task; none = date-only (ADR-0007)
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;
+  /** A Count Habit's day Task: the day's one total (+1 and exact entry both write it). */
+  amount?: number;
+  /**
+   * A Count Habit's day Task: tap time of the newest `+1` Pending Tick applied to it, so the
+   * same queued tick read again is never counted twice.
+   */
+  countTickedAt?: number;
+  /** An Avoid Habit's day Task: how many Slips were logged that day; any at all makes it Missed. */
+  slips?: number;
 }
 
 export interface TimeLog {

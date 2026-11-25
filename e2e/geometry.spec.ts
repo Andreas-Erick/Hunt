@@ -34,6 +34,9 @@ const PHONE_APP_VIEWPORTS = [
  */
 const MIN_PLAN_TITLE_WIDTH = 100;
 
+/** The seeded List's name (e2e/fixtures.ts). */
+const LONG_LIST_TITLE = LONG_QUEST_TITLE + LONG_QUEST_TITLE;
+
 /** The phone app's localStorage key (STORAGE_KEY in public/hunt-mobile.html). */
 const MOBILE_STORAGE_KEY = "hunt-mobile-standalone-v1";
 
@@ -117,6 +120,158 @@ async function expectNoHorizontalOverflow(
   }
 }
 
+/**
+ * The Checklist editor (`[role=group][aria-label=Checklist]`) keeps every item control inside its
+ * own box (a card with overflow hidden would clip, not scroll, so the page check cannot see it),
+ * and each control is at least `minTarget` px square. `what` names the box in a failure (another
+ * clipping card, such as an Ended Habit's, is checked the same way).
+ */
+async function checkChecklistEditor(
+  page: Page,
+  editor: ReturnType<Page["locator"]>,
+  minTarget: number,
+  where: string,
+  failures: string[],
+  what = "Checklist"
+): Promise<void> {
+  await expect(editor).toBeVisible();
+  await settle(page);
+  const problems = await editor.evaluate((root, min) => {
+    const box = root.getBoundingClientRect();
+    const out: string[] = [];
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>("button, input"))) {
+      const r = el.getBoundingClientRect();
+      const name = el.getAttribute("aria-label") || el.tagName.toLowerCase();
+      if (r.right > box.right + 1 || r.left < box.left - 1) {
+        out.push(`"${name.slice(0, 40)}" spans x=${Math.round(r.left)}..${Math.round(r.right)} outside ${Math.round(box.left)}..${Math.round(box.right)}`);
+      }
+      if (el.tagName === "BUTTON" && (r.width < min - 0.5 || r.height < min - 0.5)) {
+        out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px (< ${min}px)`);
+      }
+    }
+    return out;
+  }, minTarget);
+  for (const p of problems) failures.push(`${where} ${what}: ${p}`);
+}
+
+/**
+ * The Habit detail's Calendar tab (#25) with a day chosen: the screen lies inside the viewport,
+ * every control inside the screen's box, and each control at least `minTarget` px tall and wide,
+ * except a calendar day (CODING_STANDARDS: 7-column calendar exception): it is at least 44px tall
+ * and `minDayWidth` px wide, and neighbouring days sit 8px apart, or, where seven 44px days and
+ * 8px gaps do not fit in the row, as far apart as the row leaves room for.
+ */
+async function checkHabitDetail(
+  page: Page,
+  root: ReturnType<Page["locator"]>,
+  sizes: { minTarget: number; minDayWidth: number },
+  where: string,
+  failures: string[]
+): Promise<void> {
+  await expect(root).toBeVisible();
+  const day = root.getByRole("button", { name: /^\d+ \w+: (Met|Missed|Skipped|Open)$/ }).first();
+  await day.click();
+  await expect(root.getByRole("button", { name: /^(Tick|Untick) / })).toBeVisible();
+  await settle(page);
+  const problems = await root.evaluate((el, { minTarget, minDayWidth }) => {
+    const box = el.getBoundingClientRect();
+    const out: string[] = [];
+    if (box.left < -1 || box.right > window.innerWidth + 1) {
+      out.push(`screen spans x=${Math.round(box.left)}..${Math.round(box.right)} outside 0..${window.innerWidth}`);
+    }
+    // The phone sheet's shared Close button reaches 48px through its ::after hit area.
+    for (const b of Array.from(el.querySelectorAll<HTMLElement>("button:not(.sheet-close)"))) {
+      const r = b.getBoundingClientRect();
+      const name = b.getAttribute("aria-label") || (b.textContent || "").trim();
+      const isDay = /^\d+ \w+: /.test(name);
+      const minWidth = isDay ? minDayWidth : minTarget;
+      const minHeight = isDay ? Math.max(minTarget, 44) : minTarget;
+      if (r.right > box.right + 1 || r.left < box.left - 1) {
+        out.push(`"${name.slice(0, 40)}" spans x=${Math.round(r.left)}..${Math.round(r.right)} outside ${Math.round(box.left)}..${Math.round(box.right)}`);
+      }
+      if (r.height < minHeight - 0.5 || r.width < minWidth - 0.5) {
+        out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);
+      }
+    }
+    // Neighbouring days in a row: 8px apart, or the largest gap seven 44px days leave room for.
+    const days = Array.from(el.querySelectorAll<HTMLElement>("button[aria-label], span[aria-label]")).filter((d) =>
+      /^\d+ \w+: /.test(d.getAttribute("aria-label") || "")
+    );
+    const row = days[0]?.parentElement?.getBoundingClientRect();
+    const wantGap = row ? Math.max(0, Math.min(8, (row.width - 7 * 44) / 6)) : 8;
+    for (let i = 1; i < days.length; i++) {
+      const a = days[i - 1].getBoundingClientRect();
+      const b = days[i].getBoundingClientRect();
+      if (Math.abs(a.top - b.top) > 1) continue; // the next week's row
+      const gap = b.left - a.right;
+      if (gap < wantGap - 0.5) {
+        out.push(`days "${days[i - 1].getAttribute("aria-label")}" and the next are ${gap.toFixed(1)}px apart (< ${wantGap.toFixed(1)}px)`);
+      }
+    }
+    return out;
+  }, sizes);
+  for (const problem of problems) failures.push(`${where} Habit detail: ${problem}`);
+}
+
+/**
+ * The Habit detail's Statistics tab (#26) of a Count Habit: the Habit Score, the month chart and
+ * the yearly totals lie inside the screen's box, the chart's columns inside the chart, and each
+ * control is at least `minTarget` px tall and wide.
+ */
+async function checkHabitStatistics(
+  page: Page,
+  root: ReturnType<Page["locator"]>,
+  minTarget: number,
+  where: string,
+  failures: string[]
+): Promise<void> {
+  await root.getByRole("tab", { name: "Statistics" }).click();
+  await expect(root.getByText("Habit Score")).toBeVisible();
+  await expect(root.getByRole("table", { name: /^Totals per month/ })).toBeVisible();
+  await settle(page);
+  const problems = await root.evaluate((el, minTarget) => {
+    const box = el.getBoundingClientRect();
+    const out: string[] = [];
+    const inside = (r: DOMRect, outer: DOMRect) => r.left >= outer.left - 1 && r.right <= outer.right + 1;
+    const chart = el.querySelector<HTMLElement>('[aria-label^="Daily amounts,"]');
+    if (!chart) out.push("no month chart");
+    const chartBox = chart?.getBoundingClientRect();
+    for (const bar of Array.from(chart?.querySelectorAll<HTMLElement>("li") ?? [])) {
+      if (chartBox && !inside(bar.getBoundingClientRect(), chartBox)) out.push(`column "${bar.getAttribute("aria-label")}" leaves the chart`);
+    }
+    for (const node of Array.from(el.querySelectorAll<HTMLElement>("section, table, tr, td, th, ol"))) {
+      if (!inside(node.getBoundingClientRect(), box)) out.push(`${node.tagName.toLowerCase()} "${(node.getAttribute("aria-label") || node.textContent || "").trim().slice(0, 40)}" leaves the screen`);
+    }
+    for (const b of Array.from(el.querySelectorAll<HTMLElement>("button:not(.sheet-close)"))) {
+      const r = b.getBoundingClientRect();
+      const name = b.getAttribute("aria-label") || (b.textContent || "").trim();
+      if (!inside(r, box)) out.push(`"${name.slice(0, 40)}" leaves the screen`);
+      if (r.height < minTarget - 0.5 || r.width < minTarget - 0.5) out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);
+    }
+    return out;
+  }, minTarget);
+  for (const problem of problems) failures.push(`${where} Habit Statistics: ${problem}`);
+}
+
+/**
+ * Every phone Habit card keeps its rows (Count progress, week strip, Streak, Success Rate) inside
+ * the card: the card clips, so the page-level overflow check cannot see a row that runs past it.
+ */
+async function checkPhoneHabitCards(page: Page, where: string, failures: string[]): Promise<void> {
+  const problems = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>(".habits-grid .queue-item-card")).flatMap((card, i) => {
+      const box = card.getBoundingClientRect();
+      return Array.from(card.querySelectorAll<HTMLElement>(".queue-item-sub *"))
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && (r.left < box.left - 1 || r.right > box.right + 1);
+        })
+        .map((el) => `card ${i + 1}: ${el.tagName.toLowerCase()}.${el.className} runs past the card`);
+    })
+  );
+  for (const problem of problems) failures.push(`${where} Habits: ${problem}`);
+}
+
 // ---------------------------------------------------------------------------
 // Desktop app (/)
 // ---------------------------------------------------------------------------
@@ -131,7 +286,7 @@ async function seedDesktopDb(page: Page, fixtures: GeometryFixtures): Promise<vo
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
-      const stores = ["quests", "tasks", "habits", "timeLogs"] as const;
+      const stores = ["quests", "tasks", "habits", "lists", "timeLogs"] as const;
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(stores as unknown as string[], "readwrite");
         for (const name of stores) {
@@ -165,6 +320,7 @@ const DESKTOP_VIEWS: Array<{ nav: string; marker?: (page: Page) => Promise<void>
   { nav: "Plan", marker: (p) => expect(p.getByText(LONG_TASK_TITLE).first()).toBeVisible() },
   { nav: "Quests", marker: (p) => expect(p.getByText(LONG_QUEST_TITLE).first()).toBeVisible() },
   { nav: "Habits", marker: (p) => expect(p.getByText(URL_TASK_TITLE).first()).toBeVisible() },
+  { nav: "Lists", marker: (p) => expect(p.getByRole("region", { name: LONG_LIST_TITLE })).toBeVisible() },
   {
     nav: "Review",
     marker: (p) => expect(p.locator('button[aria-haspopup="listbox"]')).toBeVisible(),
@@ -234,6 +390,51 @@ test.describe(`desktop app geometry (${look})`, () => {
         if (view.nav === "Review") await checkReviewScopeMenu(page, vp, failures);
       }
 
+      // The Habit detail screen, Calendar tab, with a day chosen.
+      await clickDesktopNav(page, "Habits");
+      await page.getByRole("button", { name: `Open habit: ${URL_TASK_TITLE}` }).click();
+      const detail = page.getByRole("dialog");
+      await checkHabitDetail(page, detail, { minTarget: 32, minDayWidth: 44 }, `${label(vp)} desktop`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habit detail`);
+      await page.keyboard.press("Escape");
+      await expect(detail).toHaveCount(0);
+
+      // The Count Habit's detail, Statistics tab (month chart, yearly totals), long unit and all.
+      await page
+        .locator("[data-testid='habit-row'][data-habit-id='habit-count']")
+        .getByRole("button", { name: `Open habit: ${LONG_TASK_TITLE}` })
+        .click();
+      await checkHabitStatistics(page, page.getByRole("dialog"), 32, `${label(vp)} desktop`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habit Statistics`);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+
+      // The collapsed Ended section on Habits, opened: the Ended Habit's card keeps its controls.
+      await clickDesktopNav(page, "Habits");
+      await page.getByRole("button", { name: "Ended (1)" }).click();
+      const endedCard = page.getByTestId("ended-habit-row");
+      await checkChecklistEditor(page, endedCard, 32, `${label(vp)} desktop Habits`, failures, "Ended Habit card");
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habits Ended section`);
+
+      // The Checklist editor inside the long Task's drawer (n/m progress shows on its row).
+      await clickDesktopNav(page, "Home");
+      const longRow = page.locator("[data-testid='task-row'][data-task-id='task-long']");
+      await expect(longRow.getByLabel("Checklist: 1 of 3 done")).toBeVisible();
+      await longRow.getByTitle("Task notes & options").click();
+      await checkChecklistEditor(page, longRow.getByRole("group", { name: "Checklist" }), 32, `${label(vp)} desktop Home`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Home drawer`);
+
+      // The long Habit's edit panel: its reminder time chips and Add control.
+      await clickDesktopNav(page, "Habits");
+      await page.locator("[data-habit-id='habit-long']").getByRole("button", { name: /^Edit habit/ }).click();
+      const reminders = page.locator("[data-habit-id='habit-long']").getByRole("group", { name: /^Reminders/ });
+      await checkChecklistEditor(page, reminders, 32, `${label(vp)} desktop Habits reminders`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habits edit`);
+
+      // The seeded List's card: its item editor and actions stay inside the card, 32px targets.
+      await clickDesktopNav(page, "Lists");
+      await checkChecklistEditor(page, page.getByRole("region", { name: LONG_LIST_TITLE }), 32, `${label(vp)} desktop Lists`, failures);
+
       // Focus hides the header, so it goes last.
       await clickDesktopNav(page, "Focus");
       await expect(page.locator("header")).toHaveCount(0);
@@ -255,6 +456,7 @@ const MOBILE_VIEWS: Array<{ name: string; bodyView: string; open: string | null 
   { name: "Plan", bodyView: "plan", open: "#nav-plan" },
   { name: "Quests", bodyView: "quests", open: "#nav-quests" },
   { name: "Habits", bodyView: "habits", open: "#nav-habits" },
+  { name: "Lists", bodyView: "lists", open: "#nav-lists" },
   { name: "Review", bodyView: "telemetry", open: "#reviewBtn" },
   { name: "Guide", bodyView: "guide", open: null },
   { name: "Focus", bodyView: "focus", open: "#nav-focus" },
@@ -324,6 +526,51 @@ test.describe(`phone app geometry (${look})`, () => {
           await checkTabletPlanTitles(page, vp, failures);
         }
       }
+
+      // The Habits screen's Ended section, opened: the Ended Habit's card (48px Android targets).
+      await openMobileView(page, MOBILE_VIEWS.find((v) => v.bodyView === "habits")!);
+      await page.getByLabel("Ended habits (1)").click();
+      const endedCard = page.locator("[data-ended-habit]");
+      await checkChecklistEditor(page, endedCard, 48, `${label(vp)} phone-app Habits`, failures, "Ended Habit card");
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habits Ended section`);
+
+      // The seeded List's card: item editor and actions inside the card, 48px Android targets.
+      await openMobileView(page, MOBILE_VIEWS.find((v) => v.bodyView === "lists")!);
+      await checkChecklistEditor(page, page.locator("#mainContainer section.list-card").first(), 48, `${label(vp)} phone-app Lists`, failures);
+
+      // Task Options of the long Task: its Checklist editor (48px Android targets).
+      await openMobileView(page, MOBILE_VIEWS[0]);
+      await expect(page.getByLabel("Checklist: 1 of 3 done").first()).toBeVisible();
+      await page.evaluate(() => {
+        (window as unknown as { openTaskInspectorSheet: (id: string) => void }).openTaskInspectorSheet("task-long");
+      });
+      const sheetEditor = page.locator("#sheetContainer").getByRole("group", { name: "Checklist" });
+      await checkChecklistEditor(page, sheetEditor, 48, `${label(vp)} phone-app Task Options`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Task Options`);
+      await page.evaluate(() => (window as unknown as { closeSheet: () => void }).closeSheet());
+
+      // The Habit detail sheet, Calendar tab, with a day chosen (48px Android targets; a day shares
+      // its row with six others, so it needs 44px).
+      await openMobileView(page, MOBILE_VIEWS[3]);
+      await checkPhoneHabitCards(page, `${label(vp)} phone-app`, failures);
+      await page.locator(".habits-grid .queue-item-body").first().click();
+      const habitPanel = page.locator("#sheetContainer [role=dialog]");
+      await checkHabitDetail(page, habitPanel, { minTarget: 48, minDayWidth: 44 }, `${label(vp)} phone-app`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit detail`);
+      await page.evaluate(() => (window as unknown as { closeSheet: () => void }).closeSheet());
+
+      // The Count Habit's detail sheet, Statistics tab.
+      await page.locator(".habits-grid .queue-item-body[onclick*='habit-count']").click();
+      await checkHabitStatistics(page, habitPanel, 48, `${label(vp)} phone-app`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit Statistics`);
+
+      // The long Habit's sheet: its reminder time chips and Add control (48px Android targets).
+      await page.evaluate(() => {
+        (window as unknown as { openHabitEditorSheet: (id: string) => void }).openHabitEditorSheet("habit-long");
+      });
+      const habitReminders = page.locator("#sheetContainer").getByRole("group", { name: "Habit reminders" });
+      await checkChecklistEditor(page, habitReminders, 48, `${label(vp)} phone-app Habit reminders`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit sheet`);
 
       expect(failures, failures.join("\n")).toEqual([]);
     });

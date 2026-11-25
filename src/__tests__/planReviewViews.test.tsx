@@ -1120,9 +1120,9 @@ describe("corrupted accents", () => {
 
     render(<PlanWeekView />);
     await screen.findByRole("button", { name: "On violet" });
-    const pill = screen.getByRole("button", { name: "Violet quest", pressed: true });
+    const pill = await screen.findByRole("button", { name: "Violet quest", pressed: true });
     expect(pill.querySelector("span")).toHaveClass("bg-slate-500");
-    expect(screen.getByText("Done on violet")).toBeInTheDocument();
+    expect(await screen.findByText("Done on violet")).toBeInTheDocument();
     cleanup();
 
     render(<TelemetryDashboardView />);

@@ -49,6 +49,46 @@ associativity and idempotence over 400 seeds.
 - Tombstone lists are capped at 5,000 per collection
   (`MAX_TOMBSTONES_PER_KIND`). A device offline long enough
   to miss more deletions than that can bring old rows back.
+- A Task's Checklist is stored on the Task row and merges
+  with it as one row. Two devices that edit the same
+  Checklist while apart keep only the newer row's items.
+  This is accepted: Checklists are short and edited on one
+  device at a time.
+- Standalone Lists are a synced collection of their own
+  (`lists`, tombstones in `deletedListIds`). A List's items
+  live on the List row and merge with it, as a Checklist
+  does with its Task: two devices that edit the same List
+  while apart keep only the newer row's items. Payloads
+  from older devices carry no `lists` and read as none.
+- A Habit's Frequency history (`frequencyHistory`) is also a
+  list stored on its row: if two devices change the
+  Frequency while apart, the later Habit row wins with its
+  whole history. The validator rebuilds the list from known
+  shapes only (`sanitizeHabitFrequencyHistory`), so it stays
+  bounded.
+- A Skipped Habit Week (N times per week) has no row of its
+  own. The Skip is the `skipped` flag on the day Task of the
+  day it was made (`habitSkipRows`), and the week reads
+  Skipped while any of its day Tasks carries the flag. So a
+  Skip races only with a tick of that same day, never with
+  another day's row, and the week's Outcome is a function of
+  the merged rows, whatever order they arrive in. Undo clears
+  the flag on every day Task of the week; a Skip made on one
+  device for a different day while the other undoes keeps
+  the week Skipped. This is accepted: Skipping is rare, and
+  Undo can be repeated.
+- A Habit's end date (`endDate`) and the stretches it spent
+  Ended before a restart (`endedSpans`) ride on its row the
+  same way: the later Habit row wins with both. The
+  validator keeps only valid date keys
+  (`sanitizeHabitEnd`), at most 100 stretches.
+- A Count Habit stores one running total per day, and the
+  whole row wins or loses. If two devices each add to the
+  same day while out of sync, one of the additions is lost.
+  This is accepted: one person rarely logs on two devices
+  at once.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
-  validator, and a Dexie table.
+  validator (in its own module: `lists.ts` for Lists), a
+  Dexie table in a new schema version, and a slot in the
+  phone's saved state (`getEmptyState`, `guardSyncState`).

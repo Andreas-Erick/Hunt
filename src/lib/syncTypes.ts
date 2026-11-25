@@ -1,24 +1,42 @@
 import type {
   ActiveFocusState,
   Habit,
+  List,
   Quest,
   QuestAccent,
   Task,
   TaskStatus,
   TimeLog,
 } from "./domainTypes";
+import { toLocalDateKey } from "./dateKeys";
+import { sanitizeCountDayFields, sanitizeHabitKindFields, sanitizeSlipFields } from "./habitKind";
+import { sanitizeChecklist } from "./checklist";
+import { isReminderTime, sanitizeHabitReminderTimes } from "./reminderTime";
+import { entityIdOrNull, isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
+import { sanitizeHabitEnd } from "./habitEnd";
+import { copyScalarExtras } from "./syncRowExtras";
+import { MAX_SYNC_LISTS, sanitizeList } from "./lists";
+import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
+import {
+  clamp, clampText, finiteOr, isDateKey, isRecord, isStamp, isTableKey, type UnknownRecord,
+} from "./syncValues";
 
 export type { ActiveFocusState } from "./domainTypes";
+export { MAX_CHECKLIST_ITEMS, MAX_CHECKLIST_TEXT_LENGTH } from "./checklist";
+export { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH, SAFE_ID_CHARS_RE, SAFE_ID_RE } from "./syncIds";
 
 export interface SyncPayload {
   quests: Quest[];
   tasks: Task[];
   timeLogs: TimeLog[];
   habits?: Habit[];
+  /** Standalone Lists (absent from older devices: read as none). */
+  lists?: List[];
   deletedQuestIds?: string[];
   deletedTaskIds: string[];
   deletedLogIds: string[];
   deletedHabitIds?: string[];
+  deletedListIds?: string[];
   activeFocus: ActiveFocusState;
   lastSyncedAt: number;
 }
@@ -145,7 +163,7 @@ export function pickRowWinner<T extends object>(
 type StampedRow = { updatedAt?: number; completedAt?: number | null; createdAt?: number };
 
 /**
- * SHARED RULE R1 stamp of a quest or habit row: `updatedAt ?? createdAt ?? 0`.
+ * SHARED RULE R1 stamp of a quest, habit or List row: `updatedAt ?? createdAt ?? 0`.
  * A quest's completedAt is NOT part of it (the phone uses the same rule).
  */
 export function questOrHabitRowStamp(row: StampedRow): number {
@@ -227,10 +245,12 @@ export function syncPayloadHasContent(payload: Partial<SyncPayload> | null | und
       len(payload.tasks) +
       len(payload.timeLogs) +
       len(payload.habits) +
+      len(payload.lists) +
       len(payload.deletedQuestIds) +
       len(payload.deletedTaskIds) +
       len(payload.deletedLogIds) +
-      len(payload.deletedHabitIds) >
+      len(payload.deletedHabitIds) +
+      len(payload.deletedListIds) >
     0
   );
 }
@@ -241,10 +261,12 @@ export function createEmptySyncPayload(): SyncPayload {
     tasks: [],
     timeLogs: [],
     habits: [],
+    lists: [],
     deletedQuestIds: [],
     deletedTaskIds: [],
     deletedLogIds: [],
     deletedHabitIds: [],
+    deletedListIds: [],
     activeFocus: {
       activeTaskId: null,
       isRunning: false,
@@ -265,27 +287,6 @@ export const MAX_QUEST_TITLE_LENGTH = 300;
 export const MAX_HABIT_TITLE_LENGTH = 300;
 /** Longest task title (and log title snapshot) kept; longer ones are cut. */
 export const MAX_TASK_TITLE_LENGTH = 1000;
-/** Longest quest/task id, quest/task tombstone, questId or log taskId accepted. */
-export const MAX_ENTITY_ID_LENGTH = 128;
-/** Longest time-log id or log tombstone accepted (`log-<sessionStartedAt>-<taskId>`). */
-export const MAX_LOG_ID_LENGTH = 160;
-/** Characters of every generated id (`tsk-<ms>-<4>`, `quest-<ms>-<4>`, `log-<ms>-<taskId>`, seeds). */
-export const SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
-/** A safe quest/task id: same as `isSafeSyncId(value, MAX_ENTITY_ID_LENGTH)`. */
-export const SAFE_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
-
-/** True for a non-empty id of SAFE_ID_CHARS_RE characters, at most `maxLength` long. */
-export function isSafeSyncId(
-  value: unknown,
-  maxLength: number = MAX_ENTITY_ID_LENGTH
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    SAFE_ID_CHARS_RE.test(value)
-  );
-}
 
 // History is never pruned, so a count cap normal use can reach would one day
 // reject every sync. These sit above what the server's 16 MB byte cap
@@ -295,14 +296,11 @@ const MAX_SYNC_HABITS = 200;
 const MAX_SYNC_TASKS = 100_000;
 const MAX_SYNC_LOGS = 100_000;
 export const MAX_LONG_TEXT_LENGTH = 20_000; // notes, description; localStore cuts to it too
-const MAX_EXTRA_TEXT_LENGTH = 10_000; // string values of fields not listed below
 const MAX_COUNTER_SECONDS = 1e9;
 const MAX_WEEKLY_HOURS = 168;
 const DEFAULT_WEEKLY_HOURS = 10;
-const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** 9999-12-31T00:00Z: the local date stays 4-digit-year in every time zone up to here. */
 const MAX_DATE_KEY_MS = 253_402_214_400_000;
-const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 const QUEST_ACCENTS: Record<QuestAccent, true> = {
   cyan: true,
@@ -328,10 +326,12 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "skipped", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
+  "amount", "countTickedAt", "slips",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
+  "kind", "target", "unit", "endDate", "endedSpans", "reminderTimes",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -368,78 +368,6 @@ type LogRow = Omit<TimeLog, "taskTitleSnapshot" | "endTime" | "questCodeSnapshot
   taskTitleSnapshot?: string;
   endTime?: number;
 };
-
-type UnknownRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Own-key lookup, so "constructor" or "__proto__" never match a table entry. */
-function isTableKey<K extends string>(table: Record<K, true>, value: unknown): value is K {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(table, value);
-}
-
-/** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
-function isStamp(value: unknown): value is number {
-  return typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-}
-
-function isDateKey(value: unknown): value is string {
-  return typeof value === "string" && DATE_KEY_RE.test(value);
-}
-
-function finiteOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/** Cuts `text` to at most `max` UTF-16 units without splitting a surrogate pair. */
-function clampText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
-function entityIdOrNull(value: unknown): string | null {
-  return isSafeSyncId(value) ? value : null;
-}
-
-/** Local YYYY-MM-DD of a timestamp (same format as db.ts toLocalDateKey). */
-function localDateKeyOf(timestamp: number): string {
-  const d = new Date(Math.min(timestamp, MAX_DATE_KEY_MS));
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
-/**
- * Copies the fields `known` does not list (e.g. a log's questCodeSnapshot, a
- * quest's code/archived) when the value is a scalar: a string (cut to 10,000),
- * a finite number, a boolean or null. Objects and arrays are dropped, which
- * also bounds nesting for canonicalString; __proto__/constructor/prototype are
- * never copied.
- */
-function copyScalarExtras(target: object, raw: UnknownRecord, known: ReadonlySet<string>): void {
-  const extras: UnknownRecord = {};
-  for (const key of Object.keys(raw)) {
-    if (known.has(key) || FORBIDDEN_KEYS.has(key)) continue;
-    const value = raw[key];
-    if (typeof value === "string") {
-      extras[key] = clampText(value, MAX_EXTRA_TEXT_LENGTH);
-    } else if (
-      value === null ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value))
-    ) {
-      extras[key] = value;
-    }
-  }
-  Object.assign(target, extras);
-}
 
 /**
  * A new, sanitized quest row, or null when the row cannot be legitimate (not
@@ -492,10 +420,17 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (typeof rank === "number" && Number.isFinite(rank)) task.rank = rank;
   if (scheduledDate === null || isDateKey(scheduledDate)) task.scheduledDate = scheduledDate;
   if (isSafeSyncId(raw.habitId)) task.habitId = raw.habitId;
+  // A Skipped habit day carries `skipped: true`; not Skipped is no flag at all.
+  if (raw.skipped === true) task.skipped = true;
+  // A habit day Task never holds a Checklist (its Outcome comes from its Habit Kind).
+  if (task.habitId === undefined && Array.isArray(raw.checklist)) {
+    task.checklist = sanitizeChecklist(raw.checklist);
+  }
+  if (isReminderTime(raw.reminderTime)) task.reminderTime = raw.reminderTime;
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;
-  copyScalarExtras(task, raw, TASK_FIELDS);
+  copyScalarExtras(Object.assign(task, sanitizeCountDayFields(raw), sanitizeSlipFields(raw)), raw, TASK_FIELDS);
   return task as Task;
 }
 
@@ -516,7 +451,11 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
-  copyScalarExtras(habit, raw, HABIT_FIELDS);
+  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory, raw);
+  if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
+  const reminderTimes = sanitizeHabitReminderTimes(raw.reminderTimes);
+  if (reminderTimes) habit.reminderTimes = reminderTimes;
+  copyScalarExtras(Object.assign(habit, sanitizeHabitKindFields(raw), sanitizeHabitEnd(raw)), raw, HABIT_FIELDS);
   return habit as Habit;
 }
 
@@ -542,7 +481,7 @@ export function sanitizeLog(raw: unknown): TimeLog | null {
       : "slate",
     startTime,
     durationSeconds: Math.min(durationSeconds, MAX_COUNTER_SECONDS),
-    dateKey: isDateKey(raw.dateKey) ? raw.dateKey : localDateKeyOf(endTime ?? startTime),
+    dateKey: isDateKey(raw.dateKey) ? raw.dateKey : toLocalDateKey(Math.min(endTime ?? startTime, MAX_DATE_KEY_MS)),
   };
   if (endTime !== undefined) log.endTime = endTime;
   if (typeof raw.taskTitleSnapshot === "string") {
@@ -594,7 +533,7 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   if (!isRecord(input)) {
     return { valid: false, error: "Payload must be a JSON object" };
   }
-  const { quests, tasks, timeLogs, habits } = input;
+  const { quests, tasks, timeLogs, habits, lists } = input;
   if (!Array.isArray(quests) || quests.length > MAX_SYNC_QUESTS) {
     return { valid: false, error: "Invalid or oversized quests array" };
   }
@@ -606,6 +545,9 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   }
   if (habits !== undefined && (!Array.isArray(habits) || habits.length > MAX_SYNC_HABITS)) {
     return { valid: false, error: "Invalid or oversized habits array" };
+  }
+  if (lists !== undefined && (!Array.isArray(lists) || lists.length > MAX_SYNC_LISTS)) {
+    return { valid: false, error: "Invalid or oversized lists array" };
   }
 
   let dropped = 0;
@@ -624,10 +566,12 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
     tasks: keep(tasks, sanitizeTask),
     timeLogs: keep(timeLogs, sanitizeLog),
     habits: Array.isArray(habits) ? keep(habits, sanitizeHabit) : [],
+    lists: Array.isArray(lists) ? keep(lists, sanitizeList) : [],
     deletedQuestIds: sanitizeTombstones(input.deletedQuestIds, MAX_ENTITY_ID_LENGTH),
     deletedTaskIds: sanitizeTombstones(input.deletedTaskIds, MAX_ENTITY_ID_LENGTH),
     deletedLogIds: sanitizeTombstones(input.deletedLogIds, MAX_LOG_ID_LENGTH),
     deletedHabitIds: sanitizeTombstones(input.deletedHabitIds, MAX_ENTITY_ID_LENGTH),
+    deletedListIds: sanitizeTombstones(input.deletedListIds, MAX_ENTITY_ID_LENGTH),
     activeFocus: sanitizeFocus(input.activeFocus),
     lastSyncedAt: Date.now(),
   };
@@ -635,7 +579,7 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
 }
 
 /** The synced row collections. Each has its own tombstone list. */
-export type SyncedEntityKey = "quests" | "tasks" | "timeLogs" | "habits";
+export type SyncedEntityKey = "quests" | "tasks" | "timeLogs" | "habits" | "lists";
 type SyncedRow<K extends SyncedEntityKey> = NonNullable<SyncPayload[K]>[number];
 
 /** Payload key of each collection's tombstone list. */
@@ -644,6 +588,7 @@ export const TOMBSTONE_KEY = {
   tasks: "deletedTaskIds",
   timeLogs: "deletedLogIds",
   habits: "deletedHabitIds",
+  lists: "deletedListIds",
 } as const satisfies Record<SyncedEntityKey, keyof SyncPayload>;
 
 export const SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY) as SyncedEntityKey[];
@@ -719,6 +664,11 @@ export function mergeSyncPayloads(
       resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
       order: compareRank,
     },
+    // R1, the whole List row (its items merge with it).
+    lists: {
+      resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+      order: compareRank,
+    },
     // R1 on the questId-sanitised rows; the focus counter only grows (max).
     tasks: {
       normalize: unlinkDeletedQuest,
@@ -737,6 +687,7 @@ export function mergeSyncPayloads(
 
   const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
   const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+  const listMap = mergeRowsById(base.lists, incoming.lists, deleted.lists, specs.lists);
   const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
   const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
 
@@ -809,10 +760,12 @@ export function mergeSyncPayloads(
     tasks: mergedTasks,
     timeLogs: mergedLogs,
     habits: mergedHabits,
+    lists: Array.from(listMap.values()).sort(specs.lists.order),
     deletedQuestIds: Array.from(deleted.quests),
     deletedTaskIds: Array.from(deleted.tasks),
     deletedLogIds: Array.from(deleted.timeLogs),
     deletedHabitIds: Array.from(deleted.habits),
+    deletedListIds: Array.from(deleted.lists),
     activeFocus: mergedFocus,
     lastSyncedAt: now,
   };

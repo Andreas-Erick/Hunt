@@ -38,6 +38,46 @@ describe.skipIf(!hasJdk)("PendingTicks, run on the JDK", () => {
     ]);
   }, 60_000);
 
+  it("queues each +1 on a Count Habit row (one per tap), with its kind, and lists them apart from done ticks", () => {
+    const plus = (taskId: string, at: number) =>
+      `{ PendingTicks.Queued r = PendingTicks.append(dir, "${taskId}", "2026-11-22", ${at}L, TickKeys.PLUS_ONE); System.out.println(r); }`;
+    const lines = probe(
+      [
+        plus("t-jog", 1000),
+        plus("t-jog", 2000),
+        plus("t-jog", 2000), // the same tap again (a crash between queueing and closing its window)
+        append("t-done", 3000),
+        printFile,
+        "PendingTicks.Listing l = PendingTicks.queued(dir);",
+        "System.out.println(new TreeSet<>(l.keys) + \" \" + new TreeMap<>(l.plusCounts));",
+      ].join("\n"),
+    );
+    expect(lines.slice(0, 4)).toEqual(["ADDED", "ADDED", "ALREADY_QUEUED", "ADDED true"]);
+    expect(JSON.parse(lines[4])).toEqual([
+      { taskId: "t-jog", dateKey: "2026-11-22", tickedAt: 1000, kind: "+1" },
+      { taskId: "t-jog", dateKey: "2026-11-22", tickedAt: 2000, kind: "+1" },
+      { taskId: "t-done", dateKey: "2026-11-22", tickedAt: 3000 },
+    ]);
+    expect(lines[5]).toBe("[2026-11-22|t-done] {2026-11-22|t-jog=2}");
+  }, 60_000);
+
+  it("queues a Slip on an Avoid Habit row once per Task and day, with its kind, hiding the row like a done tick", () => {
+    const slip = (taskId: string, at: number) =>
+      `{ PendingTicks.Queued r = PendingTicks.append(dir, "${taskId}", "2026-11-22", ${at}L, TickKeys.SLIP); System.out.println(r); }`;
+    const lines = probe(
+      [
+        slip("t-dry", 1000),
+        slip("t-dry", 2000), // one Slip already decides the day
+        printFile,
+        "PendingTicks.Listing l = PendingTicks.queued(dir);",
+        "System.out.println(new TreeSet<>(l.keys) + \" \" + new TreeMap<>(l.plusCounts));",
+      ].join("\n"),
+    );
+    expect(lines.slice(0, 2)).toEqual(["ADDED", "ALREADY_QUEUED"]);
+    expect(JSON.parse(lines[2])).toEqual([{ taskId: "t-dry", dateKey: "2026-11-22", tickedAt: 1000, kind: "slip" }]);
+    expect(lines[3]).toBe("[2026-11-22|t-dry] {}");
+  }, 60_000);
+
   it("never writes over a queue it could not parse, and says the tick is still pending", () => {
     expect(probe([write("{not json"), append("t-1", 1000), printFile].join("\n"))).toEqual([
       "UNREADABLE false",

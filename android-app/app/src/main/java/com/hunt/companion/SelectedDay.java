@@ -22,12 +22,17 @@ final class SelectedDay {
     /** The snapshot is from an earlier day than today: "Open Hunt to refresh". */
     boolean stale;
     /**
-     * The day's rows, ready to draw (id, title, accent, tickable, focus, habit), without Tasks
+     * The day's rows, ready to draw (id, title, accent, tickable, focus, habit, habitKind,
+     * progress), without Tasks
      * waiting in the Pending Tick queue or whose Undo window ended but are not queued yet.
      */
     JSONArray rows = new JSONArray();
-    /** Rows in their Undo window, drawn as "✓ Done · Undo". */
+    /** Rows in their Undo window, drawn as "✓ Done · Undo" (a Count row: "+1 · Undo"). */
     Set<String> undoable = Collections.emptySet();
+    /** Count rows -> +1s on their way that the snapshot's progress does not include yet. */
+    Map<String, Integer> pendingPlus = Collections.emptyMap();
+    /** Count rows with a +1 window not queued yet: they offer no tick until it is. */
+    Set<String> heldPlus = Collections.emptySet();
     /**
      * The Pending Tick queue could not be read, so which Tasks are already queued is unknown: no
      * row offers a tick until a read succeeds (ADR-0006).
@@ -72,6 +77,8 @@ final class SelectedDay {
         day.ticksPaused = !queued.readable;
         Set<String> hidden = UndoWindow.hiddenTaskIds(queued.keys, held, dateKey, now);
         day.undoable = UndoWindow.openTaskIds(held, dateKey, now);
+        day.pendingPlus = UndoWindow.pendingPlus(queued.plusCounts, held, dateKey, now);
+        day.heldPlus = UndoWindow.heldPlusTaskIds(held, dateKey);
         JSONArray rows = entry.optJSONArray(DaySelection.viewFor(dateKey, todayKey).key);
         for (int i = 0; rows != null && i < rows.length(); i++) {
             JSONObject row = rows.optJSONObject(i);
@@ -90,9 +97,41 @@ final class SelectedDay {
         return open;
     }
 
-    /** Whether `row` offers a tick now: the snapshot marks it tickable and the queue is readable. */
+    /**
+     * Whether `row` offers a tick now: the snapshot marks it tickable and the queue is readable,
+     * and a Count row has no +1 still waiting for the queue.
+     */
     boolean canTick(JSONObject row) {
-        return row != null && !ticksPaused && row.optBoolean("tickable", false);
+        if (row == null || ticksPaused || !row.optBoolean("tickable", false)) return false;
+        return !(isCountRow(row) && heldPlus.contains(row.optString("id")));
+    }
+
+    /** A Count Habit row (snapshot habitKind "count"): its tick is a +1. */
+    static boolean isCountRow(JSONObject row) {
+        return row != null && "count".equals(row.optString("habitKind"));
+    }
+
+    /** An Avoid Habit row (snapshot habitKind "avoid"): its tick logs a Slip. */
+    static boolean isAvoidRow(JSONObject row) {
+        return row != null && "avoid".equals(row.optString("habitKind"));
+    }
+
+    /** The kind of tick a tap on `row` queues, from the snapshot's Habit Kind: "+1", "slip" or "" (done). */
+    static String tickKindOf(JSONObject row) {
+        return isCountRow(row) ? TickKeys.PLUS_ONE : isAvoidRow(row) ? TickKeys.SLIP : "";
+    }
+
+    /**
+     * A Count row's progress as the snapshot drew it ("2 / 3 miles"), with the +1s on their way
+     * after it ("2 / 3 miles +1"); an Avoid row's state ("Kept so far"); "" for any other row. Java adds no Hunt rule: the count of
+     * waiting +1s is shown as it is, and Hunt folds them into the total when it applies them.
+     */
+    String progressOf(JSONObject row) {
+        if (isAvoidRow(row)) return row.optString("progress", ""); // "Kept so far", as the snapshot drew it
+        if (!isCountRow(row)) return "";
+        String progress = row.optString("progress", "");
+        Integer waiting = pendingPlus.get(row.optString("id"));
+        return waiting == null || waiting <= 0 ? progress : progress + " +" + waiting;
     }
 
     /** The row for `taskId`, or null when it is not listed. */

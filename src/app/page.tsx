@@ -5,6 +5,7 @@ import { MotionConfig } from "framer-motion";
 import { db } from "@/lib/db";
 import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
+import { startDesktopReminders } from "@/lib/desktopReminders";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
@@ -16,6 +17,7 @@ import { PlanWeekView } from "@/components/PlanWeekView";
 import { FocusHudView } from "@/components/FocusHudView";
 import { QuestMatrixPanel } from "@/components/QuestMatrixPanel";
 import { HabitsView } from "@/components/HabitsView";
+import { ListsView } from "@/components/ListsView";
 import { TelemetryDashboardView } from "@/components/TelemetryDashboardView";
 import { GuideView } from "@/components/GuideView";
 import { RegionErrorBoundary } from "@/components/RegionErrorBoundary";
@@ -47,6 +49,7 @@ const VIEWS: Record<HudView, ViewEntry> = {
   focus: { key: "view-focus", region: "Focus", Component: FocusHudView },
   quests: { key: "view-quests", region: "Quests", Component: QuestMatrixPanel },
   habits: { key: "view-habits", region: "Habits", Component: HabitsView },
+  lists: { key: "view-lists", region: "Lists", Component: ListsView },
   telemetry: REVIEW_VIEW,
   // Legacy alias of the Review view.
   log: REVIEW_VIEW,
@@ -113,6 +116,18 @@ export default function HomePage() {
       context: { view: activeView },
     });
   }, [booted, activeView]);
+
+  // Task reminders as Windows notifications while this window is open (ADR-0007), with Done (or
+  // +1) and Snooze buttons applied through the command store.
+  useEffect(() => {
+    if (!booted) return;
+    const store = () => useCommandStore.getState();
+    return startDesktopReminders({
+      completeTask: (taskId) => store().completeTaskById(taskId),
+      ensureHabitDay: (habitId, dateKey) => store().ensureHabitTaskForDay(habitId, dateKey),
+      addCount: async (habitId, dateKey) => void (await store().logHabitAmount(habitId, dateKey, "+1")),
+    });
+  }, [booted]);
 
   // Background auto-sync between PC and Phone/Tablet (via the local server). Paused
   // while the window is hidden; catches up as soon as it becomes visible. The

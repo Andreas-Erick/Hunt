@@ -14,9 +14,12 @@ import {
 } from "@/lib/taskCompletionMotion";
 import { useCommandStore } from "@/store/useCommandStore";
 import { TaskNotesField } from "./TaskNotesField";
+import { ChecklistProgressBadge, TaskChecklistEditor } from "./TaskChecklist";
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import type { QueueRowReorderHandlers } from "./useQueueReorder";
 import { HeightReveal } from "./HeightReveal";
+import { ReminderBadge, TaskReminderField } from "./TaskReminderField";
+import { AvoidRowSlip, useIsAvoidDay } from "./AvoidHabitControls";
 
 interface QueueTaskRowProps {
   variant: "queue";
@@ -77,6 +80,11 @@ function DailyHabitBadge() {
       <span>Daily</span>
     </span>
   );
+}
+
+/** A dated Task that is not a habit day can carry one reminder time (habit reminders live on the Habit). */
+function hasReminderSlot(task: Task): boolean {
+  return Boolean(task.scheduledDate) && !task.habitId;
 }
 
 /** Icon-only row delete (two-step) shared by Other work and Completed rows. */
@@ -141,6 +149,7 @@ function MaintenanceTaskRow({
 }: MaintenanceTaskRowProps) {
   const { startFocus, deleteThisTask } = useTaskRowActions(task.id);
   const taskTotalSec = task.accumulatedSeconds || 0;
+  const avoidDay = useIsAvoidDay(task);
   return (
     <div
       data-testid="task-row"
@@ -162,7 +171,7 @@ function MaintenanceTaskRow({
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
-          <button
+          {!avoidDay && <button
             type="button"
             onClick={(e) => {
               // Ignore the second click of a double-click.
@@ -178,16 +187,18 @@ function MaintenanceTaskRow({
             }`}
           >
             <Check className="h-3 w-3" />
-          </button>
+          </button>}
 
           <span className="flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 text-xs text-neutral-400">
             <span className="h-2 w-2 rounded-full bg-neutral-500" />
             <span>Other work</span>
           </span>
 
-          {task.habitId && <DailyHabitBadge />}
+          {avoidDay ? <AvoidRowSlip title={task.title} onSlip={() => onComplete(task.id)} /> : task.habitId && <DailyHabitBadge />}
+          <ChecklistProgressBadge task={task} />
+          {hasReminderSlot(task) && task.reminderTime && <ReminderBadge time={task.reminderTime} />}
 
-          <button
+          {!avoidDay && <button
             type="button"
             onClick={startFocus}
             aria-label={`Start focus: ${task.title}`}
@@ -197,7 +208,7 @@ function MaintenanceTaskRow({
               <span>{formatChronoMMSS(taskTotalSec).formatted}</span>
             )}
             <Play className="h-3.5 w-3.5 fill-current" />
-          </button>
+          </button>}
         </div>
 
         <RowDeleteButton onConfirm={deleteThisTask} />
@@ -233,6 +244,7 @@ function QueueTaskRow({
   const style = accentStyle(quest?.accentColor ?? "cyan");
   const taskTotalSec =
     (task.accumulatedSeconds || 0) + (isCurrentlyActive ? liveSeconds : 0);
+  const avoidDay = useIsAvoidDay(task);
 
   return (
     <div
@@ -274,8 +286,8 @@ function QueueTaskRow({
         {/* Bottom Metadata & Action Row */}
         <div className="mt-3.5 flex items-center justify-between gap-4">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            {/* Circular Complete Check Button */}
-            <button
+            {/* Circular Complete Check Button (an Avoid day has a labelled Slip button instead) */}
+            {!avoidDay && <button
               type="button"
               onClick={(e) => {
                 // The second click of a double-click would hit
@@ -292,7 +304,7 @@ function QueueTaskRow({
               }`}
             >
               <Check className="h-3 w-3" />
-            </button>
+            </button>}
 
             {/* Rounded Quest Pill */}
             {quest && (
@@ -304,10 +316,12 @@ function QueueTaskRow({
               </span>
             )}
 
-            {task.habitId && <DailyHabitBadge />}
+            {avoidDay ? <AvoidRowSlip title={task.title} onSlip={() => onComplete(task.id)} /> : task.habitId && <DailyHabitBadge />}
+            <ChecklistProgressBadge task={task} />
+            {hasReminderSlot(task) && task.reminderTime && <ReminderBadge time={task.reminderTime} />}
 
             {/* Timer / Play Button */}
-            {isCurrentlyActive && isRunning ? (
+            {avoidDay && !isCurrentlyActive ? null : isCurrentlyActive && isRunning ? (
               <button
                 type="button"
                 onClick={() => {
@@ -378,6 +392,11 @@ function QueueTaskRow({
             aria-label={`Notes for ${task.title}`}
             className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent/50 focus:outline-none"
           />
+
+          <TaskChecklistEditor task={task} />
+          {hasReminderSlot(task) && (
+            <TaskReminderField taskId={task.id} taskTitle={task.title} reminderTime={task.reminderTime} />
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -516,6 +535,8 @@ function CompletedTaskRow({
               {questLabel}
             </span>
           </span>
+
+          <ChecklistProgressBadge task={task} />
 
           {task.accumulatedSeconds > 0 && (
             <span className="shrink-0 font-mono text-xs tabular-nums text-hud-muted">

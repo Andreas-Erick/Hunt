@@ -51,6 +51,32 @@ or at once if it is already running.
   wait, untouched, until the user lets Hunt save again.
 - A stale tick (Task gone, already done, archived, or in
   Focus) is skipped and logged, never forced through.
+- A Count Habit row's tap is a `+1`, not a done tick: the
+  Widget Snapshot (version 2) gives each Habit row its
+  `habitKind` and a Count row its ready-made `progress`
+  ("2 / 3 miles"). The queue entry carries `"kind":"+1"`,
+  and one is queued per tap (the same tap twice still
+  once), each with its own Undo window ("+1 · Undo"). A
+  `+1` never hides its row; the row shows the `+1`s on
+  their way after the snapshot's progress. HuntCore adds
+  one through the shared Count rule and records the tap
+  time on the day Task (`countTickedAt`), so a `+1` read
+  again before the shell removed it is skipped as
+  `already-counted`. A `+1` on a row that is not a Count
+  Habit's day, or a done tick on one that is, is skipped
+  as `wrong-kind`.
+- An Avoid Habit row's tap logs a Slip: the Widget Snapshot
+  (version 3) gives the row `habitKind: "avoid"` and the
+  `progress` "Kept so far". The queue entry carries
+  `"kind":"slip"`, behind the same Undo window ("Slip ·
+  Undo"). Like a done tick it is queued once per Task and
+  day and hides its row, since one Slip already makes the
+  day Missed; a day with a Slip is left out of the snapshot.
+  HuntCore logs it through the shared Slip rule (the day
+  Task's `slips`), and skips it as `already-slipped` when
+  the day already has one, so a `slip` read again is
+  applied once. A `slip` on any other row, or a done or
+  `+1` tick on an Avoid row, is `wrong-kind`.
 - No tick is dropped silently. A queue the shell cannot
   read is never written over. If it will not parse, the
   page's read moves it aside and names the copy in

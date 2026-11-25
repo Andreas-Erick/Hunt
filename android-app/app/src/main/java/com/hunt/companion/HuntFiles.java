@@ -27,6 +27,12 @@ final class HuntFiles {
     /** The Pending Tick queue (ADR-0006): appended by the widget, drained by the page. See PendingTicks. */
     static final String PENDING_TICKS_FILE = "hunt-pending-ticks.json";
 
+    /** The Reminder Plan (ADR-0007): written only by the bridge, read by the reminder alarm. See Reminders. */
+    static final String REMINDER_PLAN_FILE = "hunt-reminder-plan.json";
+
+    /** This phone's notification Snoozes (ADR-0007): written only by ReminderSnoozes, read by the page. */
+    static final String REMINDER_SNOOZES_FILE = "hunt-reminder-snoozes.json";
+
     private HuntFiles() {
     }
 

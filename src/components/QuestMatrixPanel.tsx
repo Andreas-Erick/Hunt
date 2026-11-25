@@ -43,6 +43,7 @@ import { useQuestWeekLogs } from "./useQuestWeekLogs";
 import { useLiveBurstSeconds } from "./useLiveBurstSeconds";
 import { computeQuestWeekProgress } from "@/lib/questProgress";
 import { HeightReveal } from "./HeightReveal";
+import { RowTick } from "./RowTick";
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 /** Quest hours cover today and the 6 days before it. */
@@ -384,20 +385,11 @@ const QuestCard = memo(function QuestCard({
               className="group flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-raised px-4 py-3 text-sm"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    // The second click of a double-click would hit
-                    // the next row, which slides up under the cursor.
-                    if (e.detail > 1) return;
-                    onCompleteStep(t.id, quest.id, quest.accentColor);
-                  }}
-                  title="Mark complete"
-                  aria-label="Mark complete"
+                <RowTick
+                  task={t}
+                  onComplete={() => onCompleteStep(t.id, quest.id, quest.accentColor)}
                   className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 before:content-[''] hover:border-success hover:text-success transition-colors duration-150 ease-out active:opacity-80"
-                >
-                  <Check className="h-2.5 w-2.5" />
-                </button>
+                />
                 <span
                   data-task-title="true"
                   className="truncate text-neutral-200"

@@ -1,5 +1,5 @@
 import { db, loadSortedQuests } from "./db";
-import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "./domainTypes";
 import { compareRank } from "./syncTypes";
 
 /**
@@ -30,14 +30,24 @@ export const reads = {
 
   queuedTasks: (): Promise<Task[]> => db.tasks.where("status").equals("queued").toArray(),
 
+  /** Queued and in-Focus Tasks: the ones a reminder can still be due for. */
+  undoneTasks: (): Promise<Task[]> =>
+    db.tasks.where("status").anyOf(["queued", "active"]).toArray(),
+
   completedTasks: (): Promise<Task[]> =>
     db.tasks.where("status").equals("completed").toArray(),
 
   /** Every materialized daily habit instance (any day, any status). */
   habitTasks: (): Promise<Task[]> => db.tasks.where("habitId").above("").toArray(),
 
+  /** One habit, or undefined when it is gone. */
+  habit: (id: string): Promise<Habit | undefined> => db.habits.get(id),
+
   /** Every habit in rank order. */
   habits: async (): Promise<Habit[]> => (await db.habits.toArray()).sort(compareRank),
+
+  /** Every standalone List in rank order. */
+  lists: async (): Promise<List[]> => (await db.lists.toArray()).sort(compareRank),
 
   /** Logs whose dateKey is one of `dateKeys`. */
   logsOnDays: (dateKeys: readonly string[]): Promise<TimeLog[]> =>

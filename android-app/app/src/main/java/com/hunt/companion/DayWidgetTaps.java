@@ -3,6 +3,8 @@ package com.hunt.companion;
 import android.content.Context;
 import android.content.Intent;
 
+import org.json.JSONObject;
+
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 
@@ -59,23 +61,29 @@ final class DayWidgetTaps {
      */
     private static Result tick(Context ctx, String taskId, String dateKey, long tickedAt) {
         boolean opened = true;
-        if (taskId != null && dateKey != null && isTickable(ctx, taskId, dateKey)) {
-            opened = DayWidgetUndo.open(ctx, taskId, dateKey, tickedAt);
+        JSONObject row = taskId != null && dateKey != null ? tickableRow(ctx, taskId, dateKey) : null;
+        if (row != null) {
+            // The snapshot's Habit Kind decides what the tap means: one more on a Count row, a Slip on
+            // an Avoid row, done otherwise.
+            String kind = SelectedDay.tickKindOf(row);
+            opened = DayWidgetUndo.open(ctx, taskId, dateKey, tickedAt, kind);
         }
         DayWidgetProvider.refreshAll(ctx); // draws the Undo row, or redraws a stale list the tap came from
         return opened ? Result.DONE : Result.TICK_FAILED;
     }
 
-    private static boolean isTickable(Context ctx, String taskId, String dateKey) {
+    /** The snapshot row `taskId` on `dateKey` when it offers a tick now, else null. */
+    private static JSONObject tickableRow(Context ctx, String taskId, String dateKey) {
         long offset;
         try {
             offset = ChronoUnit.DAYS.between(LocalDate.parse(WidgetSupport.localDateKey()), LocalDate.parse(dateKey));
         } catch (RuntimeException e) {
-            return false; // a malformed day from a stale list: nothing to tick
+            return null; // a malformed day from a stale list: nothing to tick
         }
-        if (offset < 0 || offset > DaySelection.MAX_DAY_OFFSET) return false;
+        if (offset < 0 || offset > DaySelection.MAX_DAY_OFFSET) return null;
         SelectedDay day = SelectedDay.read(ctx, (int) offset);
-        if (!day.hasList() || !dateKey.equals(day.date.toString())) return false;
-        return day.canTick(day.row(taskId));
+        if (!day.hasList() || !dateKey.equals(day.date.toString())) return null;
+        JSONObject row = day.row(taskId);
+        return day.canTick(row) ? row : null;
     }
 }

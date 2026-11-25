@@ -187,4 +187,16 @@ describe.skipIf(!hasJdk)("StatsWidgetFit, run on the JDK", () => {
     );
     expect(lines).toEqual(["0m", "45m", "2h 05m", "5.5 / 8h", "10.0 / 6h \u2713", "1.5 / 7.5h", "0.0h"]);
   }, 60_000);
+
+  it("draws a streak in days, or in Habit Weeks as \"3w\" when the snapshot says so", () => {
+    const lines = runFit(
+      [
+        'System.out.println(StatsWidgetFit.formatStreak(4, ""));',
+        'System.out.println(StatsWidgetFit.formatStreak(3, "week"));',
+        'System.out.println(StatsWidgetFit.formatStreak(-1, "week"));',
+        'System.out.println(StatsWidgetFit.formatStreak(2, "fortnight"));',
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["4d", "3w", "0w", "2d"]);
+  }, 60_000);
 });

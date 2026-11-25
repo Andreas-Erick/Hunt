@@ -1,4 +1,4 @@
-import type { Habit, Quest, Task, TimeLog } from "../src/lib/domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "../src/lib/domainTypes";
 
 /**
  * Long-text fixtures for the geometry suite. One data set feeds both apps: the
@@ -39,6 +39,7 @@ export interface GeometryFixtures {
   quests: Quest[];
   tasks: Task[];
   habits: Habit[];
+  lists: List[];
   timeLogs: TimeLog[];
 }
 
@@ -83,7 +84,18 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
   });
 
   const tasks: Task[] = [
-    task({ id: "task-long", title: LONG_TASK_TITLE, notes: LONG_NOTE, rank: 1000, accumulatedSeconds: 5400 }),
+    task({
+      id: "task-long",
+      title: LONG_TASK_TITLE,
+      notes: LONG_NOTE,
+      rank: 1000,
+      accumulatedSeconds: 5400,
+      checklist: [
+        { id: "chk-geom-1", text: URL_TASK_TITLE, done: true },
+        { id: "chk-geom-2", text: LONG_TASK_TITLE, done: false },
+        { id: "chk-geom-3", text: LONG_QUEST_TITLE, done: false },
+      ],
+    }),
     task({ id: "task-url", title: URL_TASK_TITLE, notes: URL_TASK_TITLE, rank: 2000, accumulatedSeconds: 1800 }),
     task({ id: "task-other", title: URL_TASK_TITLE, questId: null, rank: 3000 }),
     task({ id: "task-tomorrow", title: LONG_TASK_TITLE, questId: "quest-slot-1", rank: 4000, scheduledDate: tomorrow }),
@@ -106,6 +118,71 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       questId: "quest-slot-0",
       rank: 1000,
       createdAt: now - 10 * DAY_MS,
+      // Several reminder times: the card badge and the edit panel chips must wrap, not overflow.
+      reminderTimes: ["06:30", "12:00", "18:45", "21:15"],
+    },
+    // A Count Habit with a long unit: its "+1" ring and "n / target unit" progress must fit too.
+    {
+      id: "habit-count",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 2000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "count",
+      target: 12.5,
+      unit: "glasses of sparkling mineral water",
+    },
+    {
+      // An Ended Habit (ended three days ago): the collapsed Ended section on both apps.
+      id: "habit-ended",
+      title: `${LONG_QUEST_TITLE}${LONG_QUEST_TITLE}`,
+      notes: "",
+      questId: "quest-slot-0",
+      rank: 3000,
+      createdAt: now - 20 * DAY_MS,
+      endDate: dateKey(now - 3 * DAY_MS),
+    },
+    // An Avoid Habit: its mark, "Kept so far" and the "Log a Slip" button must fit beside a long title.
+    {
+      id: "habit-avoid",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 4000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "avoid",
+    },
+  ];
+
+  // A Count day over its target two days ago, so the Statistics chart and yearly totals have a value.
+  const countDay = dateKey(now - 2 * DAY_MS);
+  tasks.push(
+    task({
+      id: `habtsk-${countDay}-habit-count`,
+      title: LONG_TASK_TITLE,
+      questId: null,
+      habitId: "habit-count",
+      status: "completed",
+      completedAt: now - 2 * DAY_MS,
+      scheduledDate: countDay,
+      amount: 14,
+      rank: 6000,
+    })
+  );
+
+  // A standalone List with an unbreakable name and long items, one of them ticked.
+  const lists: List[] = [
+    {
+      id: "list-long",
+      title: LONG_QUEST_TITLE + LONG_QUEST_TITLE,
+      items: [
+        { id: "chk-l1", text: URL_TASK_TITLE, done: true },
+        { id: "chk-l2", text: LONG_TASK_TITLE, done: false },
+      ],
+      rank: 1000,
+      createdAt: now - 3 * DAY_MS,
+      updatedAt: now - 3 * DAY_MS,
     },
   ];
 
@@ -128,7 +205,7 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
     };
   });
 
-  return { quests, tasks, habits, timeLogs };
+  return { quests, tasks, habits, lists, timeLogs };
 }
 
 /** The phone app's saved-state shape (see getEmptyState in public/hunt-mobile.html). */
@@ -139,6 +216,7 @@ export function buildMobileState(fixtures: GeometryFixtures) {
     deletedTaskIds: [],
     deletedLogIds: [],
     deletedHabitIds: [],
+    deletedListIds: [],
     activeFocus: { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: 0 },
     lastSyncedAt: 0,
   };

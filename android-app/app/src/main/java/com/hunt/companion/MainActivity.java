@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.system.ErrnoException;
@@ -220,6 +221,12 @@ public class MainActivity extends Activity {
     private static final String NO_PENDING_TICKS = "{\"ticks\":[]}";
     /** The Widget Snapshot file's coalescing write, as for the state file. */
     private static final HuntFiles.CoalescedWrite widgetSnapshotWrite = new HuntFiles.CoalescedWrite();
+    /** The Reminder Plan file's coalescing write (ADR-0007), as for the state file. */
+    private static final HuntFiles.CoalescedWrite reminderPlanWrite = new HuntFiles.CoalescedWrite();
+    /** Android 13's notification permission, by name (the constant is API 33). */
+    private static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS";
+    /** requestPermissions code for the notification dialog; the page re-reads the result on resume. */
+    private static final int REQUEST_NOTIFICATIONS = 30;
 
     /** Normalized laptop URL as saved ("" = nothing saved, null = not loaded yet). */
     private static volatile String laptopUrlCache;
@@ -271,6 +278,8 @@ public class MainActivity extends Activity {
     private int imeAnimationDepth = 0;
     private boolean containerPaddingInitialized = false;
     private String pendingPairedToastUrl;
+    /** A notification tap that arrived before the page loaded: __huntOpenReminder's argument. */
+    private String pendingReminderOpen;
     /** True once PAGE_URL has finished loading (a pairing can then be announced right away). */
     private boolean pageLoaded;
     /** The open "replace the current pairing?" dialog, if any. */
@@ -388,6 +397,7 @@ public class MainActivity extends Activity {
         }
 
         registerNetworkCallback();
+        handleReminderIntent(getIntent());
         handlePairingIntent(getIntent());
         PendingTicks.setListener(tickQueuedListener);
 
@@ -398,7 +408,69 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        handleReminderIntent(intent);
         handlePairingIntent(intent);
+    }
+
+    /**
+     * A reminder notification tap (ADR-0007): asks the page to open the item it names, now or once
+     * the page has loaded. The page decides what to show; a stale item just opens Hunt. The action
+     * is cleared so a recreated Activity does not open the item again.
+     */
+    private void handleReminderIntent(Intent intent) {
+        JSONObject target = Reminders.openTarget(intent);
+        if (target == null) return;
+        intent.setAction(Intent.ACTION_MAIN);
+        String arg = toJsLiteral(target);
+        if (pageLoaded) {
+            callJs("__huntOpenReminder", arg);
+        } else {
+            pendingReminderOpen = arg;
+        }
+    }
+
+    /**
+     * UI thread: the next step towards reminders that arrive (ReminderPermissions decides): the
+     * notification dialog, Hunt's notification settings, or the exact-alarm setting. The page
+     * re-reads the grants when Hunt resumes after any of them.
+     */
+    private void requestReminderPermissionsNow() {
+        if (destroyed || isFinishing()) return;
+        int sdk = Build.VERSION.SDK_INT;
+        boolean rationale = sdk >= ReminderPermissions.SDK_RUNTIME_NOTIFICATIONS
+                && shouldShowRequestPermissionRationale(POST_NOTIFICATIONS);
+        switch (ReminderPermissions.nextStep(sdk, Reminders.notificationsAllowed(this),
+                Reminders.askedForNotifications(this), rationale, Reminders.exactAlarmsAllowed(this))) {
+            case ASK_NOTIFICATIONS:
+                Reminders.markAskedForNotifications(this);
+                requestPermissions(new String[] {POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
+                break;
+            case OPEN_NOTIFICATION_SETTINGS:
+                openSettings(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                break;
+            case OPEN_EXACT_ALARM_SETTINGS:
+                openSettings(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:" + getPackageName())));
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** UI thread: opens a settings screen; a device without it falls back to Hunt's app info. */
+    private void openSettings(Intent intent) {
+        try {
+            startActivity(intent);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Settings screen not available; opening app info", e);
+            try {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (RuntimeException again) {
+                Log.w(TAG, "App info not available either", again);
+            }
+        }
     }
 
     /**
@@ -583,6 +655,8 @@ public class MainActivity extends Activity {
         }
         // After timers run again, so the page can re-render time-dependent views and sync.
         callJs("__huntLifecycle", "\"resume\"");
+        // The exact-alarm grant may have changed in settings: post what is due, re-arm.
+        executeQuietly(ioExec, () -> Reminders.replan(appContext));
     }
 
     @Override
@@ -714,6 +788,11 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             if (!isPageUrl(url != null ? url : "")) return;
             pageLoaded = true;
+            if (pendingReminderOpen != null) {
+                String open = pendingReminderOpen;
+                pendingReminderOpen = null;
+                callJs("__huntOpenReminder", open);
+            }
             if (pendingPairedToastUrl != null) {
                 String pairedUrl = pendingPairedToastUrl;
                 pendingPairedToastUrl = null;
@@ -1053,6 +1132,27 @@ public class MainActivity extends Activity {
         }
         DayWidgetProvider.refreshAll(appContext);
         StatsWidgetProvider.refreshAll(appContext);
+    }
+
+    /** JavaBridge thread: records the newest Reminder Plan (ADR-0007) and schedules its write. */
+    private void saveReminderPlanInternal(String json) {
+        if (!looksLikeJsonObject(json)) {
+            Log.w(TAG, "saveReminderPlan ignored: not a JSON object");
+            return;
+        }
+        reminderPlanWrite.set(json);
+        executeQuietly(ioExec, this::flushReminderPlan);
+    }
+
+    /** ioExec: writes the newest plan (identical content skipped), then posts what is due and re-arms. */
+    private void flushReminderPlan() {
+        try {
+            if (!reminderPlanWrite.flushTo(file(HuntFiles.REMINDER_PLAN_FILE))) return;
+        } catch (IOException | RuntimeException e) {
+            Log.w(TAG, "Saving the reminder plan failed; the next save retries", e);
+            return;
+        }
+        Reminders.replan(appContext);
     }
 
     /**
@@ -2037,6 +2137,50 @@ public class MainActivity extends Activity {
             } catch (RuntimeException e) {
                 Log.w(TAG, "ackPendingTicks failed", e);
             }
+        }
+
+        /**
+         * Reminders (ADR-0007): the Reminder Plan HuntCore built ({"version": 1, "reminders": [...]}).
+         * Written asynchronously (coalesced, atomic); then the due ones are posted and the alarm armed.
+         */
+        @JavascriptInterface
+        public void saveReminderPlan(String json) {
+            try {
+                saveReminderPlanInternal(json);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "saveReminderPlan failed", e);
+            }
+        }
+
+        /** {"notifications": bool, "exactAlarms": bool}: whether reminders can arrive, and on time. */
+        @JavascriptInterface
+        public String getReminderPermissions() {
+            try {
+                return Reminders.permissionsJson(appContext);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "getReminderPermissions failed", e);
+                return "{}";
+            }
+        }
+
+        /**
+         * The Snoozes this phone's notifications stored ({@link ReminderSnoozes}), a JSON array of
+         * {key, fireAt, until} the page folds into its next Reminder Plan. A small file.
+         */
+        @JavascriptInterface
+        public String readReminderSnoozes() {
+            try {
+                return ReminderSnoozes.readJson(filesDir);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "readReminderSnoozes failed", e);
+                return "[]";
+            }
+        }
+
+        /** Takes the next step towards reminders arriving on time (a dialog or a settings screen). */
+        @JavascriptInterface
+        public void requestReminderPermissions() {
+            main.post(MainActivity.this::requestReminderPermissionsNow);
         }
 
         @JavascriptInterface
