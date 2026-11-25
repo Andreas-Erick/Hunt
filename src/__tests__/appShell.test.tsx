@@ -1112,6 +1112,19 @@ describe("MobileSyncModal: actions", () => {
     expect(errors).toHaveBeenCalledWith("[hunt] snapshot_import_failed", failure);
   });
 
+  it("an import whose file cannot be read says so (not 'Invalid snapshot file.') and logs it", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failure = namedError("NotReadableError", "file moved");
+    const file = new File(["{}"], "snap.json", { type: "application/json" });
+    file.text = () => Promise.reject(failure);
+
+    render(<MobileSyncModal isOpen onClose={() => undefined} />);
+    const input = screen.getByRole("dialog").querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(status()).toHaveTextContent("Could not read the file."));
+    expect(errors).toHaveBeenCalledWith("[hunt] snapshot_read_failed", failure);
+  });
+
   it("a successful import merges, syncs, and the message clears after a moment", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const payload = await buildLocalSyncPayload({

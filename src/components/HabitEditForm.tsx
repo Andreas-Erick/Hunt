@@ -6,23 +6,14 @@ import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitFrequencyOn, sameHabitFrequency } from "@/lib/habitFrequency";
 import { habitKindRules } from "@/lib/habitKind";
 import { hudAudio } from "@/lib/hudAudio";
+import { MAX_HABIT_TITLE_LENGTH, MAX_LONG_TEXT_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import * as Count from "./CountHabitControls";
 import { EditHabitQuestPicker } from "./HabitQuestPicker";
 import { HabitEndDateField } from "./HabitEndDateField";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitReminderTimes } from "./HabitReminderTimes";
-import { useDiscardGuard } from "./useDiscardGuard";
-
-const DISCARD_PROMPT = "Discard unsaved changes?";
-
-/** Asks before unsaved habit edits are dropped; true when there are none or the user agrees. */
-export function confirmDiscardHabitEdit(dirty: boolean): boolean {
-  return !dirty || window.confirm(DISCARD_PROMPT);
-}
-
-/** Discard guard for leaving the view with an unsaved habit edit. */
-const confirmLeaveDirty = () => confirmDiscardHabitEdit(true);
+import { confirmDiscard, confirmLeaveDirty, useDiscardGuard } from "./useDiscardGuard";
 
 /**
  * The one editor of a Habit, used by the card's Edit drawer and the detail
@@ -71,7 +62,7 @@ export function HabitEditForm({
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   const cancel = () => {
-    if (confirmDiscardHabitEdit(dirty)) onCancel();
+    if (confirmDiscard(dirty)) onCancel();
   };
 
   const save = async (e: React.FormEvent) => {
@@ -120,6 +111,7 @@ export function HabitEditForm({
           type="text"
           required
           autoFocus
+          maxLength={MAX_HABIT_TITLE_LENGTH}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="min-h-8 coarse:min-h-11 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
@@ -131,6 +123,7 @@ export function HabitEditForm({
         <input
           id={notesId}
           type="text"
+          maxLength={MAX_LONG_TEXT_LENGTH}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Optional reminder copied to each day's task..."

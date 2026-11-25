@@ -167,10 +167,9 @@ describe("module size ratchet", () => {
   // does. A file that must grow past its number gets split instead.
   const FROZEN: Record<string, number> = {
     "src/components/GuideLabSection.tsx": 767,
-    "src/components/MobileSyncModal.tsx": 772,
+    "src/components/MobileSyncModal.tsx": 702,
     "src/components/PlanWeekView.tsx": 737,
-    "src/components/QuestMatrixPanel.tsx": 1161,
-    "src/components/TelemetryDashboardView.tsx": 929,
+    "src/components/TelemetryDashboardView.tsx": 679,
     "src/lib/questScience.ts": 618,
     "src/lib/reviewAnalytics.ts": 649,
   };

@@ -15,6 +15,7 @@ import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitRowMode, habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import { isEndedHabit } from "@/lib/habitEnd";
 import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor } from "@/lib/habitFrequency";
+import { MAX_HABIT_TITLE_LENGTH, MAX_LONG_TEXT_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 import { MAX_SYNC_HABITS } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
@@ -27,7 +28,8 @@ import { HabitSkipToday } from "./HabitDayStrip";
 import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
-import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitEditForm } from "./HabitEditForm";
+import { confirmDiscard } from "./useDiscardGuard";
 import { HabitReminderBadge } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
@@ -177,7 +179,7 @@ export function HabitsView() {
 
   const startEdit = (habit: Habit, toggle: HTMLButtonElement) => {
     hudAudio.playClick();
-    if (!confirmDiscardHabitEdit(editingHabitId !== null && editDirty)) return;
+    if (!confirmDiscard(editingHabitId !== null && editDirty)) return;
     setEditDirty(false);
     editToggleRef.current = toggle;
     setEditingHabitId((cur) => (cur === habit.id ? null : habit.id));
@@ -251,6 +253,7 @@ export function HabitsView() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
             type="text"
+            maxLength={MAX_HABIT_TITLE_LENGTH}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Add a daily habit..."
@@ -277,6 +280,7 @@ export function HabitsView() {
         <div className="mt-2 border-t border-white/[0.05] pt-2">
           <input
             type="text"
+            maxLength={MAX_LONG_TEXT_LENGTH}
             value={newNotes}
             onChange={(e) => setNewNotes(e.target.value)}
             placeholder="Add description (optional)..."

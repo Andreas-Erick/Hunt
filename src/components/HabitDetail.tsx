@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import type { Habit, Quest } from "@/lib/domainTypes";
 import type { HabitDaySummary } from "@/lib/habitDay";
 import { HabitCalendar } from "./HabitCalendar";
-import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitEditForm } from "./HabitEditForm";
+import { confirmDiscard } from "./useDiscardGuard";
 import { HabitStatistics } from "./HabitStatistics";
+import { useModalDialog } from "./useModalDialog";
 
 /** The detail screen's tabs, in order. */
 const TABS = [
@@ -17,13 +19,12 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
 /**
  * A Habit's detail screen: a dialog with one tab per view of the Habit
  * (Calendar, Statistics, Edit). Escape, the close button and a press on the
- * backdrop close it, asking first while the Edit tab holds unsaved edits;
- * focus stays inside while it is open and returns to the opener.
+ * backdrop close it, asking first while the Edit tab holds unsaved edits.
+ * While open the page behind is scroll-locked and inert, focus stays inside,
+ * and it returns to the opener on close (useModalDialog).
  */
 export function HabitDetail({
   habit,
@@ -47,39 +48,16 @@ export function HabitDetail({
   const [tab, setTab] = useState<TabId>("calendar");
   const [editDirty, setEditDirty] = useState(false);
   const onClose = () => {
-    if (confirmDiscardHabitEdit(tab === "edit" && editDirty)) close();
+    if (confirmDiscard(tab === "edit" && editDirty)) close();
   };
   const selectTab = (next: TabId) => {
-    if (next === tab || !confirmDiscardHabitEdit(tab === "edit" && editDirty)) return;
+    if (next === tab || !confirmDiscard(tab === "edit" && editDirty)) return;
     setEditDirty(false);
     setTab(next);
   };
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const pressOnBackdrop = useRef(false);
-
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    return () => opener?.focus?.();
-  }, []);
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    if (e.key !== "Tab" || !dialogRef.current) return;
-    const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
-      e.preventDefault();
-      (e.shiftKey ? last : first).focus();
-    }
-  };
+  const { dialogRef, onKeyDown } = useModalDialog<HTMLDivElement>({ onClose, initialFocusRef: closeRef });
 
   // Portalled to <body>: a Habit card is a size container, which would trap a fixed overlay.
   return createPortal(
