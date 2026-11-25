@@ -4,18 +4,12 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
-import {
-  Check,
-  Play,
-  Plus,
-  Repeat,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
 import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
+import { isEndedHabit } from "@/lib/habitEnd";
 import {
   habitFrequencyLabel,
   habitFrequencyOn,
@@ -31,6 +25,8 @@ import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitTodayCheck } from "./HabitCardParts";
 import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
+import { EndedHabitsSection } from "./EndedHabitsSection";
+import { HabitEndDateField } from "./HabitEndDateField";
 
 export { computeHabitStreak };
 
@@ -88,9 +84,7 @@ export function HabitsView() {
   const [newTitle, setNewTitle] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [newFrequency, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
-  const [questChoice, setQuestChoice] = useState<string | null | undefined>(
-    undefined
-  );
+  const [questChoice, setQuestChoice] = useState<string | null | undefined>(undefined);
   const addingRef = useRef(false);
 
   // Inline Edit drawer (one habit at a time)
@@ -99,6 +93,7 @@ export function HabitsView() {
   const [editNotes, setEditNotes] = useState("");
   const [editQuestId, setEditQuestId] = useState<string | null>(null);
   const [editFrequency, setEditFrequency] = useState<HabitFrequency>(EVERY_DAY);
+  const [editEndDate, setEditEndDate] = useState(""); // "" = no end date
   const [savingEdit, setSavingEdit] = useState(false);
   const savingEditRef = useRef(false);
   const editToggleRef = useRef<HTMLButtonElement | null>(null);
@@ -131,10 +126,7 @@ export function HabitsView() {
 
   // Last 7 local days (oldest -> today) for real daily consistency dots.
   const recentDays = useMemo(
-    () =>
-      Array.from({ length: HISTORY_DAYS }, (_, idx) =>
-        dateKeyFromOffset(todayKey, idx - (HISTORY_DAYS - 1))
-      ),
+    () => Array.from({ length: HISTORY_DAYS }, (_, idx) => dateKeyFromOffset(todayKey, idx - (HISTORY_DAYS - 1))),
     [todayKey]
   );
 
@@ -143,6 +135,10 @@ export function HabitsView() {
     () => summarizeHabitDays(habitTasks ?? [], todayKey, habits ?? []),
     [habitTasks, todayKey, habits]
   );
+
+  // An Ended Habit (past its end date) leaves the list for the collapsed Ended section.
+  const ended = useMemo(() => (habits ?? []).filter((h) => isEndedHabit(h, todayKey)), [habits, todayKey]);
+  const current = useMemo(() => (habits ?? []).filter((h) => !ended.includes(h)), [habits, ended]);
 
   // Only Habits asked of today (scheduled, not Skipped) count toward "done today".
   const todayTally = useMemo(
@@ -155,6 +151,7 @@ export function HabitsView() {
     (editTitle !== editingHabit.title ||
       editNotes !== (editingHabit.notes ?? "") ||
       editQuestId !== editingHabit.questId ||
+      editEndDate !== (editingHabit.endDate ?? "") ||
       !sameHabitFrequency(editFrequency, habitFrequencyOn(editingHabit, todayKey)));
 
   useDiscardGuard(editIsDirty(), confirmLeaveDirty);
@@ -199,6 +196,7 @@ export function HabitsView() {
     setEditNotes(habit.notes ?? "");
     setEditQuestId(habit.questId);
     setEditFrequency(habitFrequencyOn(habit, todayKey));
+    setEditEndDate(habit.endDate ?? "");
   };
 
   const closeEdit = () => {
@@ -226,6 +224,7 @@ export function HabitsView() {
         notes: editNotes,
         questId: editQuestId,
         frequency: editFrequency,
+        endDate: editEndDate || null,
       });
       if (saved) {
         setEditingHabit((cur) => (cur?.id === habitId ? null : cur));
@@ -407,10 +406,8 @@ export function HabitsView() {
         </div>
       ) : (
         <div className="space-y-3.5">
-          {habits.map((habit) => {
-            const linkedQuest = habit.questId
-              ? questMap.get(habit.questId)
-              : undefined;
+          {current.map((habit) => {
+            const linkedQuest = habit.questId ? questMap.get(habit.questId) : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
             const { doneToday, outcomeOn, streak, todayTask } =
@@ -595,6 +592,7 @@ export function HabitsView() {
                         onChange={setEditFrequency}
                       />
                     </div>
+                    <HabitEndDateField value={editEndDate} onChange={setEditEndDate} />
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div
@@ -670,6 +668,7 @@ export function HabitsView() {
           })}
         </div>
       )}
+      <EndedHabitsSection habits={ended} summaryFor={habitDays.summaryFor} todayKey={todayKey} questMap={questMap} />
     </div>
   );
 }

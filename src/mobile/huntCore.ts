@@ -11,6 +11,7 @@
  */
 export {
   computeHabitStreak,
+  dateKeyFromOffset,
   habitTaskId,
   isMissedHabitTask,
   isOpenTask,
@@ -19,6 +20,7 @@ export {
 } from "../lib/dateUtils";
 export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
+export { habitEndDateLabel, isEndedHabit, withHabitEndDate } from "../lib/habitEnd";
 export {
   applyChecklistEdit,
   canHoldChecklist,

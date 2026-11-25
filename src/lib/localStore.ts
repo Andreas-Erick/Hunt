@@ -7,6 +7,8 @@ import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { withHabitEndDate } from "./habitEnd";
+import { isDateKey } from "./syncValues";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -411,8 +413,9 @@ async function deleteQuest(questId: string): Promise<void> {
 
 /** A new habit: every day unless `frequency` says otherwise. */
 export type NewHabit = { title: string; notes?: string; questId: string | null; frequency?: HabitFrequency };
-/** Habit fields the edit form can change; a new `frequency` applies from today (withHabitFrequency). */
-export type HabitChanges = Partial<NewHabit>;
+/** Habit fields the edit form can change; a new `frequency` applies from today (withHabitFrequency),
+ * a new `endDate` (null clears it) ends or restarts the Habit (withHabitEndDate). */
+export type HabitChanges = Partial<NewHabit> & { endDate?: string | null };
 
 /** Adds a habit at the end, with today's instance when its Frequency asks for today (unless
  * tombstoned). False for an empty title or an invalid Frequency (no weekday chosen). */
@@ -463,6 +466,10 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
       const frequency = parseHabitFrequency(changes.frequency);
       if (!frequency) return false;
       patch.frequencyHistory = withHabitFrequency(row, frequency, todayKey);
+    }
+    if (changes.endDate !== undefined) {
+      if (changes.endDate !== null && !isDateKey(changes.endDate)) return false;
+      Object.assign(patch, withHabitEndDate(row, changes.endDate, todayKey));
     }
     await db.habits.update(habitId, { ...patch, updatedAt: nextStamp(row) });
 

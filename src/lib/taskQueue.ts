@@ -221,7 +221,7 @@ export function missingHabitRows(
 }
 
 /**
- * Today's day Task after a Frequency change (it applies from today). Today no
+ * Today's day Task after a Frequency or end date change (it applies from today). Today no
  * longer scheduled sets an untouched queued day Task aside ("archived", so it
  * leaves Today and can come back); today scheduled again brings a set-aside one
  * back, or builds it when missing. A ticked or focused day Task is left alone.
@@ -237,8 +237,8 @@ function todayTaskForFrequency(habit: Habit, todayTask: Task | undefined, todayK
 
 /**
  * SHARED Habit-edit rule for today's day Task: the row to write after `before`
- * was edited into `after`, or null when nothing changes. A Frequency change
- * applies from today (todayTaskForFrequency); an open day Task follows the new
+ * was edited into `after`, or null when nothing changes. A Frequency or end date
+ * change applies from today (todayTaskForFrequency); an open day Task follows the new
  * title and Quest, and the new notes unless they were edited on the day Task.
  * The caller skips a tombstoned id when a missing day Task is built.
  */
@@ -249,9 +249,9 @@ export function habitTodayTaskAfterEdit(
   todayKey: string,
   now: number = Date.now()
 ): Task | null {
-  const frequencyChanged =
-    JSON.stringify(before.frequencyHistory ?? []) !== JSON.stringify(after.frequencyHistory ?? []);
-  const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+  const scheduleOf = (h: Habit) => JSON.stringify([h.frequencyHistory ?? [], h.endDate ?? null, h.endedSpans ?? []]);
+  const scheduleChanged = scheduleOf(before) !== scheduleOf(after);
+  const task = scheduleChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
   if (!task) return null;
   const next: Task = { ...task };
   if (next.status === "queued" || next.status === "active") {

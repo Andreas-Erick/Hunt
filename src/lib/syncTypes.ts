@@ -2,6 +2,7 @@ import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, Tim
 import { sanitizeChecklist } from "./checklist";
 import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
+import { sanitizeHabitEnd } from "./habitEnd";
 import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
 import {
   clamp, clampText, finiteOr, isDateKey, isRecord, isStamp, isTableKey, type UnknownRecord,
@@ -310,7 +311,7 @@ const TASK_FIELDS: ReadonlySet<string> = new Set([
   "scheduledDate", "skipped", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory", "endDate", "endedSpans",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -469,6 +470,7 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
   const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
   if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
+  Object.assign(habit, sanitizeHabitEnd(raw));
   copyScalarExtras(habit, raw, HABIT_FIELDS);
   return habit as Habit;
 }

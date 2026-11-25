@@ -3063,15 +3063,18 @@ var HuntCore = (() => {
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    dateKeyFromOffset: () => dateKeyFromOffset,
     dueReminders: () => dueReminders,
     fromFocusSession: () => fromFocusSession,
     habitDayOutcome: () => habitDayOutcome,
+    habitEndDateLabel: () => habitEndDateLabel,
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     habitTodayTally: () => habitTodayTally,
     habitTodayTaskAfterEdit: () => habitTodayTaskAfterEdit,
+    isEndedHabit: () => isEndedHabit,
     isHabitScheduledOn: () => isHabitScheduledOn,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -3094,8 +3097,45 @@ var HuntCore = (() => {
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
     transitionFocus: () => transitionFocus,
+    withHabitEndDate: () => withHabitEndDate,
     withHabitFrequency: () => withHabitFrequency
   });
+
+  // src/lib/habitEnd.ts
+  var MAX_ENDED_SPANS = 100;
+  function shiftDateKey(dateKey, days) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const date = new Date(y, m - 1, d + days, 12);
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${mm}-${dd}`;
+  }
+  function isHabitEndedOn(habit, dayKey) {
+    var _a;
+    if (habit.endDate && dayKey > habit.endDate) return true;
+    return ((_a = habit.endedSpans) != null ? _a : []).some((span) => span.from <= dayKey && dayKey <= span.to);
+  }
+  function isEndedHabit(habit, todayKey) {
+    return Boolean(habit.endDate) && habit.endDate < todayKey;
+  }
+  function withHabitEndDate(habit, endDate, todayKey) {
+    var _a;
+    const spans = [...(_a = habit.endedSpans) != null ? _a : []];
+    const restarts = isEndedHabit(habit, todayKey) && (endDate === null || endDate >= todayKey);
+    if (restarts) {
+      const from = shiftDateKey(habit.endDate, 1);
+      const to = shiftDateKey(todayKey, -1);
+      if (from <= to) spans.push({ from, to });
+    }
+    const kept = spans.slice(-MAX_ENDED_SPANS);
+    return { endDate: endDate != null ? endDate : void 0, endedSpans: kept.length > 0 ? kept : void 0 };
+  }
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function habitEndDateLabel(dateKey, todayKey) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const year = dateKey.slice(0, 4) === todayKey.slice(0, 4) ? "" : ` ${y}`;
+    return `${d} ${MONTHS[m - 1]}${year}`;
+  }
 
   // src/lib/habitFrequency.ts
   var EVERY_DAY = { type: "everyDay" };
@@ -3115,6 +3155,7 @@ var HuntCore = (() => {
     return inForce;
   }
   function isHabitScheduledOn(habit, dayKey) {
+    if (isHabitEndedOn(habit, dayKey)) return false;
     const frequency = habitFrequencyOn(habit, dayKey);
     return frequency.type !== "weekdays" || frequency.weekdays.includes(weekdayOfKey(dayKey));
   }
@@ -3844,9 +3885,12 @@ var HuntCore = (() => {
     return { ...todayTask, status: "archived" };
   }
   function habitTodayTaskAfterEdit(before, after, todayTask, todayKey, now = Date.now()) {
-    var _a, _b;
-    const frequencyChanged = JSON.stringify((_a = before.frequencyHistory) != null ? _a : []) !== JSON.stringify((_b = after.frequencyHistory) != null ? _b : []);
-    const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+    const scheduleOf = (h) => {
+      var _a, _b, _c;
+      return JSON.stringify([(_a = h.frequencyHistory) != null ? _a : [], (_b = h.endDate) != null ? _b : null, (_c = h.endedSpans) != null ? _c : []]);
+    };
+    const scheduleChanged = scheduleOf(before) !== scheduleOf(after);
+    const task = scheduleChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
     if (!task) return null;
     const next = { ...task };
     if (next.status === "queued" || next.status === "active") {
@@ -3983,8 +4027,9 @@ var HuntCore = (() => {
     return ((_a = state.tasks) != null ? _a : []).filter((t) => !t.habitId && t.scheduledDate === dateKey && isOpenTask(t, dateKey)).sort(compareRank);
   }
   function todayTasks(state, todayKey) {
-    var _a;
-    return ((_a = state.tasks) != null ? _a : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    var _a, _b;
+    const endedIds = new Set(((_a = state.habits) != null ? _a : []).filter((h) => isEndedHabit(h, todayKey)).map((h) => h.id));
+    return ((_b = state.tasks) != null ? _b : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).filter((t) => !t.habitId || !endedIds.has(t.habitId)).sort(compareRank);
   }
   function buildWidgetSnapshot(state, todayKey, look) {
     var _a, _b, _c, _d, _e, _f;
@@ -8412,6 +8457,8 @@ var HuntCore = (() => {
           <div class="sheet-label">Frequency · applies from today</div>
           <div id="habitFrequencyPicker">${habitFrequencyPickerHtml()}</div>
 
+          ${habitEndDateFieldHtml(h)}
+
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
             ${activeQuestsList().map(q => `
@@ -8433,6 +8480,103 @@ var HuntCore = (() => {
             <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
           </div>
       `);
+    }
+
+    // The sheet's optional end date (GLOSSARY: Ended Habit). After it the Habit leaves Today and moves
+    // to the Ended section; clearing or moving it restarts the Habit (the shared withHabitEndDate rule).
+    function habitEndDateFieldHtml(h) {
+      return `
+          <div class="sheet-label">End date · optional</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <input id="editHabitEndDateInput" type="date" class="sheet-input" style="margin:0;flex:1;min-width:0;" value="${escapeHtml(h.endDate || "")}" aria-label="End date" />
+            <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 14px;flex-shrink:0;" onclick="clearHabitEndDateInput()" aria-label="Clear end date">Clear</button>
+          </div>`;
+    }
+
+    function clearHabitEndDateInput() {
+      playClickSound();
+      const el = document.getElementById("editHabitEndDateInput");
+      if (el) el.value = "";
+    }
+
+    // Writes a Habit's end fields (withHabitEndDate) onto `h`, dropping the ones left empty.
+    function applyHabitEndDate(h, endDate, todayKey) {
+      const end = HuntCore.withHabitEndDate(h, endDate, todayKey);
+      if (end.endDate) h.endDate = end.endDate; else delete h.endDate;
+      if (end.endedSpans) h.endedSpans = end.endedSpans; else delete h.endedSpans;
+    }
+
+    // Today's day Task follows a Habit edit (shared rule): set aside, brought back or kept aligned.
+    function syncHabitTodayTask(prev, h, todayKey, now) {
+      const todayId = habitTaskId(h.id, todayKey);
+      const todayTask = HuntCore.habitTodayTaskAfterEdit(prev, h, state.tasks.find(t => t.id === todayId), todayKey, now);
+      if (todayTask && !asArray(state.deletedTaskIds).includes(todayId)) {
+        state.tasks = state.tasks.filter(t => t.id !== todayId).concat(todayTask).sort(compareRank);
+      }
+    }
+
+    // An Ended Habit's Restart: its end date is cleared, and the days it spent Ended are kept as a
+    // stretch with no Outcome, so they never count against its Streak.
+    function restartHabit(habitId) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h || !h.endDate) return;
+      playClickSound();
+      const now = Date.now();
+      const todayKey = toLocalDateKey(now);
+      const prev = cloneJson(h);
+      applyHabitEndDate(h, null, todayKey);
+      h.updatedAt = nextStamp(h, now);
+      syncHabitTodayTask(prev, h, todayKey, now);
+      commitLocalChange();
+      showToast("Habit restarted");
+    }
+
+    let endedHabitsOpen = false;
+
+    function toggleEndedHabits() {
+      playClickSound();
+      endedHabitsOpen = !endedHabitsOpen;
+      renderApp();
+    }
+
+    // The Habits screen's collapsed "Ended" section: each Ended Habit with its last week up to the
+    // end date and its final Streak. A tap opens its sheet (move the end date, or delete it).
+    function endedHabitsHtml(ended, habitDays, todayKey) {
+      if (ended.length === 0) return "";
+      const cards = endedHabitsOpen ? ended.map(h => {
+        const q = state.quests.find(x => x.id === h.questId);
+        const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
+        const { streak, outcomeOn } = habitDays.summaryFor(h.id);
+        const title = escapeHtml(h.title);
+        const dots = [6, 5, 4, 3, 2, 1, 0].map(i => {
+          const outcome = outcomeOn(HuntCore.dateKeyFromOffset(h.endDate, -i));
+          if (outcome === null) return `<span style="width:7px;height:2px;border-radius:1px;background:rgb(var(--c-ink) / 0.14);"></span>`;
+          return `<span style="width:7px;height:7px;border-radius:50%;${outcome === "met" ? `background:${hex};` : outcome === "skipped" ? "border:1px dashed rgb(var(--c-ink) / 0.35);background:transparent;" : "background:rgb(var(--c-ink) / 0.1);"}"></span>`;
+        }).join("");
+        return `
+              <div class="queue-item-card" data-ended-habit="${escapeHtml(h.id)}" style="align-items:flex-start;padding-top:12px;padding-bottom:12px;opacity:0.85;">
+                <div class="card-edge-bar" style="background:${hex};opacity:0.45;"></div>
+                <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">
+                  <div class="queue-item-title" style="color:var(--text-2);">${title}</div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:-2px;">Ended ${escapeHtml(HuntCore.habitEndDateLabel(h.endDate, todayKey))} · ${escapeHtml(q ? q.title : "Other work")}</div>
+                  <div class="queue-item-sub" style="margin-top:8px;gap:6px;">
+                    <span style="display:inline-flex;align-items:center;gap:4px;">${dots}</span>
+                    ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">${streak}d</span>` : ""}
+                  </div>
+                </div>
+                <div class="queue-item-right">
+                  <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="restartHabit(${jsArg(h.id)})" aria-label="Restart habit ${title}">Restart</button>
+                </div>
+              </div>`;
+      }).join("") : "";
+      return `
+          <div style="margin-top:18px;">
+            <button class="text-action pressable" style="min-height:var(--touch-min);display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:calc(0.12em * var(--label-track));text-transform:var(--label-case);margin:0 -8px;" onclick="toggleEndedHabits()" aria-expanded="${endedHabitsOpen}" aria-label="Ended habits (${ended.length})">
+              <span aria-hidden="true" style="display:inline-block;transition:transform 150ms ease-out;transform:rotate(${endedHabitsOpen ? 90 : 0}deg);">›</span>
+              <span>Ended (${ended.length})</span>
+            </button>
+            ${endedHabitsOpen ? `<div class="habits-grid ended-habits" style="margin-top:10px;">${cards}</div>` : ""}
+          </div>`;
     }
 
     // The sheet's "Skip today" row: only for a scheduled day still waiting to be done (not ticked,
@@ -8461,6 +8605,12 @@ var HuntCore = (() => {
       }
       const frequency = habitFrequencyFromDraft();
       if (!frequency) return;
+      const endEl = document.getElementById("editHabitEndDateInput");
+      const endDate = endEl ? endEl.value : (h.endDate || "");
+      if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        flagInvalidField(endEl);
+        return;
+      }
       playClickSound();
       const now = Date.now();
       const todayKey = toLocalDateKey(now);
@@ -8474,15 +8624,12 @@ var HuntCore = (() => {
       // A Frequency change applies from today; earlier days keep the Frequency they had.
       const frequencyHistory = HuntCore.withHabitFrequency(h, frequency, todayKey);
       if (frequencyHistory.length > 0 || h.frequencyHistory) h.frequencyHistory = frequencyHistory;
+      // Ending, moving or clearing the end date (a restart keeps the days it spent Ended).
+      if (endDate !== (h.endDate || "")) applyHabitEndDate(h, endDate || null, todayKey);
       closeSheet();
       if (JSON.stringify(h) === before) return;
       h.updatedAt = nextStamp(h, now);
-      // Today's day Task follows the edit (shared rule): set aside, brought back or kept aligned.
-      const todayId = habitTaskId(h.id, todayKey);
-      const todayTask = HuntCore.habitTodayTaskAfterEdit(prev, h, state.tasks.find(t => t.id === todayId), todayKey, now);
-      if (todayTask && !asArray(state.deletedTaskIds).includes(todayId)) {
-        state.tasks = state.tasks.filter(t => t.id !== todayId).concat(todayTask).sort(compareRank);
-      }
+      syncHabitTodayTask(prev, h, todayKey, now);
       commitLocalChange();
       showToast("Habit saved");
     }
@@ -10507,6 +10654,9 @@ var HuntCore = (() => {
       // =====================================================================
       else if (activeView === "habits") {
         const habitsList = asArray(state.habits).slice().sort(compareRank);
+        // An Ended Habit (past its end date) leaves the list for the collapsed Ended section.
+        const endedHabits = habitsList.filter(h => HuntCore.isEndedHabit(h, todayKey));
+        const currentHabits = habitsList.filter(h => !endedHabits.includes(h));
         const recentDays = [];
         for (let i = 6; i >= 0; i--) recentDays.push(dayKeyOffset(-i, now));
 
@@ -10538,7 +10688,7 @@ var HuntCore = (() => {
             "No daily habits yet",
             "Create a recurring routine and it will appear in Today's queue every day.",
             [{ label: "+ New Habit", primary: true, onclick: "openNewHabitSheet()" }]
-          ) : `<div class="habits-grid">` + habitsList.map(h => {
+          ) : `<div class="habits-grid">` + currentHabits.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
             const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
@@ -10585,7 +10735,7 @@ var HuntCore = (() => {
                 </div>
               </div>
             `;
-          }).join("") + `</div>`}
+          }).join("") + `</div>` + endedHabitsHtml(endedHabits, habitDays, todayKey)}
         `;
       }
 

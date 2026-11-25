@@ -1,6 +1,7 @@
 import { dateKeyFromOffset, isOpenTask, isTaskVisibleToday } from "./dateUtils";
 import type { QuestAccent, Task } from "./domainTypes";
 import type { Look } from "./lookPreference";
+import { isEndedHabit } from "./habitEnd";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 import { missingHabitRows } from "./taskQueue";
@@ -78,12 +79,16 @@ function futureTasks(state: SyncPayload, dateKey: string): Task[] {
  * Today's list as the app's Today view shows it: open Tasks visible today
  * (overdue and unscheduled roll in, Habits only on their own day) in rank
  * order, with today's Habits filled in by their fixed ids when Hunt has not
- * created the rows yet. Pure: `state` is not modified.
+ * created the rows yet. A day Task of an Ended Habit is left out even when it
+ * exists (made on another device before the end date synced). Pure: `state` is
+ * not modified.
  */
 function todayTasks(state: SyncPayload, todayKey: string): Task[] {
+  const endedIds = new Set((state.habits ?? []).filter((h) => isEndedHabit(h, todayKey)).map((h) => h.id));
   return (state.tasks ?? [])
     .concat(missingHabitRows(state, todayKey))
     .filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey))
+    .filter((t) => !t.habitId || !endedIds.has(t.habitId))
     .sort(compareRank);
 }
 

@@ -60,6 +60,11 @@ associativity and idempotence over 400 seeds.
   whole history. The validator rebuilds the list from known
   shapes only (`sanitizeHabitFrequencyHistory`), so it stays
   bounded.
+- A Habit's end date (`endDate`) and the stretches it spent
+  Ended before a restart (`endedSpans`) ride on its row the
+  same way: the later Habit row wins with both. The
+  validator keeps only valid date keys
+  (`sanitizeHabitEnd`), at most 100 stretches.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator, and a Dexie table.

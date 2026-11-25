@@ -863,3 +863,76 @@ describe("habit Frequency history", () => {
     expect(syncContentKey(again.payload)).toBe(syncContentKey(once));
   });
 });
+
+describe("habit end date (Ended Habits)", () => {
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: "hab-1763400000000-e1d2",
+    title: "Gym",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOf = (raw: Row) => validated(rawPayload({ habits: [raw] })).payload.habits?.[0];
+
+  it("keeps an old Habit row without an end date as it is (it never ends)", () => {
+    const habit = habitOf(habitRow());
+    expect(habit?.endDate).toBeUndefined();
+    expect(habit?.endedSpans).toBeUndefined();
+  });
+
+  it("keeps a valid end date and Ended stretches, in date order", () => {
+    const habit = habitOf(
+      habitRow({
+        endDate: "2026-11-30",
+        endedSpans: [
+          { from: "2026-11-10", to: "2026-11-12" },
+          { from: "2026-10-01", to: "2026-10-05" },
+        ],
+      })
+    );
+    expect(habit?.endDate).toBe("2026-11-30");
+    expect(habit?.endedSpans).toEqual([
+      { from: "2026-10-01", to: "2026-10-05" },
+      { from: "2026-11-10", to: "2026-11-12" },
+    ]);
+  });
+
+  it("drops a bad end date and bad or reversed Ended stretches", () => {
+    const habit = habitOf(
+      habitRow({
+        endDate: "30 Nov",
+        endedSpans: [
+          { from: "2026-11-12", to: "2026-11-10" },
+          { from: "2026-11-1", to: "2026-11-02" },
+          { from: "2026-11-03", to: "2026-11-04", extra: { deep: 1 } },
+          "2026-11-05",
+          null,
+        ],
+      })
+    );
+    expect(habit?.endDate).toBeUndefined();
+    expect(habit?.endedSpans).toEqual([{ from: "2026-11-03", to: "2026-11-04" }]);
+    expect(habitOf(habitRow({ endedSpans: "always" }))?.endedSpans).toBeUndefined();
+  });
+
+  it("keeps at most the newest 100 Ended stretches", () => {
+    const spans = Array.from({ length: 150 }, (_, i) => {
+      const day = localDateKey(new Date(2026, 0, 1 + i * 2, 12).getTime());
+      return { from: day, to: day };
+    });
+    const kept = habitOf(habitRow({ endedSpans: spans }))?.endedSpans ?? [];
+    expect(kept).toHaveLength(100);
+    expect(kept[99]).toEqual(spans[149]);
+  });
+
+  it("validating its own output changes nothing", () => {
+    const row = habitRow({ endDate: "2026-11-30", endedSpans: [{ from: "2026-11-10", to: "2026-11-12" }] });
+    const once = validated(rawPayload({ habits: [row] })).payload;
+    const again = validated(JSON.parse(JSON.stringify(once)));
+    expect(again.dropped).toBe(0);
+    expect(syncContentKey(again.payload)).toBe(syncContentKey(once));
+  });
+});

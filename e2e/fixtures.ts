@@ -118,6 +118,16 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       rank: 1000,
       createdAt: now - 10 * DAY_MS,
     },
+    {
+      // An Ended Habit (ended three days ago): the collapsed Ended section on both apps.
+      id: "habit-ended",
+      title: `${LONG_QUEST_TITLE}${LONG_QUEST_TITLE}`,
+      notes: "",
+      questId: "quest-slot-0",
+      rank: 2000,
+      createdAt: now - 20 * DAY_MS,
+      endDate: dateKey(now - 3 * DAY_MS),
+    },
   ];
 
   // A spread of sessions over the past weeks so Review, the heatmap and the session log render.
