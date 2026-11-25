@@ -129,3 +129,50 @@ describe("dueReminders: Habit reminders", () => {
     expect(due.map((r) => r.key)).toEqual(["habit:hab-1:2026-11-25T23:55"]);
   });
 });
+
+describe("dueReminders: Habit reminders follow the Outcome rule for every Kind and Frequency", () => {
+  /** The day Task of `dayKey` (default Wednesday). */
+  const taskOn = (dayKey: string, overrides: Partial<Task> = {}) =>
+    dayTask({ id: `habit:hab-1:${dayKey}`, scheduledDate: dayKey, ...overrides });
+  const ticked = (dayKey: string) => taskOn(dayKey, { status: "completed", completedAt: at(25, 9) });
+  const twicePerWeek = habit({
+    frequencyHistory: [{ effectiveFrom: "2026-11-01", frequency: { type: "perWeek", times: 2 } }],
+  });
+  const wedToFri = { from: at(25, 0), to: at(28, 0) };
+
+  it("stays quiet once a Count day reaches its target, and fires while it is partway", () => {
+    const count = habit({ kind: "count", target: 3, unit: "glasses" });
+    expect(dueReminders({ tasks: [dayTask({ amount: 3 })], habits: [count] }, wednesday)).toEqual([]);
+    expect(dueReminders({ tasks: [dayTask({ amount: 2 })], habits: [count] }, wednesday)).toHaveLength(1);
+  });
+
+  it("stays quiet for the rest of an N per week Habit Week already Met, even ahead in the plan", () => {
+    const met = [ticked("2026-11-23"), ticked("2026-11-24")];
+    expect(dueReminders({ tasks: met, habits: [twicePerWeek] }, wedToFri)).toEqual([]);
+  });
+
+  it("fires on each day of an N per week Habit Week not yet Met", () => {
+    const due = dueReminders({ tasks: [ticked("2026-11-23")], habits: [twicePerWeek] }, wedToFri);
+    expect(due.map((r) => r.dateKey)).toEqual([WED, "2026-11-26", "2026-11-27"]);
+  });
+
+  it("stays quiet for the rest of a Skipped Habit Week", () => {
+    const setAside = taskOn("2026-11-23", { skipped: true });
+    expect(dueReminders({ tasks: [setAside], habits: [twicePerWeek] }, wedToFri)).toEqual([]);
+  });
+
+  it("stays quiet after an Ended Habit's end date, and inside a restarted Habit's ended span", () => {
+    expect(dueReminders({ tasks: [], habits: [habit({ endDate: "2026-11-24" })] }, wedToFri)).toEqual([]);
+    const restarted = habit({ endedSpans: [{ from: "2026-11-20", to: "2026-11-26" }] });
+    expect(dueReminders({ tasks: [], habits: [restarted] }, wedToFri).map((r) => r.dateKey)).toEqual(["2026-11-27"]);
+  });
+
+  it("fires an Avoid Habit's evening check-in while its day is Open, and stays quiet once a Slip ends it", () => {
+    const avoid = habit({ kind: "avoid", reminderTimes: ["21:00"] });
+    expect(dueReminders({ tasks: [], habits: [avoid] }, wednesday).map((r) => r.key)).toEqual([
+      "habit:hab-1:2026-11-25T21:00",
+    ]);
+    expect(dueReminders({ tasks: [dayTask({ slips: 1 })], habits: [avoid] }, wednesday)).toEqual([]);
+    expect(dueReminders({ tasks: [dayTask({ skipped: true })], habits: [avoid] }, wednesday)).toEqual([]);
+  });
+});

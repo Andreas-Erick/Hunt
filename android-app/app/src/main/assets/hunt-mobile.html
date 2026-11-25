@@ -4639,8 +4639,12 @@ var HuntCore = (() => {
 
   // src/lib/habitReminders.ts
   var MAX_WINDOW_DAYS = 31;
-  function wantsReminder(habit, dayKey, dayTask) {
-    return habitDayOutcome({ habit, dayKey, dayTask, todayKey: dayKey }) === "open";
+  function wantsReminder(habit, dayKey, dayTaskOn) {
+    const dayOutcomeOn = (day) => habitDayOutcome({ habit, dayKey: day, dayTask: dayTaskOn(day), todayKey: dayKey });
+    if (dayOutcomeOn(dayKey) !== "open") return false;
+    if (!isPerWeekFrequency(habitFrequencyOn(habit, dayKey))) return true;
+    const week = habitWeekOf(habit, dayKey, { dayTaskOn, dayOutcomeOn, firstDayKey: "" }, dayKey);
+    return !week || week.met < week.target && !week.skipped;
   }
   function dayTasksByHabit(tasks, habitIds) {
     var _a;
@@ -4657,10 +4661,9 @@ var HuntCore = (() => {
     return byHabit;
   }
   function dueHabitReminders(habits, tasks, window) {
-    var _a;
     const timed = habits.map((habit) => {
-      var _a2;
-      return { habit, times: (_a2 = sanitizeHabitReminderTimes(habit.reminderTimes)) != null ? _a2 : [] };
+      var _a;
+      return { habit, times: (_a = sanitizeHabitReminderTimes(habit.reminderTimes)) != null ? _a : [] };
     }).filter((h) => h.times.length > 0);
     if (timed.length === 0 || !(window.to > window.from)) return [];
     const dayTasks = dayTasksByHabit(tasks, new Set(timed.map((h) => h.habit.id)));
@@ -4669,7 +4672,10 @@ var HuntCore = (() => {
     let dayKey = toLocalDateKey(window.from);
     for (let n = 0; n < MAX_WINDOW_DAYS && dayKey <= lastDay; n++, dayKey = dateKeyFromOffset(dayKey, 1)) {
       for (const { habit, times } of timed) {
-        if (!wantsReminder(habit, dayKey, (_a = dayTasks.get(habit.id)) == null ? void 0 : _a.get(dayKey))) continue;
+        if (!wantsReminder(habit, dayKey, (day) => {
+          var _a;
+          return (_a = dayTasks.get(habit.id)) == null ? void 0 : _a.get(day);
+        })) continue;
         for (const time of times) {
           const fireAt = localFireAt(dayKey, time);
           if (fireAt === null || fireAt < window.from || fireAt >= window.to) continue;

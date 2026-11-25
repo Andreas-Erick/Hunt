@@ -34,8 +34,11 @@ queued or in Focus. A Habit reminder
 Habit's `reminderTimes` on each day whose Outcome, judged
 on that day by the shared `habitDayOutcome`, is Open: a
 Met, Skipped or unscheduled day stays quiet, and so does
-any day the Outcome rule closes (an Ended Habit, a Habit
-Week already Met). Habit Kinds need no rule of their own
+any day the Outcome rule closes (an Ended Habit). An N
+per week day is Open on its own, so its Habit Week
+(`habitWeekOf`) is read too: once the week holds N Met
+days, or was set aside (Skipped), its other days stay
+quiet. Habit Kinds need no rule of their own
 here: an Avoid Habit's day stays Open until a Slip, so
 its evening reminder is a check-in. Each answer carries
 a `kind` (`task` or `habit`) and a `key`

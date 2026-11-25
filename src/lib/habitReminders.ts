@@ -1,7 +1,9 @@
 import { dateKeyFromOffset, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { completionDateKey } from "./habitDay";
+import { habitFrequencyOn, isPerWeekFrequency } from "./habitFrequency";
 import { habitDayOutcome } from "./habitOutcome";
+import { habitWeekOf } from "./habitWeek";
 import { localFireAt, sanitizeHabitReminderTimes, type DueReminder, type ReminderWindow } from "./reminderTime";
 
 /**
@@ -17,11 +19,18 @@ const MAX_WINDOW_DAYS = 31;
  * Whether a Habit day still wants its reminder: its Outcome, judged on the day
  * itself, is Open. Met, Skipped, unscheduled (null) and Ended days stay quiet.
  * The one seam for Habit Kinds and Habit Weeks: habitDayOutcome judges them,
- * so an Avoid Habit's check-in is due while no Slip ends its day, and a Habit
- * Week already Met goes quiet, without a rule of their own here.
+ * so an Avoid Habit's check-in is due while no Slip ends its day. An N per
+ * week day is Open on its own, so its Habit Week is read too: once the week
+ * holds N Met days, or was set aside (Skipped), its other days go quiet, as
+ * the Today view's skip state reads it.
  */
-function wantsReminder(habit: Habit, dayKey: string, dayTask: Task | undefined): boolean {
-  return habitDayOutcome({ habit, dayKey, dayTask, todayKey: dayKey }) === "open";
+function wantsReminder(habit: Habit, dayKey: string, dayTaskOn: (dayKey: string) => Task | undefined): boolean {
+  const dayOutcomeOn = (day: string) => habitDayOutcome({ habit, dayKey: day, dayTask: dayTaskOn(day), todayKey: dayKey });
+  if (dayOutcomeOn(dayKey) !== "open") return false;
+  if (!isPerWeekFrequency(habitFrequencyOn(habit, dayKey))) return true;
+  // firstDayKey only marks a Partial Week, which is still worth a reminder, so it is not read here.
+  const week = habitWeekOf(habit, dayKey, { dayTaskOn, dayOutcomeOn, firstDayKey: "" }, dayKey);
+  return !week || (week.met < week.target && !week.skipped);
 }
 
 /**
@@ -59,7 +68,7 @@ export function dueHabitReminders(
   let dayKey = toLocalDateKey(window.from);
   for (let n = 0; n < MAX_WINDOW_DAYS && dayKey <= lastDay; n++, dayKey = dateKeyFromOffset(dayKey, 1)) {
     for (const { habit, times } of timed) {
-      if (!wantsReminder(habit, dayKey, dayTasks.get(habit.id)?.get(dayKey))) continue;
+      if (!wantsReminder(habit, dayKey, (day) => dayTasks.get(habit.id)?.get(day))) continue;
       for (const time of times) {
         const fireAt = localFireAt(dayKey, time);
         if (fireAt === null || fireAt < window.from || fireAt >= window.to) continue;
