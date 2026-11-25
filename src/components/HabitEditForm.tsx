@@ -12,17 +12,7 @@ import { EditHabitQuestPicker } from "./HabitQuestPicker";
 import { HabitEndDateField } from "./HabitEndDateField";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitReminderTimes } from "./HabitReminderTimes";
-import { useDiscardGuard } from "./useDiscardGuard";
-
-const DISCARD_PROMPT = "Discard unsaved changes?";
-
-/** Asks before unsaved habit edits are dropped; true when there are none or the user agrees. */
-export function confirmDiscardHabitEdit(dirty: boolean): boolean {
-  return !dirty || window.confirm(DISCARD_PROMPT);
-}
-
-/** Discard guard for leaving the view with an unsaved habit edit. */
-const confirmLeaveDirty = () => confirmDiscardHabitEdit(true);
+import { confirmDiscard, confirmLeaveDirty, useDiscardGuard } from "./useDiscardGuard";
 
 /**
  * The one editor of a Habit, used by the card's Edit drawer and the detail
@@ -71,7 +61,7 @@ export function HabitEditForm({
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   const cancel = () => {
-    if (confirmDiscardHabitEdit(dirty)) onCancel();
+    if (confirmDiscard(dirty)) onCancel();
   };
 
   const save = async (e: React.FormEvent) => {

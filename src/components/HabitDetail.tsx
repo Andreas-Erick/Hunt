@@ -6,7 +6,8 @@ import { X } from "lucide-react";
 import type { Habit, Quest } from "@/lib/domainTypes";
 import type { HabitDaySummary } from "@/lib/habitDay";
 import { HabitCalendar } from "./HabitCalendar";
-import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitEditForm } from "./HabitEditForm";
+import { confirmDiscard } from "./useDiscardGuard";
 import { HabitStatistics } from "./HabitStatistics";
 import { useModalDialog } from "./useModalDialog";
 
@@ -47,10 +48,10 @@ export function HabitDetail({
   const [tab, setTab] = useState<TabId>("calendar");
   const [editDirty, setEditDirty] = useState(false);
   const onClose = () => {
-    if (confirmDiscardHabitEdit(tab === "edit" && editDirty)) close();
+    if (confirmDiscard(tab === "edit" && editDirty)) close();
   };
   const selectTab = (next: TabId) => {
-    if (next === tab || !confirmDiscardHabitEdit(tab === "edit" && editDirty)) return;
+    if (next === tab || !confirmDiscard(tab === "edit" && editDirty)) return;
     setEditDirty(false);
     setTab(next);
   };

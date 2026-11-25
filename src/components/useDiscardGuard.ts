@@ -3,6 +3,16 @@
 import { useEffect } from "react";
 import { useCommandStore } from "@/store/useCommandStore";
 
+export const DISCARD_PROMPT = "Discard unsaved changes?";
+
+/** Asks before unsaved form edits are dropped; true when there are none or the user agrees. */
+export function confirmDiscard(dirty: boolean): boolean {
+  return !dirty || window.confirm(DISCARD_PROMPT);
+}
+
+/** Discard guard for leaving a view with unsaved form edits (one identity, as useDiscardGuard wants). */
+export const confirmLeaveDirty = (): boolean => confirmDiscard(true);
+
 /**
  * While `dirty`, registers `confirmLeave` as the store's discard guard, so a
  * view switch (setActiveView) asks it first instead of unmounting the view and

@@ -26,7 +26,8 @@ import { HabitSkipToday } from "./HabitDayStrip";
 import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
-import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitEditForm } from "./HabitEditForm";
+import { confirmDiscard } from "./useDiscardGuard";
 import { HabitReminderBadge } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
@@ -173,7 +174,7 @@ export function HabitsView() {
 
   const startEdit = (habit: Habit, toggle: HTMLButtonElement) => {
     hudAudio.playClick();
-    if (!confirmDiscardHabitEdit(editingHabitId !== null && editDirty)) return;
+    if (!confirmDiscard(editingHabitId !== null && editDirty)) return;
     setEditDirty(false);
     editToggleRef.current = toggle;
     setEditingHabitId((cur) => (cur === habit.id ? null : habit.id));
