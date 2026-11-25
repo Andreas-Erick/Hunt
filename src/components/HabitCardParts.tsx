@@ -6,17 +6,21 @@ import { Check } from "lucide-react";
 
 /**
  * A Habit card's tick for today. Disabled on a day the Habit's Frequency does
- * not ask for (nothing to tick), with a dashed ring and its own label.
+ * not ask for (nothing to tick), or once an N per week Habit's Habit Week is
+ * Met, with a dashed ring and its own label.
  */
 export function HabitTodayCheck({
   title,
   askedToday,
+  weekly = false,
   doneToday,
   accentBg,
   onToggle,
 }: {
   title: string;
   askedToday: boolean;
+  /** An N per week Habit: not asked means its Habit Week is already Met. */
+  weekly?: boolean;
   doneToday: boolean;
   /** The Quest accent's background class, for a ticked ring. */
   accentBg: string;
@@ -29,7 +33,7 @@ export function HabitTodayCheck({
       disabled={!askedToday}
       aria-label={
         !askedToday
-          ? `Not scheduled today: ${title}`
+          ? `${weekly ? "Not asked again this week" : "Not scheduled today"}: ${title}`
           : doneToday
           ? `Reopen today's habit: ${title}`
           : `Complete today's habit: ${title}`

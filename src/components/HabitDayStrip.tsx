@@ -13,19 +13,23 @@ const SKIP_BUTTON =
  * A Habit card's "Skip today" control: Skip while today's day is Open and no
  * focus runs on it, "Skipped today" with Undo skip once it is set aside,
  * nothing once it is Met. A Skipped day neither breaks nor adds to the Streak.
+ * For an N per week Habit (`weekly`) it skips the whole Habit Week instead.
  */
 export function HabitSkipToday({
   habit,
   todayKey,
   outcome,
+  weekly = false,
   focusRunning,
 }: {
   habit: Pick<Habit, "id" | "title">;
   todayKey: string;
-  /** Today's Outcome for this Habit. */
+  /** The Outcome a Skip acts on (HabitDaySummary.skipState). */
   outcome: HabitOutcome | null;
+  weekly?: boolean;
   focusRunning: boolean;
 }) {
+  const period = weekly ? "this week" : "today";
   const setHabitDaySkipped = useCommandStore((s) => s.setHabitDaySkipped);
   const { title } = habit;
   const onSkip = (skipped: boolean) => {
@@ -35,7 +39,7 @@ export function HabitSkipToday({
   if (outcome === "skipped") {
     return (
       <span className="flex items-center gap-1">
-        <span className="text-xs text-hud-muted">Skipped today</span>
+        <span className="text-xs text-hud-muted">Skipped {period}</span>
         <button
           type="button"
           onClick={() => onSkip(false)}
@@ -52,57 +56,11 @@ export function HabitSkipToday({
     <button
       type="button"
       onClick={() => onSkip(true)}
-      aria-label={`Skip today: ${title}`}
-      title="Set today aside: it neither breaks nor adds to the streak"
+      aria-label={`Skip ${period}: ${title}`}
+      title={`Set ${period} aside: it neither breaks nor adds to the streak`}
       className={`${SKIP_BUTTON} text-hud-muted`}
     >
-      Skip today
+      Skip {period}
     </button>
-  );
-}
-
-/**
- * A Habit card's recent days, oldest first: a dot per scheduled day (filled
- * when Met, dashed when Skipped, ringed for today while Open, dim when Missed)
- * and a short dash for a day with no Outcome (the Frequency did not ask for it).
- */
-export function HabitRecentDays({
-  days,
-  todayKey,
-  outcomeOn,
-  metClass,
-}: {
-  days: readonly string[];
-  todayKey: string;
-  outcomeOn: (dayKey: string) => HabitOutcome | null;
-  /** The Habit's accent background class for a Met dot. */
-  metClass: string;
-}) {
-  const metCount = days.filter((d) => outcomeOn(d) === "met").length;
-  return (
-    <div
-      className="flex items-center gap-1.5"
-      aria-label={`${metCount} of last ${days.length} days completed`}
-    >
-      {days.map((dKey) => {
-        const outcome = outcomeOn(dKey);
-        if (outcome === null) {
-          return (
-            <span key={dKey} title={`${dKey}: Not scheduled`} className="h-0.5 w-2 rounded-full bg-white/[0.12]" />
-          );
-        }
-        const label =
-          outcome === "met" ? "Completed" : outcome === "skipped" ? "Skipped" : "Not completed";
-        const look =
-          outcome === "met"
-            ? metClass
-            : outcome === "skipped"
-            ? "border border-dashed border-white/30 bg-transparent"
-            : dKey === todayKey
-            ? "border border-white/30 bg-transparent"
-            : "bg-white/[0.09]";
-        return <span key={dKey} title={`${dKey}: ${label}`} className={`h-2 w-2 rounded-full ${look}`} />;
-      })}
-    </div>
   );
 }

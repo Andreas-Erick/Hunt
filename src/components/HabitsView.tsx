@@ -4,27 +4,15 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
-import {
-  Check,
-  Play,
-  Plus,
-  Repeat,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
 import { habitDayAmount, habitKindOf } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
-import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
+import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
-import {
-  habitFrequencyLabel,
-  habitFrequencyOn,
-  isHabitScheduledOn,
-  sameHabitFrequency,
-} from "@/lib/habitFrequency";
+import { habitFrequencyLabel, habitFrequencyOn, sameHabitFrequency } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
@@ -33,12 +21,13 @@ import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitTodayCheck } from "./HabitCardParts";
-import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
+import { HabitSkipToday } from "./HabitDayStrip";
+import { HabitCardStats } from "./HabitCardStats";
+import { HabitDetail } from "./HabitDetail";
 
 export { computeHabitStreak };
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
-const HISTORY_DAYS = 7;
 const EVERY_DAY: HabitFrequency = { type: "everyDay" };
 
 function confirmDiscard(dirty: boolean): boolean {
@@ -102,6 +91,7 @@ export function HabitsView() {
 
   // Inline Edit drawer (one habit at a time)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [detailHabitId, setDetailHabitId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editQuestId, setEditQuestId] = useState<string | null>(null);
@@ -135,15 +125,6 @@ export function HabitsView() {
       ? questChoice
       : activeQuests[0]?.id ?? null;
   const otherSelected = quests !== undefined && selectedQuestId === null;
-
-  // Last 7 local days (oldest -> today) for real daily consistency dots.
-  const recentDays = useMemo(
-    () =>
-      Array.from({ length: HISTORY_DAYS }, (_, idx) =>
-        dateKeyFromOffset(todayKey, idx - (HISTORY_DAYS - 1))
-      ),
-    [todayKey]
-  );
 
   // Today's instance, completed days and streak per habit (shared Habit Day rules).
   const habitDays = useMemo(
@@ -387,11 +368,11 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, outcomeOn, streak, todayTask } =
-              habitDays.summaryFor(habit.id);
-            const skippedToday = outcomeOn(todayKey) === "skipped";
+            const summary = habitDays.summaryFor(habit.id);
+            const { doneToday, todayTask, askedToday } = summary;
+            const skippedToday = summary.skipState === "skipped";
             const isEditing = editingHabit?.id === habit.id;
-            const askedToday = isHabitScheduledOn(habit, todayKey);
+            const weekly = summary.week !== null;
             // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
             const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
             const todayAmount = habitDayAmount(todayTask);
@@ -418,6 +399,7 @@ export function HabitsView() {
                         <HabitTodayCheck
                           title={habit.title}
                           askedToday={askedToday}
+                          weekly={weekly}
                           doneToday={doneToday}
                           accentBg={style.bg}
                           onToggle={() => void handleToggleToday(habit)}
@@ -425,8 +407,11 @@ export function HabitsView() {
                       )}
 
                       <div className="min-w-0 flex-1">
-                        <div
-                          className={`break-words [text-wrap:pretty] text-base font-medium leading-snug ${
+                        <button
+                          type="button"
+                          onClick={() => setDetailHabitId(habit.id)}
+                          aria-label={`Open habit: ${habit.title}`}
+                          className={`-my-1 min-h-8 max-w-full rounded-md py-1 text-left break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-base font-medium leading-snug transition-colors duration-150 ease-out hover:text-accent coarse:min-h-11 ${
                             doneToday
                               ? "text-hud-muted line-through"
                               : skippedToday
@@ -435,7 +420,7 @@ export function HabitsView() {
                           }`}
                         >
                           {habit.title}
-                        </div>
+                        </button>
                         {habit.notes && (
                           <p className="mt-1 max-w-[70ch] break-words text-xs text-hud-muted">
                             {habit.notes}
@@ -477,7 +462,7 @@ export function HabitsView() {
                     </div>
                   </div>
 
-                  {/* Metadata Row: Daily pill, Quest pill, 7-day dots & streak */}
+                  {/* Metadata Row: Frequency pill, Quest pill, week strip, Streak & Success Rate */}
                   <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 pl-8">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-hud-muted">
@@ -497,26 +482,20 @@ export function HabitsView() {
                       </span>
                     </div>
 
-                    {/* Real 7-day completion history */}
+                    {/* Skip today, week strip, Streak and Success Rate */}
                     <div className="flex flex-wrap items-center gap-3">
                       <HabitSkipToday
                         habit={habit}
                         todayKey={todayKey}
-                        outcome={outcomeOn(todayKey)}
+                        outcome={summary.skipState}
+                        weekly={weekly}
                         focusRunning={todayTask?.status === "active"}
                       />
-                      <HabitRecentDays
-                        days={recentDays}
+                      <HabitCardStats
+                        summary={habitDays.summaryFor(habit.id)}
                         todayKey={todayKey}
-                        outcomeOn={outcomeOn}
                         metClass={style.bg}
                       />
-
-                      {streak > 0 && (
-                        <span className="font-mono text-xs tabular-nums text-neutral-300">
-                          {streak}d streak
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -614,6 +593,9 @@ export function HabitsView() {
                     </div>
                   </form>
                 </HeightReveal>
+                {detailHabitId === habit.id && (
+                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={summary.outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                )}
               </div>
             );
           })}

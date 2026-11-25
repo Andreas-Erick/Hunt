@@ -66,9 +66,11 @@ const LOG_STARTS = [10_000, 20_000];
 const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${start}-${taskId}`));
 const DURATIONS = [60, 600, 1800];
 const HABIT_IDS = ["hab-1763400000000-aaaa", "hab-1763400000001-bbbb"];
-// Frequency histories (a daily row without one, chosen weekdays, a change back to every day).
+// Frequency histories (a daily row without one, chosen weekdays, a change back to every day,
+// N per week).
 const FREQUENCY_HISTORIES: ReadonlyArray<HabitFrequencyChange[] | undefined> = [
   undefined,
+  [{ effectiveFrom: "2026-11-16", frequency: { type: "perWeek", times: 3 } }],
   [{ effectiveFrom: "2026-11-18", frequency: { type: "weekdays", weekdays: [1, 3, 5] } }],
   [
     { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [0] } },

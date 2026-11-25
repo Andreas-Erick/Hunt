@@ -7,6 +7,7 @@ import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { correctHabitDay, ensureHabitTaskForDay, habitWeekTasks, setHabitDaySkipped } from "./localHabitDays";
 import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
 import {
   hasLocalLogTombstone,
@@ -27,6 +28,7 @@ import {
   buildBurstLog,
   buildHabitTaskRow,
   habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   planRankMoves,
   RANK_STEP,
@@ -507,37 +509,14 @@ async function materializeHabits(dateKey: string, options?: LocalWriteOptions): 
   const added = await db.transaction("rw", db.habits, db.tasks, async () => {
     const habits = (await db.habits.toArray()).sort(compareRank);
     if (habits.length === 0) return 0;
-    const candidateIds = habits.map((h) => habitTaskId(h.id, dateKey));
-    const existing = await db.tasks.bulkGet(candidateIds);
-    const toAdd: Task[] = [];
-    habits.forEach((habit, i) => {
-      if (!isHabitScheduledOn(habit, dateKey)) return;
-      if (existing[i] || hasLocalTaskTombstone(candidateIds[i])) return;
-      toAdd.push(buildHabitTaskRow(habit, dateKey));
-    });
+    const existing = await db.tasks.bulkGet(habits.map((h) => habitTaskId(h.id, dateKey)));
+    // The Habit Week's day Tasks decide whether an N per week Habit still asks for the day.
+    const tasks = [...(await habitWeekTasks(dateKey)), ...existing.filter((t): t is Task => Boolean(t))];
+    const toAdd = missingHabitRows({ habits, tasks }, dateKey).filter((t) => !hasLocalTaskTombstone(t.id));
     if (toAdd.length > 0) await db.tasks.bulkPut(toAdd);
     return toAdd.length;
   });
   return changed(added, options);
-}
-
-/**
- * One habit's instance for `dateKey`, materializing the day first when it is
- * missing. Undefined when the habit is gone or the instance is tombstoned.
- */
-async function ensureHabitTaskForDay(habitId: string, dateKey: string): Promise<Task | undefined> {
-  const id = habitTaskId(habitId, dateKey);
-  const existing = await db.tasks.get(id);
-  if (existing) return existing;
-  await materializeHabits(dateKey);
-  return db.tasks.get(id);
-}
-
-/** Sets a habit day Skipped or back, materializing it first: the row skipHabitDayRow builds. */
-async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boolean): Promise<boolean> {
-  const day = await ensureHabitTaskForDay(habitId, dateKey);
-  if (!day || Boolean(day.skipped) === skipped) return false;
-  return changed(await writeTask(day.id, { skipped: skipped || undefined }));
 }
 
 // ── Time logs ────────────────────────────────────────────────────────────
@@ -575,5 +554,6 @@ export const localStore = {
   /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
   logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
   setHabitDaySkipped,
+  correctHabitDay,
   deleteTimeLog,
 };
