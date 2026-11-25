@@ -2,7 +2,7 @@
 // Pending Ticks (ADR-0006): a Task ticked done on the Day Widget is queued by the shell and applied
 // by HuntCore the next time Hunt starts, through the shared complete-a-Task rule.
 import { describe, expect, it } from "vitest";
-import { applyPendingTicks, completeTaskRow, habitTaskId } from "@/mobile/huntCore";
+import { applyPendingTicks, buildHabitTaskRow, completeTaskRow, habitTaskId } from "@/mobile/huntCore";
 import type { Habit, Task } from "@/lib/domainTypes";
 import { mergeSyncPayloads, type SyncPayload } from "@/lib/syncTypes";
 
@@ -94,6 +94,48 @@ describe("applyPendingTicks", () => {
     const twice = applyPendingTicks(once, ticks);
     expect(twice.state).toEqual(once);
     expect(twice.skipped.map((s) => s.reason)).toEqual(["already-done", "already-done"]);
+  });
+
+  describe("a +1 tick on a Count Habit row", () => {
+    const jog: Habit = { ...habit, id: "hab-jog", title: "Jog", kind: "count", target: 3, unit: "miles" };
+    const jogId = habitTaskId(jog.id, DAY);
+    const plus = (tickedAt: number, taskId = jogId) => ({ taskId, dateKey: DAY, tickedAt, kind: "+1" as const });
+
+    it("creates the day's row Hunt has not created yet with a total of 1", () => {
+      const { state: after, skipped } = applyPendingTicks(state({ habits: [jog] }), [plus(TICKED_AT)]);
+      expect(skipped).toEqual([]);
+      expect(after.tasks[0]).toMatchObject({ id: jogId, amount: 1, status: "queued", countTickedAt: TICKED_AT });
+    });
+
+    it("adds one per tick through the shared rule, completing the day at its target", () => {
+      const before = state({ habits: [jog], tasks: [{ ...buildHabitTaskRow(jog, DAY), amount: 1 }] });
+      const { state: after } = applyPendingTicks(before, [plus(TICKED_AT), plus(TICKED_AT + 1000)]);
+      expect(after.tasks[0]).toMatchObject({ amount: 3, status: "completed", completedAt: TICKED_AT + 1000 });
+    });
+
+    it("is applied once: the same ticks read again are skipped and change nothing", () => {
+      const ticks = [plus(TICKED_AT), plus(TICKED_AT + 1000)];
+      const once = applyPendingTicks(state({ habits: [jog] }), ticks).state;
+      const twice = applyPendingTicks(once, ticks);
+      expect(twice.state).toEqual(once);
+      expect(twice.skipped.map((s) => s.reason)).toEqual(["already-counted", "already-counted"]);
+      expect(once.tasks[0].amount).toBe(2);
+    });
+
+    it("still counts on a day already Met, so going over the target is recorded", () => {
+      const met = { ...buildHabitTaskRow(jog, DAY), amount: 3, status: "completed" as const, completedAt: 5 };
+      const { state: after, skipped } = applyPendingTicks(state({ habits: [jog], tasks: [met] }), [plus(TICKED_AT)]);
+      expect(skipped).toEqual([]);
+      expect(after.tasks[0]).toMatchObject({ amount: 4, completedAt: 5 });
+    });
+
+    it("never mixes up the two kinds: +1 on a Check row, or a done tick on a Count row, is skipped", () => {
+      const check = state({ habits: [habit, jog], tasks: [task()] });
+      const wrong = [plus(TICKED_AT, "tsk-1"), { taskId: jogId, dateKey: DAY, tickedAt: TICKED_AT }];
+      const { state: after, skipped } = applyPendingTicks(check, wrong);
+      expect(skipped.map((s) => s.reason)).toEqual(["wrong-kind", "wrong-kind"]);
+      expect(after).toEqual(check);
+    });
   });
 
   it("skips a malformed tick as missing", () => {

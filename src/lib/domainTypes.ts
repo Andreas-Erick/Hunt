@@ -28,6 +28,12 @@ export interface Quest {
   completedAt?: number;
 }
 
+/**
+ * How a Habit's day succeeds (GLOSSARY: Habit Kind). Chosen when the Habit is
+ * made and never changed. A row without one is a Check Habit.
+ */
+export type HabitKind = "check" | "count";
+
 /** A day of the week as Date#getDay counts it: 0 = Sunday … 6 = Saturday. */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -53,6 +59,12 @@ export interface Habit {
   rank: number;
   createdAt: number;
   updatedAt?: number;
+  /** Habit Kind; missing on rows made before Kinds existed, which read as "check". */
+  kind?: HabitKind;
+  /** Count Habit: the day's total that makes it Met (a positive number). */
+  target?: number;
+  /** Count Habit: what is counted, e.g. "miles" (may be empty). */
+  unit?: string;
   /**
    * Frequency changes, ascending by `effectiveFrom` (habitFrequency.ts). Days
    * before the first change, and rows without the field, are every day.
@@ -99,6 +111,13 @@ export interface Task {
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;
+  /** A Count Habit's day Task: the day's one total (+1 and exact entry both write it). */
+  amount?: number;
+  /**
+   * A Count Habit's day Task: tap time of the newest `+1` Pending Tick applied to it, so the
+   * same queued tick read again is never counted twice.
+   */
+  countTickedAt?: number;
 }
 
 export interface TimeLog {

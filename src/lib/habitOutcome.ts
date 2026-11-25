@@ -1,5 +1,6 @@
 import type { Habit, Task } from "./domainTypes";
 import { isHabitScheduledOn } from "./habitFrequency";
+import { countTargetOf, habitDayAmount, habitKindOf } from "./habitKind";
 
 /**
  * How a scheduled Habit day ended (GLOSSARY: Outcome). Derived, never stored.
@@ -22,7 +23,7 @@ export interface HabitDay {
    * belongs to its scheduled day (completionDateKey), so a task ticked after
    * midnight is passed as the Task of the day before.
    */
-  dayTask: Pick<Task, "status" | "skipped"> | undefined;
+  dayTask: Pick<Task, "status" | "skipped" | "amount"> | undefined;
   /** Today's local YYYY-MM-DD key. */
   todayKey: string;
 }
@@ -30,13 +31,19 @@ export interface HabitDay {
 /**
  * SHARED Outcome rule: the Outcome of one Habit day, or null when the day has
  * none (yet): a day after today, or a day its Frequency did not ask for then. A
- * ticked day is Met; a day set aside on purpose (its day Task `skipped`) is
- * Skipped; today, and a past day whose focus is still running across midnight,
- * are Open; any other past day is Missed.
+ * day is Met when the Habit's Kind says so: a Check Habit's day once ticked, a
+ * Count Habit's once its total reaches the target (going over is still Met). A
+ * day set aside on purpose (its day Task `skipped`) is Skipped; today, and a
+ * past day whose focus is still running across midnight, are Open; any other
+ * past day is Missed, a Count day that got only partway included.
  */
 export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
   if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
-  if (dayTask?.status === "completed") return "met";
+  const met =
+    habitKindOf(habit) === "count"
+      ? habitDayAmount(dayTask) >= countTargetOf(habit)
+      : dayTask?.status === "completed";
+  if (met) return "met";
   if (dayTask?.skipped) return "skipped";
   if (dayKey === todayKey || dayTask?.status === "active") return "open";
   return "missed";

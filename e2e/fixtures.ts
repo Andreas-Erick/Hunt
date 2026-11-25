@@ -119,6 +119,18 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       rank: 1000,
       createdAt: now - 10 * DAY_MS,
     },
+    // A Count Habit with a long unit: its "+1" ring and "n / target unit" progress must fit too.
+    {
+      id: "habit-count",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 2000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "count",
+      target: 12.5,
+      unit: "glasses of sparkling mineral water",
+    },
   ];
 
   // A standalone List with an unbreakable name and long items, one of them ticked.

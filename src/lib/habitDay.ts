@@ -41,7 +41,7 @@ export interface HabitDaySummary {
   completedDates: ReadonlySet<string>;
   /** Met days in a row ending today, or yesterday while today is Open. */
   streak: number;
-  /** Whether today's instance is completed. */
+  /** Whether today is Met (a Check Habit ticked, a Count Habit at its target). */
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
@@ -83,8 +83,9 @@ function firstHabitDay(
  * that habit scheduled for `todayKey`. Pure: `habitTasks` is not modified.
  * Habits without any task still get a summary from `summaryFor`.
  *
- * `habits` gives each Habit's Frequency and the day it began; a Habit missing
- * from it is judged as an old row (every day) from its first day Task on.
+ * `habits` gives each Habit's Kind (and a Count Habit's target), its Frequency
+ * and the day it began; a Habit missing from it is judged as an old row (a
+ * daily Check Habit) from its first day Task on.
  */
 export function summarizeHabitDays(
   habitTasks: readonly Task[],
@@ -138,7 +139,7 @@ export function summarizeHabitDays(
           todayTask,
           completedDates,
           streak: habitStreakOn(todayKey, outcomeOn, firstHabitDay(habit, dayTasks, todayKey)),
-          doneToday: todayTask?.status === "completed",
+          doneToday: outcomeOn(todayKey) === "met",
           outcomeOn,
         };
         cache.set(habitId, summary);
