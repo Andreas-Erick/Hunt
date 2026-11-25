@@ -4,6 +4,7 @@ import { applyChecklistEdit, type ChecklistEdit } from "./checklist";
 import { clampLength, clampTitle } from "./textLimits";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
 import { isReminderTime } from "./reminders";
+import { correctHabitDayRow, type HabitDayMark } from "./habitCalendar";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, Quest, QuestAccent, Task } from "./domainTypes";
 import {
@@ -531,6 +532,19 @@ async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boo
   return changed(await writeTask(day.id, { skipped: skipped || undefined }));
 }
 
+/** Ticks, unticks or Skips one habit day from its calendar, materializing it first: the correctHabitDayRow row. */
+async function correctHabitDay(habitId: string, dateKey: string, mark: HabitDayMark): Promise<boolean> {
+  const day = await ensureHabitTaskForDay(habitId, dateKey);
+  if (!day) return false;
+  const at = Date.now();
+  return changed(
+    await writeTask(day.id, (row) => {
+      const next = correctHabitDayRow(row, mark, at);
+      return next === row ? null : next;
+    })
+  );
+}
+
 // ── Time logs ────────────────────────────────────────────────────────────
 
 /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -564,5 +578,6 @@ export const localStore = {
   materializeHabits,
   ensureHabitTaskForDay,
   setHabitDaySkipped,
+  correctHabitDay,
   deleteTimeLog,
 };

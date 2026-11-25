@@ -5,18 +5,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import {
-  Check,
-  Play,
-  Plus,
-  Repeat,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { dateKeyFromOffset } from "@/lib/dateUtils";
+import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
 import type { Habit, Quest } from "@/lib/domainTypes";
-import { computeHabitStreak } from "@/lib/dateUtils";
 import { summarizeHabitDays } from "@/lib/habitDay";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
@@ -25,6 +17,7 @@ import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
 import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
+import { HabitDetail } from "./HabitDetail";
 
 export { computeHabitStreak };
 
@@ -87,6 +80,7 @@ export function HabitsView() {
 
   // Inline Edit drawer (one habit at a time)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [detailHabitId, setDetailHabitId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editQuestId, setEditQuestId] = useState<string | null>(null);
@@ -459,8 +453,11 @@ export function HabitsView() {
                       </button>
 
                       <div className="min-w-0 flex-1">
-                        <div
-                          className={`break-words [text-wrap:pretty] text-base font-medium leading-snug ${
+                        <button
+                          type="button"
+                          onClick={() => setDetailHabitId(habit.id)}
+                          aria-label={`Open habit: ${habit.title}`}
+                          className={`-my-1 min-h-8 max-w-full rounded-md py-1 text-left break-words [overflow-wrap:anywhere] [text-wrap:pretty] text-base font-medium leading-snug transition-colors duration-150 ease-out hover:text-accent coarse:min-h-11 ${
                             doneToday
                               ? "text-hud-muted line-through"
                               : skippedToday
@@ -469,7 +466,7 @@ export function HabitsView() {
                           }`}
                         >
                           {habit.title}
-                        </div>
+                        </button>
                         {habit.notes && (
                           <p className="mt-1 max-w-[70ch] break-words text-xs text-hud-muted">
                             {habit.notes}
@@ -665,6 +662,9 @@ export function HabitsView() {
                     </div>
                   </form>
                 </HeightReveal>
+                {detailHabitId === habit.id && (
+                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                )}
               </div>
             );
           })}
