@@ -23,7 +23,7 @@ export function ReminderBadge({ time }: { time: string }) {
   );
 }
 
-const ACCESS_NOTE: Partial<Record<NotificationAccess, string>> = {
+export const REMINDER_ACCESS_NOTE: Partial<Record<NotificationAccess, string>> = {
   denied:
     "Notifications are blocked for Hunt, so this reminder will not show here. Allow notifications in the site settings (the icon left of the address), then reload.",
   unsupported: "Reminders show as notifications on the Hunt desktop app.",
@@ -53,7 +53,7 @@ export function TaskReminderField({
     if (value) void ensureNotificationAccess().then(setAccess);
   };
 
-  const note = reminderTime && access ? ACCESS_NOTE[access] : undefined;
+  const note = reminderTime && access ? REMINDER_ACCESS_NOTE[access] : undefined;
 
   return (
     <div className="space-y-1.5 text-xs">

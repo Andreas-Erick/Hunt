@@ -4,8 +4,8 @@ Status: Accepted · Date: 2026-11-25
 
 ## Context
 
-A dated Task can get one reminder time, and Habits get
-reminder times later. The user works at the desktop and
+A dated Task can get one reminder time, and a Habit one
+or more. The user works at the desktop and
 carries the phone, and wants a prompt on whichever is at
 hand. There is no push service: the laptop is the only
 hub (ADR-0002), and it is often off. Each device holds a
@@ -29,23 +29,34 @@ Both devices fire. One pure rule in HuntCore,
 `src/lib/reminders.ts`, answers which reminders fall in a
 window. A Task reminder is due on its `scheduledDate` at
 its `reminderTime` (local `HH:MM`) while the Task is
-queued or in Focus. Each answer carries a `key`
-(`task:<id>:<date>T<time>`) that is stable per item and
-time. Habit reminders and snoozes join the same rule and
-the same `DueReminder` union later.
+queued or in Focus. A Habit reminder
+(`src/lib/habitReminders.ts`) is due at each of the
+Habit's `reminderTimes` on each day whose Outcome, judged
+on that day by the shared `habitDayOutcome`, is Open: a
+Met, Skipped or unscheduled day stays quiet, and so does
+any day the Outcome rule closes (an Ended Habit, a Habit
+Week already Met). Habit Kinds need no rule of their own
+here: an Avoid Habit's day stays Open until a Slip, so
+its evening reminder is a check-in. Each answer carries
+a `kind` (`task` or `habit`) and a `key`
+(`task:<id>:<date>T<time>`, `habit:<id>:<date>T<time>`)
+that is stable per item and time. Snoozes join the same
+rule and the same `DueReminder` union later.
 
 Each device re-plans after every save and every sync.
 
 - **Desktop.** While the launcher's window is open, one
   timer is set for the next due reminder
   (`reminderAlarm.ts`). A Dexie live query over the undone
-  Tasks re-plans it on any write, local or synced. When it
-  rings it re-reads the Tasks before asking the rule, so a
-  Task finished in the meantime stays quiet. It shows a
-  Web Notification, which the launcher's Chromium window
-  turns into a Windows notification. The notification tag
-  is the reminder key, so two windows replace each other's
-  toast instead of stacking.
+  Tasks, the Habits and their day Tasks from yesterday on
+  re-plans it on any write, local or synced. When it rings
+  it re-reads them before asking the rule, so an item
+  finished in the meantime stays quiet. It shows a Web
+  Notification, which the launcher's Chromium window turns
+  into a Windows notification. The notification tag is the
+  reminder key, so two windows replace each other's toast
+  instead of stacking. A click focuses Hunt; a Habit's
+  opens Habits at its card.
 - **Phone.** After every save (a sync's merge is saved
   too), at boot and at the start of each day, the page
   hands the shell a Reminder Plan: HuntCore's
@@ -59,8 +70,10 @@ Each device re-plans after every save and every sync.
   minutes, and arms the next. A reboot, a clock or time
   zone change, an update or an exact-alarm grant re-arms
   it. The notification tag is the reminder key. A tap
-  opens Hunt on the item; an item gone since just opens
-  Hunt. The shell decides nothing about what is due.
+  opens Hunt on the item (a Task's options; a Habit's
+  sheet on Habits); an item gone since just opens Hunt.
+  The shell decides nothing about what is due; it only
+  picks the notification's text by `kind`.
 
 ## Consequences
 
@@ -95,8 +108,19 @@ Each device re-plans after every save and every sync.
 - A phone left closed for more than 7 days stops
   reminding until Hunt is opened again; the plan is
   rebuilt on every open. Its fire times are computed in
-  the time zone the page last ran in.
+  the time zone the page last ran in. Many Habit times
+  can fill the 64 entries before 7 days; the plan is
+  rebuilt each day, so this only shortens how long a
+  closed phone keeps reminding.
+- A phone plan built before a day is Met still holds
+  that day's Habit reminder until the next save or sync
+  replaces it; ticking the Habit is a save, so on the
+  device it was ticked on it goes quiet at once.
 - A reminder time is validated as `HH:MM` by the sync
-  validator and the phone's boundary guard. It merges with
-  its row under row-level last-write-wins (ADR-0001), so
-  it needs no merge rule of its own.
+  validator and the phone's boundary guard; a Habit keeps
+  at most 6, ascending, without repeats
+  (`sanitizeHabitReminderTimes`). Each merges with its row
+  under row-level last-write-wins (ADR-0001), so it needs
+  no merge rule of its own. Habit reminder times save as
+  soon as they change, as a Task's does, not with the
+  Habit's edit form.

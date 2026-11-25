@@ -32,7 +32,7 @@ let stop: (() => void) | null;
 
 function start() {
   const alarm = startReminderAlarm({
-    readTasks: async () => tasks,
+    readSources: async () => ({ tasks }),
     notify: (r) => fired.push(r),
   });
   stop = alarm.stop;
@@ -116,9 +116,9 @@ describe("startReminderAlarm", () => {
   it("keeps running when a read fails, and fires on the next successful one", async () => {
     let failing = true;
     const alarm = startReminderAlarm({
-      readTasks: async () => {
+      readSources: async () => {
         if (failing) throw new Error("idb closed");
-        return tasks;
+        return { tasks };
       },
       notify: (r) => fired.push(r),
       onError: () => {},

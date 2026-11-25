@@ -31,6 +31,7 @@ import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitTodayCheck } from "./HabitCardParts";
 import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
+import { HabitReminderBadge, HabitReminderTimes } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
 
@@ -503,6 +504,7 @@ export function HabitsView() {
                         <Repeat className="h-3 w-3" aria-hidden="true" />
                         <span>{habitFrequencyLabel(habitFrequencyOn(habit, todayKey))}</span>
                       </span>
+                      <HabitReminderBadge times={habit.reminderTimes} />
 
                       <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300">
                         <span
@@ -569,12 +571,7 @@ export function HabitsView() {
                     </div>
 
                     <div>
-                      <label
-                        htmlFor={editNotesId}
-                        className="mb-1 block text-xs text-neutral-400"
-                      >
-                        Default Notes
-                      </label>
+                      <label htmlFor={editNotesId} className="mb-1 block text-xs text-neutral-400">Default Notes</label>
                       <input
                         id={editNotesId}
                         type="text"
@@ -595,6 +592,8 @@ export function HabitsView() {
                         onChange={setEditFrequency}
                       />
                     </div>
+
+                    <HabitReminderTimes habitId={habit.id} habitTitle={habit.title} times={habit.reminderTimes} />
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div

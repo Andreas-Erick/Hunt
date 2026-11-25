@@ -58,6 +58,8 @@ export interface Habit {
    * before the first change, and rows without the field, are every day.
    */
   frequencyHistory?: HabitFrequencyChange[];
+  /** Local "HH:MM" times to remind on each Open scheduled day, ascending (ADR-0007). */
+  reminderTimes?: string[];
 }
 
 /** One item to tick inside a Task's Checklist. */

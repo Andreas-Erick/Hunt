@@ -23,8 +23,9 @@ import java.io.File;
  * are due, once each, and keeps one alarm armed for the next one, exact when Android allows it.
  * A tap opens Hunt on the item. Nothing here decides what is due or writes Hunt data.
  *
- * <p>Extension points: habit reminders (#31) are more plan entries of another kind, passed back to
- * the page as they are; notification actions (#32) are added in {@link #post} and go through the
+ * <p>Habit reminders are plan entries of kind "habit": only their text differs, and the kind is
+ * passed back to the page as it is. Extension point: notification actions (#32) are added in
+ * {@link #post} and go through the
  * Pending Tick queue, as widget ticks do (ADR-0006).
  */
 final class Reminders {
@@ -39,6 +40,8 @@ final class Reminders {
     static final String EXTRA_KIND = "com.hunt.companion.extra.REMINDER_KIND";
     static final String EXTRA_ITEM_ID = "com.hunt.companion.extra.REMINDER_ITEM_ID";
     static final String EXTRA_DATE_KEY = "com.hunt.companion.extra.REMINDER_DATE_KEY";
+    /** A plan entry's kind for a Habit day (HuntCore's DueReminder.kind); anything else reads as a Task. */
+    private static final String KIND_HABIT = "habit";
 
     /**
      * PendingIntent request codes. NEVER change a value: an armed alarm and a posted notification
@@ -114,10 +117,11 @@ final class Reminders {
         NotificationManager nm = app.getSystemService(NotificationManager.class);
         if (nm == null) return;
         ensureChannel(app, nm);
+        int text = KIND_HABIT.equals(e.kind) ? R.string.reminder_habit_text : R.string.reminder_task_text;
         Notification n = new Notification.Builder(app, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher_monochrome)
                 .setContentTitle(e.title)
-                .setContentText(app.getString(R.string.reminder_task_text))
+                .setContentText(app.getString(text))
                 .setWhen(e.fireAt)
                 .setShowWhen(true)
                 .setCategory(Notification.CATEGORY_REMINDER)

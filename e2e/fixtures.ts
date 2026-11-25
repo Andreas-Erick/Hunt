@@ -117,6 +117,8 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       questId: "quest-slot-0",
       rank: 1000,
       createdAt: now - 10 * DAY_MS,
+      // Several reminder times: the card badge and the edit panel chips must wrap, not overflow.
+      reminderTimes: ["06:30", "12:00", "18:45", "21:15"],
     },
   ];
 
