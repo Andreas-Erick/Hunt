@@ -161,6 +161,7 @@ step.
 | [0004](docs/adr/0004-direct-apk-build.md) | No-Gradle signed APK | Custom build script |
 | [0005](docs/adr/0005-two-looks.md) | Two looks, one token set | Looks aren't synced |
 | [0006](docs/adr/0006-widget-pending-ticks.md) | Widget ticks are queued | Applied when Hunt runs |
+| [0007](docs/adr/0007-reminders-on-both-devices.md) | Reminders fire on both devices | Duplicates until sync |
 
 ## Quickstart
 

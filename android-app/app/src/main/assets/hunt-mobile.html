@@ -1104,6 +1104,24 @@
       align-items: center;
       gap: 6px;
     }
+    .reminder-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .reminder-row .sheet-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: var(--touch-min);
+      margin-bottom: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .reminder-row .text-action {
+      flex: 0 0 auto;
+      margin: 0;
+      color: var(--slate);
+    }
     .danger-outline-btn {
       min-height: var(--touch-min);
       padding: 0 14px;
@@ -2897,12 +2915,14 @@ var HuntCore = (() => {
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    dueReminders: () => dueReminders,
     fromFocusSession: () => fromFocusSession,
     habitDayOutcome: () => habitDayOutcome,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
+    isReminderTime: () => isReminderTime,
     isSafeSyncId: () => isSafeSyncId,
     isTaskVisibleToday: () => isTaskVisibleToday,
     losingSessionEndAt: () => losingSessionEndAt,
@@ -3055,6 +3075,48 @@ var HuntCore = (() => {
         return summary;
       }
     };
+  }
+
+  // src/lib/reminders.ts
+  var REMINDER_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+  var DATE_KEY_RE2 = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function isReminderTime(value) {
+    return typeof value === "string" && REMINDER_TIME_RE.test(value);
+  }
+  function localFireAt(dateKey, time) {
+    const m = DATE_KEY_RE2.exec(dateKey);
+    if (!m) return null;
+    const [hour, minute] = time.split(":").map(Number);
+    const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, minute).getTime();
+    return Number.isFinite(at) ? at : null;
+  }
+  function isUndone(task) {
+    return task.status === "queued" || task.status === "active";
+  }
+  function taskReminder(task) {
+    const { scheduledDate, reminderTime } = task;
+    if (!isUndone(task) || !scheduledDate || !isReminderTime(reminderTime)) return null;
+    const fireAt = localFireAt(scheduledDate, reminderTime);
+    if (fireAt === null) return null;
+    return {
+      kind: "task",
+      key: `task:${task.id}:${scheduledDate}T${reminderTime}`,
+      itemId: task.id,
+      title: task.title,
+      dateKey: scheduledDate,
+      time: reminderTime,
+      fireAt
+    };
+  }
+  function dueReminders(sources, window) {
+    const due = [];
+    for (const task of sources.tasks) {
+      const reminder = taskReminder(task);
+      if (reminder && reminder.fireAt >= window.from && reminder.fireAt < window.to) {
+        due.push(reminder);
+      }
+    }
+    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
   // src/lib/syncTypes.ts
@@ -3608,9 +3670,9 @@ var HuntCore = (() => {
   }
 
   // src/lib/pendingTicks.ts
-  var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
+  var DATE_KEY_RE3 = /^\d{4}-\d{2}-\d{2}$/;
   function isWellFormed(tick) {
-    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE3.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
   }
   function habitRowFor(state, tick) {
     var _a;
@@ -3666,6 +3728,7 @@ var HuntCore = (() => {
     var buildHabitTaskRow = HuntCore.buildHabitTaskRow;
     var computeHabitStreak = HuntCore.computeHabitStreak;
     var completionDateKey = HuntCore.completionDateKey;
+    var isReminderTime = HuntCore.isReminderTime;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
@@ -3841,7 +3904,7 @@ var HuntCore = (() => {
     // Keeps only what the screens and the merge can use (the rows the server validator keeps): objects with
     // a safe id; quests and tasks with a string title; logs with a safe taskId, a finite duration >= 0 and
     // a startTime stamp; safe tombstone ids; a valid focus (else the empty focus). A scheduledDate that is
-    // not YYYY-MM-DD is removed. Never mutates `input` (rows are shared, fixed ones copied).
+    // not YYYY-MM-DD, and a reminderTime that is not HH:MM, are removed. Never mutates `input` (rows are shared, fixed ones copied).
     // dropped = rows, ids or fields discarded.
     function guardSyncState(input) {
       const src = isPlainRecord(input) ? input : {};
@@ -3859,10 +3922,12 @@ var HuntCore = (() => {
       const tasks = keep("tasks", isTitledRow).map(t => {
         const badDate = !hasDateKeyOrNone(t);
         const badHabit = t.habitId !== undefined && !isSafeSyncId(t.habitId);
-        if (!badDate && !badHabit) return t;
+        const badReminder = t.reminderTime !== undefined && !isReminderTime(t.reminderTime);
+        if (!badDate && !badHabit && !badReminder) return t;
         const copy = { ...t };
         if (badDate) { dropped++; delete copy.scheduledDate; }
         if (badHabit) { dropped++; delete copy.habitId; }
+        if (badReminder) { dropped++; delete copy.reminderTime; }
         return copy;
       });
       let activeFocus = src.activeFocus === undefined ? emptyFocus(0) : src.activeFocus;
@@ -4553,6 +4618,22 @@ var HuntCore = (() => {
     function updateTaskField(taskId, field, value) {
       cancelFieldDraft(taskId, field);
       if (applyTaskField(taskId, field, value)) commitLocalChange();
+    }
+
+    // A dated Task's one reminder time (ADR-0007): "" clears it (the Task stays date-only); only a local
+    // "HH:MM" is saved. Quiet commit, so the open Task Options sheet keeps its input.
+    function setTaskReminder(taskId, value) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t || (value !== "" && !isReminderTime(value))) return;
+      if ((t.reminderTime || "") === value) return;
+      if (value) t.reminderTime = value;
+      else delete t.reminderTime;
+      t.updatedAt = nextStamp(t);
+      const clear = document.getElementById("taskReminderClear");
+      if (clear) clear.hidden = !value;
+      const input = clear && clear.parentElement.querySelector("input");
+      if (input && !value) input.value = "";
+      commitLocalChange({ render: false });
     }
 
     // ----- Merge (phone side) -----
@@ -6888,6 +6969,13 @@ var HuntCore = (() => {
             <button class="sheet-pill ${dayKey === tomorrowKey ? 'selected' : ''}" aria-pressed="${dayKey === tomorrowKey}" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(tomorrowKey)});">Tomorrow</button>
             ${otherDay ? `<button class="sheet-pill selected" aria-pressed="true" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(dayKey)});">${escapeHtml(dateKeyLabel(dayKey))}</button>` : ""}
           </div>
+
+          ${task.scheduledDate && !task.habitId ? `
+          <div class="sheet-label">Reminder</div>
+          <div class="reminder-row">
+            <input type="time" class="sheet-input" aria-label="Reminder time" value="${escapeHtml(isReminderTime(task.reminderTime) ? task.reminderTime : "")}" onchange="setTaskReminder(${jsArg(task.id)}, this.value)" />
+            <button id="taskReminderClear" class="text-action" aria-label="Clear reminder" ${isReminderTime(task.reminderTime) ? "" : "hidden"} onclick="setTaskReminder(${jsArg(task.id)}, '')">✕ Clear</button>
+          </div>` : ""}
 
           <div class="sheet-footer-row">
             <button class="text-action" onclick="completeTaskDirect(${jsArg(task.id)})" style="color:var(--emerald);">✓ Mark Completed</button>

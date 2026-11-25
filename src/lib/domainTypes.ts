@@ -50,6 +50,7 @@ export interface Task {
   accumulatedSeconds: number;
   scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
   habitId?: string; // Source Habit.id when materialized from a daily habit
+  reminderTime?: string; // Local "HH:MM" on a dated Task; none = date-only (ADR-0007)
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;

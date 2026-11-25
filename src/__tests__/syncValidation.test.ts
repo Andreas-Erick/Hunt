@@ -443,6 +443,13 @@ describe("enums and dates", () => {
     expect(sanitizeOne("task", taskRow({ scheduledDate: "2024-02-29" }))?.get("scheduledDate")).toBe("2024-02-29");
   });
 
+  it("keeps a reminderTime only when it is a local 24-hour HH:MM", () => {
+    for (const reminderTime of ["9:30", "24:00", "09:30:00", "noon", 930, null, {}]) {
+      expect(sanitizeOne("task", taskRow({ reminderTime }))?.has("reminderTime"), String(reminderTime)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ reminderTime: "07:05" }))?.get("reminderTime")).toBe("07:05");
+  });
+
   it("recomputes an invalid log dateKey from endTime, else from startTime", () => {
     const end = 1_763_420_000_000;
     expect(sanitizeOne("log", logRow({ dateKey: "<b>", endTime: end }))?.get("dateKey")).toBe(localDateKey(end));
@@ -539,12 +546,13 @@ describe("seeded fuzz of row sanitizing", () => {
     ...MATRIX_INPUTS.map(([, value]) => value),
     "", "   ", "<script>alert(1)</script>", "x".repeat(300), "👨‍👩‍👧‍👦", true, false, [], {}, [[1]], { a: { b: 1 } },
     TASK_ID, QUEST_ID, "2026-11-18", "cyan", "slate", "completed", "__proto__", "x".repeat(129),
+    "09:30", "24:00",
   ];
   const FIELDS = [
     "id", "title", "notes", "description", "questId", "taskId", "status", "rank", "accumulatedSeconds",
     "scheduledDate", "createdAt", "updatedAt", "completedAt", "slotIndex", "accentColor", "accentColorSnapshot",
     "targetWeeklyHours", "startTime", "endTime", "durationSeconds", "dateKey", "taskTitleSnapshot",
-    "questCodeSnapshot", "extra", "constructor", "prototype",
+    "questCodeSnapshot", "extra", "constructor", "prototype", "reminderTime",
   ];
   const isScalar = (v: unknown) =>
     v === null || typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
@@ -585,6 +593,7 @@ describe("seeded fuzz of row sanitizing", () => {
         expect(["queued", "active", "completed", "archived"], msg).toContain(t.status);
         expect(inRange(t.accumulatedSeconds, 0, 1e9), msg).toBe(true);
         expect(t.questId === null || isSafeSyncId(t.questId), msg).toBe(true);
+        expect(t.reminderTime === undefined || /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.reminderTime), msg).toBe(true);
       }
       for (const l of payload.timeLogs) {
         expect(isSafeSyncId(l.id, MAX_LOG_ID_LENGTH) && isSafeSyncId(l.taskId), msg).toBe(true);
