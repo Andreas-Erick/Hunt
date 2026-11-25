@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/domainTypes";
+import type { HabitDayMark } from "@/lib/habitCalendar";
 import type { SlipEdit } from "@/lib/localHabitAvoid";
 import { localStore } from "@/lib/localStore";
 
@@ -17,6 +18,8 @@ export interface HabitDayActions {
   setHabitDaySkipped: (habitId: string, dateKey: string, skipped: boolean) => Promise<void>;
   /** Logs a Slip on an Avoid Habit's day, or undoes the newest one (the shared Slip rule). */
   editHabitSlip: (habitId: string, dateKey: string, edit: SlipEdit) => Promise<void>;
+  /** Ticks, unticks or Skips one habit day from its calendar (the shared correctHabitDayRow row). */
+  correctHabitDay: (habitId: string, dateKey: string, mark: HabitDayMark) => Promise<void>;
 }
 
 export function habitDayActions(run: RunAction): HabitDayActions {
@@ -35,6 +38,10 @@ export function habitDayActions(run: RunAction): HabitDayActions {
 
     editHabitSlip: async (habitId, dateKey, edit) => {
       await run("editHabitSlip", () => localStore.editHabitSlip(habitId, dateKey, edit));
+    },
+
+    correctHabitDay: async (habitId, dateKey, mark) => {
+      await run("correctHabitDay", () => localStore.correctHabitDay(habitId, dateKey, mark));
     },
   };
 }

@@ -963,6 +963,22 @@ describe("habit Frequency history", () => {
     ).toBeUndefined();
   });
 
+  it("keeps an N per week Frequency of 1 to 7 times and drops any other count", () => {
+    const history = [
+      { effectiveFrom: "2026-11-02", frequency: { type: "perWeek", times: 0 } },
+      { effectiveFrom: "2026-11-03", frequency: { type: "perWeek", times: 8 } },
+      { effectiveFrom: "2026-11-04", frequency: { type: "perWeek", times: 2.5 } },
+      { effectiveFrom: "2026-11-05", frequency: { type: "perWeek", times: "3" } },
+      { effectiveFrom: "2026-11-06", frequency: { type: "perWeek" } },
+      { effectiveFrom: "2026-11-09", frequency: { type: "perWeek", times: 3, extra: { deep: 1 } } },
+      { effectiveFrom: "2026-11-16", frequency: { type: "perWeek", times: 7 } },
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-09", frequency: { type: "perWeek", times: 3 } },
+      { effectiveFrom: "2026-11-16", frequency: { type: "perWeek", times: 7 } },
+    ]);
+  });
+
   it("keeps at most the newest 100 changes, and validating its own output changes nothing", () => {
     const history = Array.from({ length: 150 }, (_, i) => ({
       effectiveFrom: localDateKey(new Date(2026, 0, 1 + i, 12).getTime()),

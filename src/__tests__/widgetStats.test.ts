@@ -184,6 +184,24 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
     expect(statsOf(state({ habits: [gym], tasks }))[0].streaks).toEqual([{ title: "Gym", days: 2 }]);
   });
 
+  it("counts an N per week Habit's streak in Habit Weeks, marked with the week unit", () => {
+    // Sunday 22 Nov: 2 times a week since Mon 2 Nov; Met the weeks of 2 and 9 Nov, 1 of 2 this week (Open).
+    const gym: Habit = {
+      ...habit("gym", "Gym", 100),
+      frequencyHistory: [{ effectiveFrom: "2026-11-02", frequency: { type: "perWeek", times: 2 } }],
+    };
+    const tasks = ["2026-11-02", "2026-11-05", "2026-11-10", "2026-11-14", "2026-11-17"].map((d) =>
+      doneHabitDay("gym", d)
+    );
+    const [today, tomorrow] = statsOf(state({ habits: [gym, habit("read", "Read", 200)], tasks }));
+    expect(today.streaks).toEqual([
+      { title: "Gym", days: 2, unit: "week" },
+      { title: "Read", days: 0 },
+    ]);
+    // Monday 23 Nov starts a new Habit Week; last week (1 of 2) ended Missed.
+    expect(tomorrow.streaks[0]).toEqual({ title: "Gym", days: 0, unit: "week" });
+  });
+
   it("has no Quest rows and no streaks for a user without Quests or Habits", () => {
     const [today] = statsOf(state({ tasks: [doneHabitDay("x", TODAY)] }));
     expect(today).toEqual({ dateKey: TODAY, focusSeconds: 0, quests: [], streaks: [] });

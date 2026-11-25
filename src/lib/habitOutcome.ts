@@ -1,5 +1,5 @@
 import type { Habit, Task } from "./domainTypes";
-import { isHabitScheduledOn } from "./habitFrequency";
+import { habitFrequencyOn, isHabitScheduledOn } from "./habitFrequency";
 import { countTargetOf, habitDayAmount, habitDaySlips, habitKindOf } from "./habitKind";
 
 /**
@@ -35,8 +35,10 @@ export interface HabitDay {
  * Count Habit's once its total reaches the target (going over is still Met). A
  * day set aside on purpose (its day Task `skipped`) is Skipped; today, and a
  * past day whose focus is still running across midnight, are Open; any other
- * past day is Missed, a Count day that got only partway included. An Avoid
- * Habit's day is judged by its Slips instead (avoidDayOutcome).
+ * past day is Missed, a Count day that got only partway included, except a
+ * day of an N per week Habit, which has no Outcome of its own (its Habit Week
+ * has one). An Avoid Habit's day is judged by its Slips instead
+ * (avoidDayOutcome).
  */
 export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
   if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
@@ -48,7 +50,8 @@ export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay):
   if (met) return "met";
   if (dayTask?.skipped) return "skipped";
   if (dayKey === todayKey || dayTask?.status === "active") return "open";
-  return "missed";
+  // N per week: the Habit Week is judged (habitWeek.ts); a single day is never Missed.
+  return habitFrequencyOn(habit, dayKey).type === "perWeek" ? null : "missed";
 }
 
 /**

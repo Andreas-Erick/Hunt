@@ -127,7 +127,7 @@ export function msUntilNextLocalMidnight(nowMs: number = Date.now()): number {
 }
 
 /** `outcomeOn` for each day from `todayKey` back to `firstDayKey` (inclusive). */
-function* outcomesBackFrom(
+export function* outcomesBackFrom(
   todayKey: string,
   firstDayKey: string,
   outcomeOn: (dayKey: string) => HabitOutcome | null

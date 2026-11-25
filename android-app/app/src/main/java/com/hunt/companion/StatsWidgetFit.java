@@ -87,6 +87,14 @@ final class StatsWidgetFit {
         return fit;
     }
 
+    /**
+     * A streak as "4d", or "3w" when the snapshot's `unit` is "week" (an N per week Habit counts
+     * Habit Weeks). Any other or missing unit reads as days, as older snapshots do.
+     */
+    static String formatStreak(int count, String unit) {
+        return Math.max(0, count) + ("week".equals(unit) ? "w" : "d");
+    }
+
     /** "2h 05m" or "45m" (fixed-width minutes for the tabular figures). */
     static String formatFocus(long seconds) {
         long minutes = Math.max(0, seconds) / 60;
