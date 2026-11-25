@@ -9,7 +9,7 @@ import { habitStreakOf, type HabitOutcome } from "./habitOutcome";
  * Pure; the desktop and the phone page both reach it through habitDay.ts.
  */
 
-type FrequencySource = Readonly<Pick<Partial<Habit>, "frequencyHistory">>;
+type FrequencySource = Readonly<Pick<Partial<Habit>, "frequencyHistory" | "endDate" | "endedSpans">>;
 type WeekDayTask = Pick<Task, "status" | "skipped"> | undefined;
 
 /** The Monday (YYYY-MM-DD) of the Habit Week holding `dayKey`. */
