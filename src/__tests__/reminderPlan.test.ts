@@ -32,9 +32,19 @@ describe("reminderPlan", () => {
     const plan = reminderPlan({ tasks: [task("b", 26, "08:00"), task("a", 25, "18:45")] }, NOW);
     expect(plan.version).toBe(1);
     expect(plan.reminders).toEqual([
-      { kind: "task", key: "task:a:2026-11-25T18:45", itemId: "a", title: "Task a", dateKey: "2026-11-25", time: "18:45", fireAt: at(25, 18, 45) },
-      { kind: "task", key: "task:b:2026-11-26T08:00", itemId: "b", title: "Task b", dateKey: "2026-11-26", time: "08:00", fireAt: at(26, 8) },
+      { kind: "task", key: "task:a:2026-11-25T18:45", itemId: "a", title: "Task a", dateKey: "2026-11-25", time: "18:45", fireAt: at(25, 18, 45), action: { tick: "done", taskId: "a" } },
+      { kind: "task", key: "task:b:2026-11-26T08:00", itemId: "b", title: "Task b", dateKey: "2026-11-26", time: "08:00", fireAt: at(26, 8), action: { tick: "done", taskId: "b" } },
     ]);
+  });
+
+  it("folds in this device's snoozes, and lists the snoozes it judged so the shell stands in only for newer ones", () => {
+    const snooze = { key: "task:a:2026-11-25T08:55", fireAt: at(25, 8, 55), until: at(25, 9, 5) };
+    const gone = { key: "task:done:2026-11-25T08:50", fireAt: at(25, 8, 50), until: at(25, 9, 1) };
+    const tasks = [task("a", 25, "08:55"), task("done", 25, "08:50", { status: "completed" })];
+    const plan = reminderPlan({ tasks, snoozes: [snooze, gone] }, NOW);
+    expect(plan.reminders.map((r) => r.key)).toEqual([`task:a:2026-11-25T08:55`, `task:a:2026-11-25T08:55~${at(25, 9, 5)}`]);
+    expect(plan.reminders[1]).toMatchObject({ fireAt: at(25, 9, 5), snoozeOf: { key: snooze.key, fireAt: snooze.fireAt }, action: { tick: "done", taskId: "a" } });
+    expect(plan.snoozes).toEqual([snooze, gone]);
   });
 
   it("keeps a reminder from the last 10 minutes, so an alarm that runs late still fires, and drops older ones", () => {

@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
@@ -21,11 +22,11 @@ import java.io.File;
  * Reminder notifications (ADR-0007). The page hands the bridge a Reminder Plan built by HuntCore
  * (MainActivity writes it to {@link HuntFiles#REMINDER_PLAN_FILE}); this posts the reminders that
  * are due, once each, and keeps one alarm armed for the next one, exact when Android allows it.
- * A tap opens Hunt on the item. Nothing here decides what is due or writes Hunt data.
- *
- * <p>Extension points: habit reminders (#31) are more plan entries of another kind, passed back to
- * the page as they are; notification actions (#32) are added in {@link #post} and go through the
- * Pending Tick queue, as widget ticks do (ADR-0006).
+ * A tap opens Hunt on the item. Each notification offers the plan entry's Done or +1 and always
+ * Snooze 10 min, handled by {@link ReminderActionReceiver}: Done and +1 go through the Pending
+ * Tick queue, as widget ticks do (ADR-0006); a Snooze is stored by {@link ReminderSnoozes} and
+ * posted again from {@link ReminderPlan#withSnoozes} until the page's next plan has judged it.
+ * Nothing here decides what is due or writes Hunt data.
  */
 final class Reminders {
     private static final String TAG = "HuntReminders";
@@ -39,6 +40,11 @@ final class Reminders {
     static final String EXTRA_KIND = "com.hunt.companion.extra.REMINDER_KIND";
     static final String EXTRA_ITEM_ID = "com.hunt.companion.extra.REMINDER_ITEM_ID";
     static final String EXTRA_DATE_KEY = "com.hunt.companion.extra.REMINDER_DATE_KEY";
+    /** A notification's Done or +1, and its Snooze, to {@link ReminderActionReceiver}. */
+    static final String ACTION_TICK = "com.hunt.companion.action.REMINDER_TICK";
+    static final String ACTION_SNOOZE = "com.hunt.companion.action.REMINDER_SNOOZE";
+    /** The plan entry an action is for ({@link ReminderPlan.Entry#toJson}). */
+    static final String EXTRA_ENTRY = "com.hunt.companion.extra.REMINDER_ENTRY";
 
     /**
      * PendingIntent request codes. NEVER change a value: an armed alarm and a posted notification
@@ -47,6 +53,8 @@ final class Reminders {
      */
     static final int REQUEST_ALARM = 40;
     static final int REQUEST_OPEN = 41;
+    /** Every notification action; they differ by intent action and data URI (the reminder key). */
+    static final int REQUEST_ACTION = 42;
     /** Notifications are told apart by tag (the reminder key) under this one id. */
     private static final int NOTIFICATION_ID = 1;
 
@@ -64,7 +72,7 @@ final class Reminders {
      */
     static synchronized void replan(Context ctx) {
         Context app = ctx.getApplicationContext();
-        ReminderPlan plan = readPlan(app);
+        ReminderPlan plan = readPlan(app).withSnoozes(ReminderSnoozes.read(app.getFilesDir()));
         long now = System.currentTimeMillis();
         SharedPreferences prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         long firedThrough = prefs.getLong(PREF_FIRED_THROUGH, 0L);
@@ -114,7 +122,7 @@ final class Reminders {
         NotificationManager nm = app.getSystemService(NotificationManager.class);
         if (nm == null) return;
         ensureChannel(app, nm);
-        Notification n = new Notification.Builder(app, CHANNEL_ID)
+        Notification.Builder b = new Notification.Builder(app, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher_monochrome)
                 .setContentTitle(e.title)
                 .setContentText(app.getString(R.string.reminder_task_text))
@@ -122,8 +130,13 @@ final class Reminders {
                 .setShowWhen(true)
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setAutoCancel(true)
-                .setContentIntent(openIntent(app, e))
-                .build();
+                .setContentIntent(openIntent(app, e));
+        if (e.actionTick != null) {
+            int label = TickKeys.PLUS_ONE.equals(e.actionTick) ? R.string.reminder_action_plus_one : R.string.reminder_action_done;
+            b.addAction(action(app, e, ACTION_TICK, label));
+        }
+        b.addAction(action(app, e, ACTION_SNOOZE, R.string.reminder_action_snooze));
+        Notification n = b.build();
         try {
             nm.notify(e.key, NOTIFICATION_ID, n);
         } catch (RuntimeException ex) {
@@ -151,6 +164,24 @@ final class Reminders {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return PendingIntent.getActivity(app, REQUEST_OPEN, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    /** One notification action: an explicit, immutable broadcast to the action receiver carrying the entry. */
+    private static Notification.Action action(Context app, ReminderPlan.Entry e, String intentAction, int label) {
+        Intent intent = new Intent(app, ReminderActionReceiver.class)
+                .setAction(intentAction)
+                .setData(Uri.fromParts("hunt-reminder", e.key, null))
+                .putExtra(EXTRA_ENTRY, e.toJson());
+        PendingIntent pi = PendingIntent.getBroadcast(app, REQUEST_ACTION, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        return new Notification.Action.Builder(Icon.createWithResource(app, R.mipmap.ic_launcher_monochrome),
+                app.getString(label), pi).build();
+    }
+
+    /** Removes the notification posted for `key`, once one of its actions has been handled. */
+    static void cancel(Context ctx, String key) {
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm != null) nm.cancel(key, NOTIFICATION_ID);
     }
 
     /**

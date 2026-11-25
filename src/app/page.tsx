@@ -117,10 +117,16 @@ export default function HomePage() {
     });
   }, [booted, activeView]);
 
-  // Task reminders as Windows notifications while this window is open (ADR-0007).
+  // Task reminders as Windows notifications while this window is open (ADR-0007), with Done (or
+  // +1) and Snooze buttons applied through the command store.
   useEffect(() => {
     if (!booted) return;
-    return startDesktopReminders();
+    const store = () => useCommandStore.getState();
+    return startDesktopReminders({
+      completeTask: (taskId) => store().completeTaskById(taskId),
+      ensureHabitDay: (habitId, dateKey) => store().ensureHabitTaskForDay(habitId, dateKey),
+      addCount: async (habitId, dateKey) => void (await store().logHabitAmount(habitId, dateKey, "+1")),
+    });
   }, [booted]);
 
   // Background auto-sync between PC and Phone/Tablet (via the local server). Paused

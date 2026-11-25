@@ -1,4 +1,5 @@
 import type { Task } from "./domainTypes";
+import { snoozedReminders, type ReminderSnooze } from "./reminderSnooze";
 
 /**
  * Reminders (ADR-0007): the one rule both apps plan their notifications from.
@@ -39,9 +40,11 @@ export interface DueReminder {
   fireAt: number;
 }
 
-/** What the rule reads. Habits and snoozes are added here as they arrive. */
+/** What the rule reads. Habits are added here as they arrive. */
 export interface ReminderSources {
   tasks: readonly Task[];
+  /** This device's Snoozes (reminderSnooze.ts); each re-fires while its reminder is still due. */
+  snoozes?: readonly ReminderSnooze[];
 }
 
 /** A half-open time window, epoch ms: `from <= fireAt < to`. */
@@ -83,8 +86,16 @@ function taskReminder(task: Task): DueReminder | null {
 /**
  * The reminders due in `window`, earliest first (ties by key). A Task reminder
  * is due on its scheduled day at its reminder time while the Task is undone.
+ * A Snooze re-fires its reminder at its end while that reminder is still due.
  */
 export function dueReminders(sources: ReminderSources, window: ReminderWindow): DueReminder[] {
+  const due = unsnoozedDue(sources, window);
+  if (sources.snoozes) due.push(...snoozedReminders(sources.snoozes, (w) => unsnoozedDue(sources, w), window));
+  return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** dueReminders without the snoozes, unsorted. */
+function unsnoozedDue(sources: ReminderSources, window: ReminderWindow): DueReminder[] {
   const due: DueReminder[] = [];
   for (const task of sources.tasks) {
     const reminder = taskReminder(task);
@@ -92,5 +103,5 @@ export function dueReminders(sources: ReminderSources, window: ReminderWindow): 
       due.push(reminder);
     }
   }
-  return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return due;
 }

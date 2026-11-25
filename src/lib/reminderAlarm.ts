@@ -1,5 +1,6 @@
 import type { Task } from "./domainTypes";
-import { dueReminders, type DueReminder } from "./reminders";
+import { dueReminders, type DueReminder, type ReminderSources } from "./reminders";
+import type { ReminderSnooze } from "./reminderSnooze";
 
 /**
  * The desktop's reminder alarm (ADR-0007): one timer, always set for the next
@@ -23,6 +24,8 @@ const RETRY_MS = 60_000;
 export interface ReminderAlarmDeps {
   /** Every undone Task (done ones may be included; the rule skips them). */
   readTasks: () => Promise<readonly Task[]>;
+  /** This device's Snoozes (reminderSnooze.ts), read with the Tasks. */
+  readSnoozes?: () => readonly ReminderSnooze[];
   notify: (reminder: DueReminder) => void;
   /** A failed read or notification; the alarm keeps running. */
   onError?: (error: unknown) => void;
@@ -47,10 +50,10 @@ export function startReminderAlarm(deps: ReminderAlarmDeps): ReminderAlarm {
     timer = stopped ? null : setTimeout(run, Math.max(0, Math.min(delayMs, MAX_WAIT_MS)));
   };
 
-  const fireDue = (tasks: readonly Task[], now: number) => {
+  const fireDue = (sources: ReminderSources, now: number) => {
     const from = Math.max(checkedUpTo, now - REMINDER_LATE_LIMIT_MS);
     checkedUpTo = now + 1;
-    for (const reminder of dueReminders({ tasks }, { from, to: now + 1 })) {
+    for (const reminder of dueReminders(sources, { from, to: now + 1 })) {
       try {
         deps.notify(reminder);
       } catch (err) {
@@ -67,11 +70,11 @@ export function startReminderAlarm(deps: ReminderAlarmDeps): ReminderAlarm {
     }
     running = true;
     try {
-      const tasks = await deps.readTasks();
+      const sources: ReminderSources = { tasks: await deps.readTasks(), snoozes: deps.readSnoozes?.() };
       if (stopped) return;
       const now = Date.now();
-      fireDue(tasks, now);
-      const [next] = dueReminders({ tasks }, { from: now + 1, to: now + 1 + MAX_WAIT_MS });
+      fireDue(sources, now);
+      const [next] = dueReminders(sources, { from: now + 1, to: now + 1 + MAX_WAIT_MS });
       arm(next ? next.fireAt - now : MAX_WAIT_MS);
     } catch (err) {
       deps.onError?.(err);

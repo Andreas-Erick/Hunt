@@ -3572,6 +3572,33 @@ var HuntCore = (() => {
     return { done: items.filter((i) => i.done === true).length, total: items.length };
   }
 
+  // src/lib/reminderSnooze.ts
+  var REMINDER_SNOOZE_MS = 10 * 6e4;
+  var MAX_SNOOZES = 64;
+  var isTime = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+  function sanitizeReminderSnoozes(raw) {
+    if (!Array.isArray(raw)) return [];
+    const byKey = /* @__PURE__ */ new Map();
+    for (const s of raw) {
+      if (!s || typeof s !== "object") continue;
+      const { key, fireAt, until } = s;
+      if (typeof key !== "string" || key === "" || !isTime(fireAt) || !isTime(until)) continue;
+      const held = byKey.get(key);
+      if (!held || held.until < until) byKey.set(key, { key, fireAt, until });
+    }
+    return [...byKey.values()].sort((a, b) => b.until - a.until).slice(0, MAX_SNOOZES);
+  }
+  function snoozedReminders(snoozes, baseDue, window) {
+    const out = [];
+    for (const s of sanitizeReminderSnoozes(snoozes)) {
+      if (s.until < window.from || s.until >= window.to) continue;
+      const base = baseDue({ from: s.fireAt, to: s.fireAt + 1 }).find((r) => r.key === s.key);
+      if (!base) continue;
+      out.push({ ...base, key: `${s.key}~${s.until}`, fireAt: s.until, snoozeOf: { key: s.key, fireAt: s.fireAt } });
+    }
+    return out;
+  }
+
   // src/lib/reminders.ts
   var REMINDER_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   var DATE_KEY_RE2 = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -3604,6 +3631,11 @@ var HuntCore = (() => {
     };
   }
   function dueReminders(sources, window) {
+    const due = unsnoozedDue(sources, window);
+    if (sources.snoozes) due.push(...snoozedReminders(sources.snoozes, (w) => unsnoozedDue(sources, w), window));
+    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  }
+  function unsnoozedDue(sources, window) {
     const due = [];
     for (const task of sources.tasks) {
       const reminder = taskReminder(task);
@@ -3611,7 +3643,7 @@ var HuntCore = (() => {
         due.push(reminder);
       }
     }
-    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    return due;
   }
 
   // src/lib/syncRowExtras.ts
@@ -4343,12 +4375,32 @@ var HuntCore = (() => {
   var REMINDER_LATE_LIMIT_MS = 10 * 6e4;
   var MAX_WAIT_MS = 60 * 6e4;
 
+  // src/lib/reminderActions.ts
+  function reminderAction(reminder, habits) {
+    if (reminder.kind === "task") return { tick: "done", taskId: reminder.itemId };
+    if (reminder.kind !== "habit") return null;
+    const habit = (habits != null ? habits : []).find((h) => h.id === reminder.itemId);
+    if (!habit) return null;
+    const kind = habitKindOf(habit);
+    if (habit.kind !== void 0 && habit.kind !== kind) return null;
+    const taskId = habitTaskId(habit.id, reminder.dateKey);
+    if (kind === "check") return { tick: "done", taskId };
+    if (kind === "count") return { tick: "+1", taskId };
+    return null;
+  }
+
   // src/lib/reminderPlan.ts
   var REMINDER_PLAN_AHEAD_MS = 7 * 24 * 60 * 6e4;
   var REMINDER_PLAN_MAX = 64;
   function reminderPlan(sources, now) {
-    const due = dueReminders(sources, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
-    return { version: 1, reminders: due.slice(0, REMINDER_PLAN_MAX) };
+    var _a;
+    const snoozes = sanitizeReminderSnoozes((_a = sources.snoozes) != null ? _a : []);
+    const due = dueReminders({ ...sources, snoozes }, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
+    const reminders = due.slice(0, REMINDER_PLAN_MAX).map((r) => {
+      const action = reminderAction(r, sources.habits);
+      return action ? { ...r, action } : r;
+    });
+    return { version: 1, reminders, snoozes };
   }
   return __toCommonJS(huntCore_exports);
 })();
@@ -5113,17 +5165,29 @@ var HuntCore = (() => {
     // Reminders (ADR-0007): after every save (a sync's merge is saved too), at boot and at the start of
     // the day, hand the shell the Reminder Plan HuntCore built. The shell arms the exact alarms and
     // posts the notifications; it decides nothing. Only the APK notifies; an unchanged plan is not resent.
+    // The plan folds in the Snoozes the shell stored for this phone's notifications (#32).
     let lastReminderPlanJson = "";
     function publishReminderPlan() {
       if (!isApkShell()) return;
       try {
-        const text = JSON.stringify(HuntCore.reminderPlan(state, Date.now()));
+        const sources = { ...state, snoozes: readReminderSnoozes() };
+        const text = JSON.stringify(HuntCore.reminderPlan(sources, Date.now()));
         if (text === lastReminderPlanJson) return;
         lastReminderPlanJson = text;
         bridgeCall("saveReminderPlan", text);
       } catch (e) {
         // A plan bug must never break saving: the state is stored, the alarms keep the previous plan.
         recordMobileBreadcrumb("WARN", "reminders", "plan_failed", { message: e && e.message });
+      }
+    }
+
+    // The Snoozes the shell stored (a JSON array; HuntCore reads it defensively). An older shell without
+    // the method, or text that will not parse, is no snoozes: the shell itself re-posts what it snoozed.
+    function readReminderSnoozes() {
+      try {
+        return JSON.parse(bridgeCall("readReminderSnoozes") || "[]");
+      } catch (e) {
+        return [];
       }
     }
 

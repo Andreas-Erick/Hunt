@@ -147,18 +147,27 @@ describe("Android reminder shell: source contract", () => {
     expect(all).not.toMatch(/FLAG_MUTABLE/);
   });
 
-  it("never writes Hunt data: no state file, no Pending Ticks, and only the bridge saves the plan", () => {
+  it("never writes Hunt data: no state file, Pending Ticks only appended, and only the bridge saves the plan", () => {
     expect(reminderSources.map((f) => f.name).sort()).toEqual([
+      "ReminderActionReceiver.java",
+      "ReminderActions.java",
       "ReminderAlarmReceiver.java",
       "ReminderPermissions.java",
       "ReminderPlan.java",
+      "ReminderSnoozes.java",
       "Reminders.java",
     ]);
     for (const { name, code } of reminderSources) {
-      expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE|WIDGET_SNAPSHOT_FILE/);
-      expect(code, name).not.toMatch(/PendingTicks\./);
-      expect(code, name).not.toMatch(/\bwriteText\s*\(|FileOutputStream|startWrite|CoalescedWrite/);
+      expect(code, name).not.toMatch(/hunt-mobile-state\.json|STATE_FILE|WIDGET_SNAPSHOT_FILE|PENDING_TICKS_FILE/);
+      // A notification's Done or +1 is appended to the queue (ADR-0006), as a widget tick is; nothing else.
+      const queueCalls = Array.from(code.matchAll(/PendingTicks\.(\w+)\s*\(/g), (m) => m[1]);
+      expect(queueCalls.filter((c) => c !== "append"), name).toEqual([]);
+      expect(code, name).not.toMatch(/FileOutputStream|startWrite|CoalescedWrite/);
+      // The only file a reminder class writes is the shell's own snooze file.
+      const writes = Array.from(code.matchAll(/\bwriteText\s*\(([^;]*)/g), (m) => m[1]);
+      expect(writes.every((w) => /^\s*file\(\s*dir\s*\)/.test(w)) && (writes.length === 0 || name === "ReminderSnoozes.java"), name).toBe(true);
     }
+    expect(source("ReminderSnoozes.java")).toMatch(/new File\(\s*dir\s*,\s*HuntFiles\.REMINDER_SNOOZES_FILE\s*\)/);
     // The plan file is written by MainActivity's bridge through a coalesced, atomic write.
     expect(read(path.join(JAVA_DIR, "HuntFiles.java"))).toMatch(/REMINDER_PLAN_FILE\s*=\s*"hunt-reminder-plan\.json"/);
     expect(mainActivity).toMatch(/reminderPlanWrite\.flushTo\(\s*file\(\s*HuntFiles\.REMINDER_PLAN_FILE\s*\)\s*\)/);
