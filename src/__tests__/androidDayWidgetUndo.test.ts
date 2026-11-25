@@ -197,7 +197,11 @@ describe("Day Widget Undo window (#9): boundaries", () => {
   });
 
   it("only the end of a window appends a Pending Tick (ADR-0006): a tap opens one, Undo leaves the queue alone", () => {
-    const widgetFiles = fs.readdirSync(JAVA_DIR).filter((f) => f.endsWith(".java") && f !== "DayWidgetUndo.java");
+    // A reminder notification's Done / +1 (ReminderActions, ADR-0007) is the one other appender:
+    // the user pressed a labelled button, so it opens no Undo window.
+    const widgetFiles = fs
+      .readdirSync(JAVA_DIR)
+      .filter((f) => f.endsWith(".java") && f !== "DayWidgetUndo.java" && f !== "ReminderActions.java");
     for (const file of widgetFiles) expect(code(file), file).not.toMatch(/PendingTicks\.append\(/);
     expect(undo.match(/PendingTicks\.append\(/g) ?? []).toHaveLength(1);
     expect(code("DayWidgetTaps.java")).toMatch(/DayWidgetUndo\.open\(/);

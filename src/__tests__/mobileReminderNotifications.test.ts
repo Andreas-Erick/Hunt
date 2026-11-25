@@ -135,6 +135,25 @@ describe("phone reminder notifications", () => {
     expect(pageErrors(p)).toEqual([]);
   });
 
+  it("folds the shell's stored snoozes into the plan (#32), and plans without them on a shell that keeps none", () => {
+    const s = shell({ notifications: true, exactAlarms: true });
+    const base = `task:tsk-1:${TODAY}T07:55`;
+    const snooze = { key: base, fireAt: new Date(2026, 10, 25, 7, 55).getTime(), until: NOW + 5 * 60_000 };
+    s.bridge.readReminderSnoozes = () => JSON.stringify([snooze]);
+    const p = (w = loadMobile({ seedState: state([task()]), bridge: s.bridge }));
+    setReminder(p, "07:55");
+    vi.advanceTimersByTime(100);
+    const last = s.plans[s.plans.length - 1] as Plan & { snoozes: unknown[] };
+    expect(last.reminders.map((r) => r.key)).toEqual([base, `${base}~${snooze.until}`]);
+    expect(last.snoozes).toEqual([snooze]);
+
+    s.bridge.readReminderSnoozes = () => "not json";
+    setReminder(p, "07:56");
+    vi.advanceTimersByTime(100);
+    expect((s.plans[s.plans.length - 1] as Plan & { snoozes: unknown[] }).snoozes).toEqual([]);
+    expect(pageErrors(p)).toEqual([]);
+  });
+
   it("the browser copy has no notifications to explain", () => {
     const p = (w = loadMobile({ seedState: state([task({ reminderTime: "18:45" })]) }));
     p.openTaskInspectorSheet("tsk-1");

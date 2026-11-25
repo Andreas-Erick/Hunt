@@ -50,4 +50,8 @@
     <string name="reminder_channel_description">Task reminders at the time you set</string>
     <string name="reminder_task_text">Task reminder</string>
     <string name="reminder_habit_text">Habit reminder</string>
+    <string name="reminder_action_done">Done</string>
+    <string name="reminder_action_plus_one">+1</string>
+    <string name="reminder_action_snooze">Snooze 10 min</string>
+    <string name="reminder_action_failed">Hunt couldn\'t save that. Try again in Hunt.</string>
 </resources>

@@ -146,6 +146,15 @@
             </intent-filter>
         </receiver>
 
+        <!--
+            A reminder notification's Done, +1 and Snooze (ADR-0007). Not exported: only the
+            notification's explicit, immutable PendingIntents reach it. Never rename the class:
+            a posted notification's actions name it.
+        -->
+        <receiver
+            android:name=".ReminderActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

@@ -20,7 +20,7 @@ const MAX_WAIT_MS = 60 * 60_000;
 const RETRY_MS = 60_000;
 
 export interface ReminderAlarmDeps {
-  /** What the rule reads: the undone Tasks, the Habits and their recent day Tasks (any status). */
+  /** What the rule reads: the undone Tasks, the Habits and their recent day Tasks (any status), and this device's Snoozes. */
   readSources: () => Promise<ReminderSources>;
   notify: (reminder: DueReminder) => void;
   /** A failed read or notification; the alarm keeps running. */

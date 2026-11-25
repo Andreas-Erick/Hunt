@@ -1,5 +1,6 @@
 import type { Habit, Task } from "./domainTypes";
 import { dueHabitReminders } from "./habitReminders";
+import { snoozedReminders, type ReminderSnooze } from "./reminderSnooze";
 import { isReminderTime, localFireAt, type DueReminder, type ReminderWindow } from "./reminderTime";
 
 export { isReminderTime };
@@ -14,12 +15,14 @@ export type { DueReminder, ReminderKind, ReminderWindow } from "./reminderTime";
  * Pure: no clock, storage or browser API. Times are local wall-clock times.
  */
 
-/** What the rule reads. Snoozes are added here as they arrive. */
+/** What the rule reads. */
 export interface ReminderSources {
   /** Every Task the rule may judge: dated ones, and the Habits' day Tasks of any status. */
   tasks: readonly Task[];
   /** Habits with reminder times; each day is judged by its day Task in `tasks`. */
   habits?: readonly Habit[];
+  /** This device's Snoozes (reminderSnooze.ts); each re-fires while its reminder is still due. */
+  snoozes?: readonly ReminderSnooze[];
 }
 
 /** An undone Task: queued or in Focus (done and archived Tasks stay quiet). */
@@ -47,9 +50,17 @@ function taskReminder(task: Task): DueReminder | null {
  * The reminders due in `window`, earliest first (ties by key). A Task reminder
  * is due on its scheduled day at its reminder time while the Task is undone; a
  * Habit reminder at each of its times on each day it is asked for while that
- * day's Outcome is Open (habitReminders.ts).
+ * day's Outcome is Open (habitReminders.ts). A Snooze re-fires its reminder at
+ * its end while that reminder is still due.
  */
 export function dueReminders(sources: ReminderSources, window: ReminderWindow): DueReminder[] {
+  const due = unsnoozedDue(sources, window);
+  if (sources.snoozes) due.push(...snoozedReminders(sources.snoozes, (w) => unsnoozedDue(sources, w), window));
+  return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** dueReminders without the snoozes, unsorted. */
+function unsnoozedDue(sources: ReminderSources, window: ReminderWindow): DueReminder[] {
   const due: DueReminder[] = [];
   for (const task of sources.tasks) {
     const reminder = taskReminder(task);
@@ -58,5 +69,5 @@ export function dueReminders(sources: ReminderSources, window: ReminderWindow): 
     }
   }
   if (sources.habits) due.push(...dueHabitReminders(sources.habits, sources.tasks, window));
-  return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return due;
 }

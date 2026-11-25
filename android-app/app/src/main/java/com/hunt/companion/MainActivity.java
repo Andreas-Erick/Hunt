@@ -2163,6 +2163,20 @@ public class MainActivity extends Activity {
             }
         }
 
+        /**
+         * The Snoozes this phone's notifications stored ({@link ReminderSnoozes}), a JSON array of
+         * {key, fireAt, until} the page folds into its next Reminder Plan. A small file.
+         */
+        @JavascriptInterface
+        public String readReminderSnoozes() {
+            try {
+                return ReminderSnoozes.readJson(filesDir);
+            } catch (RuntimeException e) {
+                Log.w(TAG, "readReminderSnoozes failed", e);
+                return "[]";
+            }
+        }
+
         /** Takes the next step towards reminders arriving on time (a dialog or a settings screen). */
         @JavascriptInterface
         public void requestReminderPermissions() {

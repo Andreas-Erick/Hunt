@@ -259,6 +259,7 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
       ackPendingTicks: "void",
       saveReminderPlan: "void",
       getReminderPermissions: "String",
+      readReminderSnoozes: "String",
       requestReminderPermissions: "void",
     });
     // Nothing outside the bridge class is exposed to JS.
@@ -408,12 +409,17 @@ describe("build hygiene", () => {
     }
   );
 
-  it("public/ serves only the APK, the favicon, the logo and the phone page", () => {
+  it("public/ serves only the APK, the favicon, the logo, the phone page and the reminder worker", () => {
     const files = fs.readdirSync(path.join(ROOT, "public")).sort();
-    const required = ["favicon.ico", "hunt-logo.png", "hunt-mobile.html"];
+    const required = ["favicon.ico", "hunt-logo.png", "hunt-mobile.html", "hunt-reminder-sw.js"];
     const allowed = new Set([...required, "Hunt-Mobile.apk"]);
     for (const file of required) expect(files).toContain(file);
     for (const file of files) expect(allowed.has(file), `unexpected file in public/: ${file}`).toBe(true);
+    // The desktop's notification buttons need a service worker (ADR-0007). It must never cache or
+    // answer requests: a caching worker serves a stale app after an update.
+    const worker = fs.readFileSync(path.join(ROOT, "public", "hunt-reminder-sw.js"), "utf8").replace(/\/\/[^\n]*/g, "");
+    expect(worker).toMatch(/addEventListener\("notificationclick"/);
+    expect(worker).not.toMatch(/"fetch"|\bcaches\b|importScripts/);
   });
 
   it("build-apk.sh refuses stale build files, downgrades, a stale public copy, Wi-Fi permission and an embedded key", () => {

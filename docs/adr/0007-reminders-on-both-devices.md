@@ -43,8 +43,8 @@ here: an Avoid Habit's day stays Open until a Slip, so
 its evening reminder is a check-in. Each answer carries
 a `kind` (`task` or `habit`) and a `key`
 (`task:<id>:<date>T<time>`, `habit:<id>:<date>T<time>`)
-that is stable per item and time. Snoozes join the same
-rule and the same `DueReminder` union later.
+that is stable per item and time. Snoozes are folded
+into the same rule (see Consequences).
 
 Each device re-plans after every save and every sync.
 
@@ -84,11 +84,38 @@ Each device re-plans after every save and every sync.
 - Duplicates are suppressed by sync, not prevented. A
   Task done on one device stays quiet on the other once
   that device has synced. Before then, both may fire.
-- Notification actions (Done, +1) are written as Pending
-  Ticks and applied through HuntCore, as widget ticks are
-  (ADR-0006). Snooze is stored by the device that showed
-  the notification and folded into its next plan. No
-  action writes Hunt data directly.
+- Notification actions. HuntCore picks each reminder's
+  action (`reminderAction` in `src/lib/reminderActions.ts`):
+  Done on a Task or a Check Habit's day, +1 on a Count
+  Habit's day, none on an Avoid Habit's check-in; every
+  notification also offers Snooze 10 min. On the phone
+  the Reminder Plan carries each entry's `action`
+  (`{tick, taskId}`, a Habit's day Task by its fixed id),
+  and Done or +1 only appends that Pending Tick
+  (ADR-0006), applied through HuntCore when Hunt next
+  runs, or at once if it is running; a second press of
+  the same tap is queued once, and applying it again
+  skips it. There is no Undo window: the user pressed a
+  labelled button. On the desktop the buttons need a
+  service worker (`public/hunt-reminder-sw.js`, no fetch
+  handling, no cache), which hands a press to one open
+  window; that window applies it through the command
+  store. Without a service worker (a tablet on plain
+  http) the notification has no buttons. No action
+  writes Hunt data outside HuntCore's rules.
+- Snooze is device-local and never synced. A Snooze
+  stores `{key, fireAt, until}` of the original reminder
+  (`src/lib/reminderSnooze.ts`); `dueReminders` folds
+  stored snoozes in, so one re-fires at `until`, keyed
+  `<key>~<until>`, only while the original would still
+  be due: an item finished meanwhile stays quiet. A
+  second Snooze moves the same snooze. The desktop keeps
+  snoozes in localStorage. The phone's shell keeps them
+  in its own file (`hunt-reminder-snoozes.json`), which
+  the page reads through the bridge for its next plan;
+  the plan lists the snoozes it judged, and until the
+  page plans again (Hunt closed) the shell re-posts a
+  newer snooze itself, as its stand-in.
 - A reminder missed by more than 10 minutes on the
   desktop (asleep, or the timer late) is dropped, not
   fired late. Reminders from before the window opened
