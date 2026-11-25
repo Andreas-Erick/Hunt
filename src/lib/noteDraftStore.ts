@@ -1,5 +1,7 @@
 import { db } from "./db";
 import { logDiagnostic, summarizeError } from "./diagnostics";
+import { MAX_LONG_TEXT_LENGTH } from "./syncTypes";
+import { clampLength } from "./textLimits";
 
 /**
  * Device-local localStorage mirror of an unsaved notes draft, written
@@ -53,7 +55,7 @@ export function clearNoteDraftMirrorIfDraft(taskId: string, draft: string): void
     const mirror = readNoteDraftMirror(key);
     if (!mirror || mirror.draft === draft) window.localStorage.removeItem(key);
   } catch {
-    // ignore
+    // Storage blocked: the stale mirror's base no longer matches, so boot will not restore it.
   }
 }
 
@@ -61,18 +63,30 @@ function removeMirrorKey(key: string): void {
   try {
     window.localStorage.removeItem(key);
   } catch {
-    // ignore
+    // Storage blocked: the key stays and the next boot handles it again, which is harmless.
   }
+}
+
+/** Heads a draft kept after the notes changed elsewhere, so the user can merge it by hand. */
+export const CONFLICTED_DRAFT_MARKER = "--- Unsaved draft (these notes changed on another device) ---";
+
+/** `notes` with a conflicted `draft` appended under the marker, cut to the synced notes length. */
+export function withConflictedDraft(notes: string, draft: string): string {
+  const head = notes ? `${notes}\n\n` : "";
+  return clampLength(`${head}${CONFLICTED_DRAFT_MARKER}\n${draft}`, MAX_LONG_TEXT_LENGTH);
 }
 
 /**
  * Page boot (before seeding / the first sync): puts every mirrored notes draft
  * back into IndexedDB when its task still exists and still holds the notes the
  * draft was typed over (`(task.notes ?? '') === base`), so a newer edit that
- * arrived from the phone meanwhile is never overwritten. A mirror key is
- * removed once handled (restored, task gone, base mismatch, draft already
- * saved, or unreadable mirror); it is kept when the IndexedDB transaction
- * fails, so the next boot tries again. Returns the number of drafts restored.
+ * arrived from the phone meanwhile is never overwritten. When the notes did
+ * change meanwhile, the draft is not lost either: it is appended under
+ * CONFLICTED_DRAFT_MARKER for the user to merge. A mirror key is removed once
+ * handled (restored, kept as a conflict, task gone, draft already saved, or
+ * unreadable mirror; the last two drops are logged); it is kept when the
+ * IndexedDB transaction fails, so the next boot tries again. Returns the
+ * number of drafts restored, conflicts included.
  */
 export async function restoreMirroredNoteDrafts(): Promise<number> {
   if (typeof window === "undefined") return 0;
@@ -92,21 +106,27 @@ export async function restoreMirroredNoteDrafts(): Promise<number> {
     const mirror = readNoteDraftMirror(key);
     const taskId = key.slice(NOTES_DRAFT_KEY_PREFIX.length);
     if (!mirror || !taskId) {
+      logDiagnostic({ level: "WARN", domain: "notes", event: "draft_unreadable", context: { key } });
       removeMirrorKey(key);
       continue;
     }
     try {
-      const done = await db.transaction("rw", db.tasks, async () => {
+      const outcome = await db.transaction("rw", db.tasks, async () => {
         const task = await db.tasks.get(taskId);
-        if (!task || (task.notes ?? "") !== mirror.base) return false;
-        if ((task.notes ?? "") === mirror.draft) return false;
+        if (!task) return "task_gone" as const;
+        const notes = task.notes ?? "";
+        if (notes === mirror.draft) return "already_saved" as const;
+        const conflicted = notes !== mirror.base;
         await db.tasks.update(taskId, {
-          notes: mirror.draft,
+          notes: conflicted ? withConflictedDraft(notes, mirror.draft) : mirror.draft,
           updatedAt: Math.max(Date.now(), (task.updatedAt || 0) + 1),
         });
-        return true;
+        return conflicted ? ("conflict_kept" as const) : ("restored" as const);
       });
-      if (done) restored += 1;
+      if (outcome === "restored" || outcome === "conflict_kept") restored += 1;
+      if (outcome === "conflict_kept" || outcome === "task_gone") {
+        logDiagnostic({ level: "WARN", domain: "notes", event: `draft_${outcome}`, context: { taskId } });
+      }
       removeMirrorKey(key);
     } catch (err) {
       logDiagnostic({

@@ -453,11 +453,13 @@ describe("UI Components & User Workflows", () => {
 
       const restored = await restoreMirroredNoteDrafts();
 
-      expect(restored).toBe(1);
+      expect(restored).toBe(2); // tsk-01 restored, tsk-02's draft kept beside the phone's edit
       const t1 = await db.tasks.get("tsk-01");
       expect(t1?.notes).toBe("base text + typed before reload");
       expect(t1?.updatedAt).toBeGreaterThan(5000);
-      expect((await db.tasks.get("tsk-02"))?.notes).toBe("edited on the phone meanwhile");
+      const t2 = (await db.tasks.get("tsk-02"))?.notes ?? "";
+      expect(t2.startsWith("edited on the phone meanwhile\n\n")).toBe(true); // the newer edit is never overwritten
+      expect(t2.endsWith("\nstale draft")).toBe(true);
       expect(await db.tasks.get("tsk-gone")).toBeUndefined();
       expect(mirrorKeys()).toEqual([]);
     });
