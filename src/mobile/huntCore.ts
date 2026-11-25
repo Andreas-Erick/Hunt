@@ -20,10 +20,18 @@ export {
 export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
+  applyChecklistEdit,
+  canHoldChecklist,
+  checklistOf,
+  checklistProgress,
+  newChecklistItemId,
+} from "../lib/checklist";
+export {
   canonicalString,
   compareRank,
   isSafeSyncId,
   losingSessionEndAt,
+  MAX_CHECKLIST_TEXT_LENGTH,
   mergeSyncPayloads,
   sameContent,
   SYNCED_ENTITY_KEYS,
@@ -42,3 +50,4 @@ export {
 } from "../lib/taskQueue";
 export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
 export { applyPendingTicks } from "../lib/pendingTicks";
+export { dueReminders, isReminderTime } from "../lib/reminders";

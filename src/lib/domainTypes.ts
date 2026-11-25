@@ -38,6 +38,13 @@ export interface Habit {
   updatedAt?: number;
 }
 
+/** One item to tick inside a Task's Checklist. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export type TaskStatus = "queued" | "active" | "completed" | "archived";
 
 export interface Task {
@@ -52,6 +59,8 @@ export interface Task {
   habitId?: string; // Source Habit.id when materialized from a daily habit
   /** A habit day set aside on purpose: its Outcome is Skipped (GLOSSARY). Habit day Tasks only. */
   skipped?: boolean;
+  checklist?: ChecklistItem[]; // ordered; never on a habit day Task
+  reminderTime?: string; // Local "HH:MM" on a dated Task; none = date-only (ADR-0007)
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;

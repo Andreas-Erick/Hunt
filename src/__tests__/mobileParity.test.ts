@@ -92,6 +92,13 @@ function genTask(r: Rng): Row {
   };
   if (r.chance(0.5)) task.notes = r.pick(TITLES);
   if (r.chance(0.4)) task.scheduledDate = r.pick(["2026-11-18", "2026-11-19"]);
+  if (r.chance(0.3)) {
+    task.checklist = r.pick([
+      [],
+      [{ id: "chk-1", text: r.pick(TITLES), done: false }],
+      [{ id: "chk-2", text: "Charger", done: true }, { id: "chk-1", text: "Passport", done: false }],
+    ]);
+  }
   return withStamps(r, task, ["updatedAt", "completedAt", "createdAt"]);
 }
 
@@ -265,6 +272,26 @@ describe("phone boundary guards agree with the server validator", () => {
       for (const max of [undefined, MAX_LOG_ID_LENGTH]) {
         expect(w.isSafeSyncId(id, max), `${JSON.stringify(id)} / ${max}`).toBe(isSafeSyncId(id, max));
       }
+    }
+  });
+
+  it("keeps a Task's reminderTime exactly when the server does", () => {
+    const values: unknown[] = ["09:30", "00:00", "23:59", "24:00", "9:30", "09:30:00", "", 930, null, {}, ["09:30"]];
+    for (const reminderTime of values) {
+      const payload = {
+        quests: [],
+        tasks: [{ id: "tsk-1", title: "t", status: "queued", rank: 0, scheduledDate: "2026-11-25", reminderTime }],
+        timeLogs: [],
+        deletedTaskIds: [],
+        deletedLogIds: [],
+        activeFocus: { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: 0 },
+        lastSyncedAt: 0,
+      };
+      const copy = () => JSON.parse(JSON.stringify(payload)) as unknown;
+      const server = validateSyncPayload(copy());
+      const phoneTask = (w.guardSyncState(copy()).value.tasks as Record<string, unknown>[])[0];
+      const serverTask = (server.payload as unknown as { tasks: Record<string, unknown>[] }).tasks[0];
+      expect(phoneTask.reminderTime, JSON.stringify(reminderTime)).toEqual(serverTask.reminderTime);
     }
   });
 

@@ -13,6 +13,8 @@ import { hudAudio } from "@/lib/hudAudio";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import { FocusSunArc } from "./FocusSunArc";
 import { TaskNotesField } from "./TaskNotesField";
+import { TaskChecklistEditor } from "./TaskChecklist";
+import { canHoldChecklist, checklistOf } from "@/lib/checklist";
 import { useTodayDateKey } from "./useTodayDateKey";
 
 /**
@@ -89,6 +91,10 @@ export function FocusHudView() {
   const [notesOpenForTaskId, setNotesOpenForTaskId] = useState<string | null>(
     null
   );
+  // Same for the Checklist editor of a Task that has no items yet.
+  const [checklistOpenForTaskId, setChecklistOpenForTaskId] = useState<
+    string | null
+  >(null);
   // Set synchronously by Complete: clicks that arrive before React re-renders
   // (or while the next task is being started) must not complete it as well.
   const completingRef = useRef(false);
@@ -405,6 +411,23 @@ export function FocusHudView() {
               + Add notes
             </button>
           )}
+
+          {canHoldChecklist(activeTask) &&
+            (checklistOf(activeTask).length > 0 ||
+            checklistOpenForTaskId === activeTask.id ? (
+              <TaskChecklistEditor
+                task={activeTask}
+                className="mt-4 text-left"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setChecklistOpenForTaskId(activeTask.id)}
+                className="-my-2 ml-2 rounded-lg px-3 py-2 coarse:py-3 text-xs text-hud-muted transition-colors hover:bg-white/[0.04] hover:text-neutral-300 active:opacity-80"
+              >
+                + Add checklist
+              </button>
+            ))}
         </div>
       </motion.div>
 

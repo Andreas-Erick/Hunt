@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { reads } from "@/lib/reads";
 import { isMissedHabitTask, toLocalDateKey } from "@/lib/dateUtils";
+import type { ChecklistEdit } from "@/lib/checklist";
 import {
   fromFocusSession,
   toFocusSession,
@@ -22,6 +23,7 @@ import {
   onLocalChange,
   type HabitChanges,
   type QuestChanges,
+  type TaskChanges,
 } from "@/lib/localStore";
 import { SnapshotFormatError, importAndMergeSnapshotJson } from "@/lib/applySnapshot";
 import {
@@ -38,14 +40,10 @@ import {
   DEFAULT_SYNC_DEBOUNCE_MS,
   type SyncScheduler,
 } from "@/lib/syncScheduler";
-import {
-  compareRank,
-  isSafeSyncId,
-  MAX_ENTITY_ID_LENGTH,
-  type SyncPayload,
-} from "@/lib/syncTypes";
+import { compareRank, type SyncPayload } from "@/lib/syncTypes";
 import { pickNextFocusTask } from "@/lib/taskQueue";
 import { habitDayActions, type HabitDayActions } from "./habitDayActions";
+import { mergePersistedFocus } from "./persistedFocus";
 
 export {
   orderAfterDrop,
@@ -69,7 +67,7 @@ export interface CompletedDirectiveFeedback {
   timestamp: number;
 }
 
-export type { HabitChanges, QuestChanges } from "@/lib/localStore";
+export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
 interface CommandStoreState extends HabitDayActions {
   activeView: HudView;
@@ -147,15 +145,12 @@ interface CommandStoreState extends HabitDayActions {
    * The title is trimmed and cut to MAX_TASK_TITLE_LENGTH; an empty one keeps
    * the old title. Resolves to false when the local write failed, true otherwise.
    */
-  updateTask: (
-    taskId: string,
-    updates: Partial<{
-      title: string;
-      notes: string;
-      questId: string | null;
-      scheduledDate: string;
-    }>
-  ) => Promise<boolean>;
+  updateTask: (taskId: string, updates: TaskChanges) => Promise<boolean>;
+  /**
+   * Applies one Checklist edit (shared rule: refused on a habit day Task).
+   * Resolves to true only when the Checklist changed and was saved.
+   */
+  editChecklist: (taskId: string, edit: ChecklistEdit) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<void>;
   /**
    * Puts the given tasks in this order by rewriting as FEW rows as possible
@@ -498,40 +493,6 @@ async function completeFocusedTask(get: StoreGet, set: StoreSet): Promise<void> 
   get().requestSync();
 }
 
-type PersistedFocusState = Pick<
-  CommandStoreState,
-  "activeView" | "activeTaskId" | "isRunning" | "sessionStartedAt" | "focusUpdatedAt"
->;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
-function isStamp(value: unknown): value is number {
-  return typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-}
-
-/**
- * Zero-trust rehydration: validates the persisted focus fields (an invalid or
- * missing one gets its default), enforces `isRunning ⇒ activeTaskId && sessionStartedAt`,
- * and always lands on the Home screen (`activeView: "command"`) when opening the app.
- * Nothing else is copied, so a corrupted or tampered entry can neither replace an
- * action nor feed NaN into a flush.
- */
-function sanitizePersistedFocus(persisted: Record<string, unknown>): PersistedFocusState {
-  const { activeTaskId, isRunning, sessionStartedAt, focusUpdatedAt } = persisted;
-  const taskId = isSafeSyncId(activeTaskId, MAX_ENTITY_ID_LENGTH) ? activeTaskId : null;
-  const startedAt = isStamp(sessionStartedAt) && sessionStartedAt > 0 ? sessionStartedAt : null;
-  return {
-    activeView: "command",
-    activeTaskId: taskId,
-    isRunning: isRunning === true && taskId !== null && startedAt !== null,
-    sessionStartedAt: startedAt,
-    focusUpdatedAt: isStamp(focusUpdatedAt) ? focusUpdatedAt : 0,
-  };
-}
-
 /** Single-flight guard for completeActiveTask (one store per page). */
 let completeInFlight: Promise<void> | null = null;
 
@@ -751,6 +712,14 @@ export const useCommandStore = create<CommandStoreState>()(
         updateTask: (taskId, updates) =>
           runAction(set, "updateTask", () => localStore.updateTask(taskId, updates)),
 
+        editChecklist: async (taskId, edit) => {
+          let applied = false;
+          const ok = await runAction(set, "editChecklist", async () => {
+            applied = await localStore.editChecklist(taskId, edit);
+          });
+          return ok && applied;
+        },
+
         deleteTask: async (taskId) => {
           await runAction(set, "deleteTask", async () => {
             const session = readStoreFocusSession(get());
@@ -825,8 +794,7 @@ export const useCommandStore = create<CommandStoreState>()(
       }),
       // Hand-written merge (the default spreads every stored key over the
       // actions). No `version` bump: existing stored sessions keep loading.
-      merge: (persisted, current) =>
-        isRecord(persisted) ? { ...current, ...sanitizePersistedFocus(persisted) } : current,
+      merge: mergePersistedFocus,
     }
   )
 );

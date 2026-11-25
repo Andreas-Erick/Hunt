@@ -4,6 +4,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import {
+  MAX_CHECKLIST_ITEMS,
+  MAX_CHECKLIST_TEXT_LENGTH,
   MAX_ENTITY_ID_LENGTH,
   MAX_LOG_ID_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
@@ -450,6 +452,13 @@ describe("enums and dates", () => {
     }
   });
 
+  it("keeps a reminderTime only when it is a local 24-hour HH:MM", () => {
+    for (const reminderTime of ["9:30", "24:00", "09:30:00", "noon", 930, null, {}]) {
+      expect(sanitizeOne("task", taskRow({ reminderTime }))?.has("reminderTime"), String(reminderTime)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ reminderTime: "07:05" }))?.get("reminderTime")).toBe("07:05");
+  });
+
   it("recomputes an invalid log dateKey from endTime, else from startTime", () => {
     const end = 1_763_420_000_000;
     expect(sanitizeOne("log", logRow({ dateKey: "<b>", endTime: end }))?.get("dateKey")).toBe(localDateKey(end));
@@ -472,6 +481,59 @@ describe("enums and dates", () => {
 // ---------------------------------------------------------------------------
 // Unknown fields, nesting and prototype pollution
 // ---------------------------------------------------------------------------
+
+describe("a Task's Checklist", () => {
+  const item = (id: string, text: string, done = false) => ({ id, text, done });
+
+  it("keeps a well-formed Checklist, in order", () => {
+    const checklist = [item("chk-1", "Passport", true), item("chk-2", "Charger")];
+    expect(sanitizeOne("task", taskRow({ checklist }))?.get("checklist")).toEqual(checklist);
+  });
+
+  it("rejects a Checklist on a habit day Task", () => {
+    const row = taskRow({ id: "habtsk-2026-11-18-hab-1", habitId: "hab-1", checklist: [item("chk-1", "Warm up")] });
+    const task = sanitizeOne("task", row);
+    expect(task?.get("habitId")).toBe("hab-1");
+    expect(task?.has("checklist")).toBe(false);
+  });
+
+  it("drops a Checklist that is not a list, and items that cannot be legitimate", () => {
+    expect(sanitizeOne("task", taskRow({ checklist: "Passport" }))?.has("checklist")).toBe(false);
+    expect(sanitizeOne("task", taskRow({ checklist: { 0: item("chk-1", "a") } }))?.has("checklist")).toBe(false);
+    const kept = sanitizeOne("task", taskRow({
+      checklist: [
+        item("chk-1", "Passport"),
+        null,
+        "Charger",
+        { id: "<b>", text: "bad id", done: false },
+        { id: "chk-2", text: 7, done: false },
+        { id: "chk-3", text: "No done flag" },
+        { id: "chk-4", text: "Stringy done", done: "yes" },
+        item("chk-1", "Duplicate id"),
+        { ...item("chk-5", "Extra keys"), colour: "red", __proto__: { polluted: 1 } },
+      ],
+    }))?.get("checklist");
+    expect(kept).toEqual([
+      item("chk-1", "Passport"),
+      item("chk-3", "No done flag"),
+      item("chk-4", "Stringy done"),
+      item("chk-5", "Extra keys"),
+    ]);
+  });
+
+  it("cuts item text and keeps at most the first MAX_CHECKLIST_ITEMS items", () => {
+    const long = sanitizeOne("task", taskRow({ checklist: [item("chk-1", "x".repeat(MAX_CHECKLIST_TEXT_LENGTH + 9))] }));
+    expect((long?.get("checklist") as { text: string }[])[0].text).toHaveLength(MAX_CHECKLIST_TEXT_LENGTH);
+    const many = Array.from({ length: MAX_CHECKLIST_ITEMS + 5 }, (_, n) => item(`chk-${n}`, `Item ${n}`));
+    const capped = sanitizeOne("task", taskRow({ checklist: many }))?.get("checklist") as { id: string }[];
+    expect(capped).toHaveLength(MAX_CHECKLIST_ITEMS);
+    expect(capped[0].id).toBe("chk-0");
+  });
+
+  it("keeps an emptied Checklist, so a device's own write is never changed", () => {
+    expect(sanitizeOne("task", taskRow({ checklist: [] }))?.get("checklist")).toEqual([]);
+  });
+});
 
 describe("unknown fields, nesting and prototype keys", () => {
   it("keeps scalar unknown fields (questCodeSnapshot, code, archived) and drops objects and arrays", () => {
@@ -546,12 +608,14 @@ describe("seeded fuzz of row sanitizing", () => {
     ...MATRIX_INPUTS.map(([, value]) => value),
     "", "   ", "<script>alert(1)</script>", "x".repeat(300), "👨‍👩‍👧‍👦", true, false, [], {}, [[1]], { a: { b: 1 } },
     TASK_ID, QUEST_ID, "2026-11-18", "cyan", "slate", "completed", "__proto__", "x".repeat(129),
+    [{ id: "chk-1", text: "Passport", done: true }, { id: "chk-1", text: "dup", done: false }, { id: 3 }],
+    "09:30", "24:00",
   ];
   const FIELDS = [
     "id", "title", "notes", "description", "questId", "taskId", "status", "rank", "accumulatedSeconds",
     "scheduledDate", "createdAt", "updatedAt", "completedAt", "slotIndex", "accentColor", "accentColorSnapshot",
     "targetWeeklyHours", "startTime", "endTime", "durationSeconds", "dateKey", "taskTitleSnapshot",
-    "questCodeSnapshot", "extra", "constructor", "prototype",
+    "questCodeSnapshot", "checklist", "extra", "constructor", "prototype", "reminderTime",
   ];
   const isScalar = (v: unknown) =>
     v === null || typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
@@ -592,6 +656,7 @@ describe("seeded fuzz of row sanitizing", () => {
         expect(["queued", "active", "completed", "archived"], msg).toContain(t.status);
         expect(inRange(t.accumulatedSeconds, 0, 1e9), msg).toBe(true);
         expect(t.questId === null || isSafeSyncId(t.questId), msg).toBe(true);
+        expect(t.reminderTime === undefined || /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t.reminderTime), msg).toBe(true);
       }
       for (const l of payload.timeLogs) {
         expect(isSafeSyncId(l.id, MAX_LOG_ID_LENGTH) && isSafeSyncId(l.taskId), msg).toBe(true);
@@ -599,8 +664,17 @@ describe("seeded fuzz of row sanitizing", () => {
         expect(l.dateKey, msg).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(["cyan", "emerald", "amber", "slate"], msg).toContain(l.accentColorSnapshot);
       }
+      for (const t of payload.tasks) {
+        if (t.checklist === undefined) continue;
+        expect(t.habitId, msg).toBeUndefined();
+        for (const i of t.checklist) {
+          expect(Object.keys(i).sort(), msg).toEqual(["done", "id", "text"]);
+          expect(isSafeSyncId(i.id) && typeof i.text === "string" && typeof i.done === "boolean", msg).toBe(true);
+        }
+      }
       for (const r of [...payload.quests, ...payload.tasks, ...payload.timeLogs]) {
         for (const [key, value] of Object.entries(r)) {
+          if (key === "checklist") continue; // a list of flat items, checked above
           expect(isScalar(value), `${msg} ${key}`).toBe(true);
           expect(["__proto__", "constructor", "prototype"], msg).not.toContain(key);
         }

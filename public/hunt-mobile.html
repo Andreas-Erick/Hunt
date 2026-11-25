@@ -1104,6 +1104,24 @@
       align-items: center;
       gap: 6px;
     }
+    .reminder-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .reminder-row .sheet-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: var(--touch-min);
+      margin-bottom: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .reminder-row .text-action {
+      flex: 0 0 auto;
+      margin: 0;
+      color: var(--slate);
+    }
     .danger-outline-btn {
       min-height: var(--touch-min);
       padding: 0 14px;
@@ -1133,6 +1151,110 @@
     }
     .sheet-input:focus {
       border-color: var(--cyan);
+    }
+
+    /* Checklist inside Task Options (rules: HuntCore.applyChecklistEdit) */
+    .checklist-items {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 8px;
+    }
+    .checklist-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .checklist-tick,
+    .checklist-icon-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--touch-min);
+      height: var(--touch-min);
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--dim);
+      cursor: pointer;
+      transition: color 0.15s ease-out, background-color 0.15s ease-out, opacity 0.15s ease-out;
+    }
+    .checklist-icon-btn:active,
+    .checklist-tick:active {
+      background: var(--surface-2);
+    }
+    .checklist-icon-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+    .checklist-tick-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: 1.5px solid var(--border-strong);
+      color: transparent;
+    }
+    .checklist-row.done .checklist-tick-box {
+      background: var(--emerald);
+      border-color: transparent;
+      color: rgb(var(--c-on-accent));
+    }
+    .checklist-text {
+      flex: 1;
+      min-width: 0;
+      min-height: var(--touch-min);
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--white);
+      padding: 0 8px;
+      font-size: 16px; /* below 16 px a focused field zooms the page in mobile browsers */
+      outline: none;
+      text-overflow: ellipsis;
+    }
+    .checklist-text:focus {
+      border-color: var(--cyan);
+      background: rgb(var(--p-deep));
+    }
+    .checklist-row.done .checklist-text {
+      color: var(--dim);
+      text-decoration: line-through;
+    }
+    .checklist-add-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .checklist-add-row .sheet-input {
+      flex: 1;
+      min-width: 0;
+      margin-bottom: 0;
+    }
+    .checklist-add-row .checklist-icon-btn {
+      border: 1px solid var(--border-strong);
+      color: var(--white);
+    }
+    .checklist-badge {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      white-space: nowrap;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--dim);
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+    .checklist-badge.complete {
+      color: var(--emerald);
     }
     /* the browsers' default placeholder grey is below 4.5:1 on these dark fields */
     input::placeholder,
@@ -2885,28 +3007,36 @@ var HuntCore = (() => {
   // src/mobile/huntCore.ts
   var huntCore_exports = {};
   __export(huntCore_exports, {
+    MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
+    applyChecklistEdit: () => applyChecklistEdit,
     applyPendingTicks: () => applyPendingTicks,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
     buildWidgetSnapshot: () => buildWidgetSnapshot,
+    canHoldChecklist: () => canHoldChecklist,
     canonicalString: () => canonicalString,
+    checklistOf: () => checklistOf,
+    checklistProgress: () => checklistProgress,
     compareRank: () => compareRank,
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    dueReminders: () => dueReminders,
     fromFocusSession: () => fromFocusSession,
     habitDayOutcome: () => habitDayOutcome,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
+    isReminderTime: () => isReminderTime,
     isSafeSyncId: () => isSafeSyncId,
     isTaskVisibleToday: () => isTaskVisibleToday,
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
+    newChecklistItemId: () => newChecklistItemId,
     nextStamp: () => nextStamp,
     pickNextFocusTask: () => pickNextFocusTask,
     sameContent: () => sameContent,
@@ -3059,6 +3189,118 @@ var HuntCore = (() => {
     };
   }
 
+  // src/lib/syncIds.ts
+  var MAX_ENTITY_ID_LENGTH = 128;
+  var SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
+  function isSafeSyncId(value, maxLength = MAX_ENTITY_ID_LENGTH) {
+    return typeof value === "string" && value.length > 0 && value.length <= maxLength && SAFE_ID_CHARS_RE.test(value);
+  }
+
+  // src/lib/textLimits.ts
+  function clampLength(text, max) {
+    if (text.length <= max) return text;
+    const last = text.charCodeAt(max - 1);
+    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
+  }
+
+  // src/lib/checklist.ts
+  var MAX_CHECKLIST_ITEMS = 200;
+  var MAX_CHECKLIST_TEXT_LENGTH = 500;
+  function checklistOf(task) {
+    return Array.isArray(task.checklist) ? task.checklist : [];
+  }
+  function newChecklistItemId(now = Date.now(), random = Math.random) {
+    return `chk-${now}-${random().toString(36).slice(2, 6).padEnd(4, "0")}`;
+  }
+  function canHoldChecklist(task) {
+    return !task.habitId;
+  }
+  function cutText(text) {
+    return clampLength(text, MAX_CHECKLIST_TEXT_LENGTH);
+  }
+  function cleanText(text) {
+    return cutText(text.trim()).trimEnd();
+  }
+  function applyChecklistEdit(task, edit) {
+    if (!canHoldChecklist(task)) return null;
+    const items = checklistOf(task);
+    const index = items.findIndex((i) => i.id === edit.id);
+    switch (edit.kind) {
+      case "add": {
+        const text = cleanText(edit.text);
+        if (!text || index !== -1 || items.length >= MAX_CHECKLIST_ITEMS) return null;
+        return [...items, { id: edit.id, text, done: false }];
+      }
+      case "toggle":
+        if (index === -1) return null;
+        return items.map((i, n) => n === index ? { ...i, done: !i.done } : i);
+      case "rename": {
+        const text = cleanText(edit.text);
+        if (index === -1 || !text || items[index].text === text) return null;
+        return items.map((i, n) => n === index ? { ...i, text } : i);
+      }
+      case "move": {
+        if (index === -1 || !Number.isInteger(edit.toIndex)) return null;
+        const to = Math.min(items.length - 1, Math.max(0, edit.toIndex));
+        if (to === index) return null;
+        const next = items.slice();
+        const [moved] = next.splice(index, 1);
+        next.splice(to, 0, moved);
+        return next;
+      }
+      case "remove":
+        if (index === -1) return null;
+        return items.filter((_, n) => n !== index);
+    }
+  }
+  function checklistProgress(task) {
+    const items = checklistOf(task);
+    if (items.length === 0) return null;
+    return { done: items.filter((i) => i.done === true).length, total: items.length };
+  }
+
+  // src/lib/reminders.ts
+  var REMINDER_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+  var DATE_KEY_RE2 = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function isReminderTime(value) {
+    return typeof value === "string" && REMINDER_TIME_RE.test(value);
+  }
+  function localFireAt(dateKey, time) {
+    const m = DATE_KEY_RE2.exec(dateKey);
+    if (!m) return null;
+    const [hour, minute] = time.split(":").map(Number);
+    const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, minute).getTime();
+    return Number.isFinite(at) ? at : null;
+  }
+  function isUndone(task) {
+    return task.status === "queued" || task.status === "active";
+  }
+  function taskReminder(task) {
+    const { scheduledDate, reminderTime } = task;
+    if (!isUndone(task) || !scheduledDate || !isReminderTime(reminderTime)) return null;
+    const fireAt = localFireAt(scheduledDate, reminderTime);
+    if (fireAt === null) return null;
+    return {
+      kind: "task",
+      key: `task:${task.id}:${scheduledDate}T${reminderTime}`,
+      itemId: task.id,
+      title: task.title,
+      dateKey: scheduledDate,
+      time: reminderTime,
+      fireAt
+    };
+  }
+  function dueReminders(sources, window) {
+    const due = [];
+    for (const task of sources.tasks) {
+      const reminder = taskReminder(task);
+      if (reminder && reminder.fireAt >= window.from && reminder.fireAt < window.to) {
+        due.push(reminder);
+      }
+    }
+    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  }
+
   // src/lib/syncTypes.ts
   function canonicalString(value) {
     return JSON.stringify(value, (_key, val) => {
@@ -3143,11 +3385,6 @@ var HuntCore = (() => {
       }
     }
     return Math.max(S + 1e3, Math.min(...cands));
-  }
-  var MAX_ENTITY_ID_LENGTH = 128;
-  var SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
-  function isSafeSyncId(value, maxLength = MAX_ENTITY_ID_LENGTH) {
-    return typeof value === "string" && value.length > 0 && value.length <= maxLength && SAFE_ID_CHARS_RE.test(value);
   }
   var QUEST_ACCENTS = {
     cyan: true,
@@ -3615,9 +3852,9 @@ var HuntCore = (() => {
   }
 
   // src/lib/pendingTicks.ts
-  var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
+  var DATE_KEY_RE3 = /^\d{4}-\d{2}-\d{2}$/;
   function isWellFormed(tick) {
-    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE3.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
   }
   function habitRowFor(state, tick) {
     var _a;
@@ -3673,6 +3910,12 @@ var HuntCore = (() => {
     var buildHabitTaskRow = HuntCore.buildHabitTaskRow;
     var computeHabitStreak = HuntCore.computeHabitStreak;
     var completionDateKey = HuntCore.completionDateKey;
+    var applyChecklistEdit = HuntCore.applyChecklistEdit;
+    var canHoldChecklist = HuntCore.canHoldChecklist;
+    var checklistOf = HuntCore.checklistOf;
+    var checklistProgress = HuntCore.checklistProgress;
+    var newChecklistItemId = HuntCore.newChecklistItemId;
+    var isReminderTime = HuntCore.isReminderTime;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
@@ -3848,7 +4091,7 @@ var HuntCore = (() => {
     // Keeps only what the screens and the merge can use (the rows the server validator keeps): objects with
     // a safe id; quests and tasks with a string title; logs with a safe taskId, a finite duration >= 0 and
     // a startTime stamp; safe tombstone ids; a valid focus (else the empty focus). A scheduledDate that is
-    // not YYYY-MM-DD is removed. Never mutates `input` (rows are shared, fixed ones copied).
+    // not YYYY-MM-DD, and a reminderTime that is not HH:MM, are removed. Never mutates `input` (rows are shared, fixed ones copied).
     // dropped = rows, ids or fields discarded.
     function guardSyncState(input) {
       const src = isPlainRecord(input) ? input : {};
@@ -3866,10 +4109,12 @@ var HuntCore = (() => {
       const tasks = keep("tasks", isTitledRow).map(t => {
         const badDate = !hasDateKeyOrNone(t);
         const badHabit = t.habitId !== undefined && !isSafeSyncId(t.habitId);
-        if (!badDate && !badHabit) return t;
+        const badReminder = t.reminderTime !== undefined && !isReminderTime(t.reminderTime);
+        if (!badDate && !badHabit && !badReminder) return t;
         const copy = { ...t };
         if (badDate) { dropped++; delete copy.scheduledDate; }
         if (badHabit) { dropped++; delete copy.habitId; }
+        if (badReminder) { dropped++; delete copy.reminderTime; }
         return copy;
       });
       let activeFocus = src.activeFocus === undefined ? emptyFocus(0) : src.activeFocus;
@@ -4560,6 +4805,22 @@ var HuntCore = (() => {
     function updateTaskField(taskId, field, value) {
       cancelFieldDraft(taskId, field);
       if (applyTaskField(taskId, field, value)) commitLocalChange();
+    }
+
+    // A dated Task's one reminder time (ADR-0007): "" clears it (the Task stays date-only); only a local
+    // "HH:MM" is saved. Quiet commit, so the open Task Options sheet keeps its input.
+    function setTaskReminder(taskId, value) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t || (value !== "" && !isReminderTime(value))) return;
+      if ((t.reminderTime || "") === value) return;
+      if (value) t.reminderTime = value;
+      else delete t.reminderTime;
+      t.updatedAt = nextStamp(t);
+      const clear = document.getElementById("taskReminderClear");
+      if (clear) clear.hidden = !value;
+      const input = clear && clear.parentElement.querySelector("input");
+      if (input && !value) input.value = "";
+      commitLocalChange({ render: false });
     }
 
     // ----- Merge (phone side) -----
@@ -6850,6 +7111,82 @@ var HuntCore = (() => {
       else showToast("Added for " + dateKeyLabel(scheduledDate));
     }
 
+    // ----- Checklist: the rules are HuntCore's (applyChecklistEdit, shared with the desktop) -----
+    // "n/m" on a Task row; "" when the Task has no Checklist items.
+    function checklistBadgeHtml(task) {
+      const p = checklistProgress(task);
+      if (!p) return "";
+      return `<span class="checklist-badge${p.done === p.total ? " complete" : ""}" aria-label="Checklist: ${p.done} of ${p.total} done"><span aria-hidden="true">${p.done}/${p.total}</span></span>`;
+    }
+
+    // The item rows of the Checklist editor in Task Options (tick, rename in place, up/down, delete).
+    function checklistItemsHtml(task) {
+      const items = checklistOf(task);
+      return items.map((it, i) => {
+        const text = escapeHtml(it.text);
+        return `
+          <div class="checklist-row${it.done ? " done" : ""}">
+            <button class="checklist-tick" role="checkbox" aria-checked="${it.done ? "true" : "false"}" aria-label="${text}" onclick="editTaskChecklist(${jsArg(task.id)}, 'toggle', ${jsArg(it.id)})"><span class="checklist-tick-box">${SVG_CHECK}</span></button>
+            <input class="checklist-text" value="${text}" maxlength="${HuntCore.MAX_CHECKLIST_TEXT_LENGTH}" aria-label="Rename ${text}" onkeydown="if(isSubmitKey(event)) this.blur()" onchange="editTaskChecklist(${jsArg(task.id)}, 'rename', ${jsArg(it.id)}, this.value)" />
+            <button class="checklist-icon-btn" aria-label="Move ${text} up" ${i === 0 ? "disabled" : ""} onclick="editTaskChecklist(${jsArg(task.id)}, 'move', ${jsArg(it.id)}, ${jsArg(i - 1)})">↑</button>
+            <button class="checklist-icon-btn" aria-label="Move ${text} down" ${i === items.length - 1 ? "disabled" : ""} onclick="editTaskChecklist(${jsArg(task.id)}, 'move', ${jsArg(it.id)}, ${jsArg(i + 1)})">↓</button>
+            <button class="checklist-icon-btn" aria-label="Delete ${text}" onclick="editTaskChecklist(${jsArg(task.id)}, 'remove', ${jsArg(it.id)})">✕</button>
+          </div>`;
+      }).join("");
+    }
+
+    // The Checklist section of Task Options; "" for a habit day Task (it never holds a Checklist).
+    function checklistEditorHtml(task) {
+      if (!canHoldChecklist(task)) return "";
+      return `
+          <div class="sheet-label">Checklist</div>
+          <div role="group" aria-label="Checklist">
+            <div id="sheetChecklistItems" class="checklist-items">${checklistItemsHtml(task)}</div>
+            <div class="checklist-add-row">
+              <input id="sheetChecklistNew" class="sheet-input" maxlength="${HuntCore.MAX_CHECKLIST_TEXT_LENGTH}" placeholder="Add an item..." aria-label="New checklist item" onkeydown="if(isSubmitKey(event)) addChecklistItemFromSheet(${jsArg(task.id)})" />
+              <button class="checklist-icon-btn" aria-label="Add checklist item" onclick="addChecklistItemFromSheet(${jsArg(task.id)})">+</button>
+            </div>
+          </div>`;
+    }
+
+    // One Checklist edit through the shared rule; a refused edit (blank rename) just redraws the rows.
+    function editTaskChecklist(taskId, kind, itemId, arg) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t) return;
+      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
+        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
+        : { kind, id: itemId };
+      const next = applyChecklistEdit(t, edit);
+      if (next) {
+        t.checklist = next;
+        t.updatedAt = nextStamp(t);
+        commitLocalChange();
+      }
+      refreshSheetChecklist(t);
+    }
+
+    // Adds the typed item; the field stays (and keeps the keyboard up) for the next one.
+    function addChecklistItemFromSheet(taskId) {
+      const input = document.getElementById("sheetChecklistNew");
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!input || !t || !input.value.trim()) return;
+      const next = applyChecklistEdit(t, { kind: "add", id: newChecklistItemId(), text: input.value });
+      if (!next) return;
+      t.checklist = next;
+      t.updatedAt = nextStamp(t);
+      input.value = "";
+      commitLocalChange();
+      refreshSheetChecklist(t);
+    }
+
+    // Redraws only the item rows of the open Task Options sheet (the add field keeps focus).
+    function refreshSheetChecklist(task) {
+      const sc = document.getElementById("sheetContainer");
+      const host = document.getElementById("sheetChecklistItems");
+      if (!sc || !host || sc.dataset.sheet !== "task:" + task.id) return;
+      host.innerHTML = checklistItemsHtml(task);
+    }
+
     function openTaskInspectorSheet(taskId) {
       playClickSound();
       const task = state.tasks.find(t => t.id === taskId);
@@ -6864,6 +7201,7 @@ var HuntCore = (() => {
 
           <input class="sheet-input" value="${escapeHtml(task.title)}" aria-label="Task title" oninput="draftTaskField(${jsArg(task.id)}, 'title', this.value)" onchange="updateTaskField(${jsArg(task.id)}, 'title', this.value)" />
           <textarea maxlength="20000" class="sheet-input" rows="3" placeholder="Add session notes..." aria-label="Notes" oninput="draftTaskField(${jsArg(task.id)}, 'notes', this.value)" onchange="updateTaskField(${jsArg(task.id)}, 'notes', this.value)">${escapeHtml(task.notes || "")}</textarea>
+          ${checklistEditorHtml(task)}
 
           <!-- Quick Actions -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
@@ -6895,6 +7233,13 @@ var HuntCore = (() => {
             <button class="sheet-pill ${dayKey === tomorrowKey ? 'selected' : ''}" aria-pressed="${dayKey === tomorrowKey}" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(tomorrowKey)});">Tomorrow</button>
             ${otherDay ? `<button class="sheet-pill selected" aria-pressed="true" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(dayKey)});">${escapeHtml(dateKeyLabel(dayKey))}</button>` : ""}
           </div>
+
+          ${task.scheduledDate && !task.habitId ? `
+          <div class="sheet-label">Reminder</div>
+          <div class="reminder-row">
+            <input type="time" class="sheet-input" aria-label="Reminder time" value="${escapeHtml(isReminderTime(task.reminderTime) ? task.reminderTime : "")}" onchange="setTaskReminder(${jsArg(task.id)}, this.value)" />
+            <button id="taskReminderClear" class="text-action" aria-label="Clear reminder" ${isReminderTime(task.reminderTime) ? "" : "hidden"} onclick="setTaskReminder(${jsArg(task.id)}, '')">✕ Clear</button>
+          </div>` : ""}
 
           <div class="sheet-footer-row">
             <button class="text-action" onclick="completeTaskDirect(${jsArg(task.id)})" style="color:var(--emerald);">✓ Mark Completed</button>
@@ -7938,6 +8283,7 @@ var HuntCore = (() => {
                 <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
               </span>
               ${task.habitId ? `<span style="font-size:10px;color:var(--dim);padding:1px 6px;border-radius:999px;border:1px solid var(--border);flex-shrink:0;">Daily</span>` : ""}
+              ${checklistBadgeHtml(task)}
             </div>
           </div>
 
@@ -8717,6 +9063,7 @@ var HuntCore = (() => {
                     <span style="width:7px;height:7px;border-radius:50%;background:${hHex};flex-shrink:0;"></span>
                     <span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(hq ? hq.title : "Quest")}</span>
                   </span>
+                  ${checklistBadgeHtml(heroTask)}
                 </div>
                 <button class="more-dots-btn" onclick="openTaskInspectorSheet(${jsArg(heroTask.id)})" aria-label="Task options for ${escapeHtml(heroTask.title)}">${SVG_MORE}</button>
               </div>
