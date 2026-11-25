@@ -19,6 +19,7 @@ export {
 } from "../lib/dateUtils";
 export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
+export { habitSuccessRate, habitSuccessRateLabel, habitWeekStrip } from "../lib/habitInsight";
 export {
   countProgressLabel,
   countTargetOf,
