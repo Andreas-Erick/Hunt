@@ -2,7 +2,7 @@
 // title or description is stopped while typing instead of cut silently on save.
 import React from "react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { db } from "@/lib/db";
 import type { Quest } from "@/lib/domainTypes";
 import {
@@ -15,6 +15,7 @@ import { useCommandStore } from "@/store/useCommandStore";
 import { HabitsView } from "@/components/HabitsView";
 import { QuestMatrixPanel } from "@/components/QuestMatrixPanel";
 import { TaskComposer } from "@/components/TaskComposer";
+import { PlanWeekView } from "@/components/PlanWeekView";
 
 const QUEST: Quest = {
   id: "q1",
@@ -74,5 +75,16 @@ describe("desktop text fields cap at the stored lengths", () => {
     const form = within(row).getByRole("form", { name: "Edit habit Stretch" });
     expect(maxLengthOf(within(form).getByLabelText("Habit title"))).toBe(MAX_HABIT_TITLE_LENGTH);
     expect(maxLengthOf(within(form).getByLabelText("Default notes"))).toBe(MAX_LONG_TEXT_LENGTH);
+  });
+
+  it("Plan the Week: every day's add-task title and notes", async () => {
+    const { container } = render(<PlanWeekView />);
+    // Days still open for planning each show a title field and a notes field.
+    await waitFor(() => expect(container.querySelectorAll('input[type="text"]').length).toBeGreaterThan(0));
+    const caps = [...container.querySelectorAll<HTMLInputElement>('input[type="text"]')].map((el) => el.maxLength);
+    const titles = caps.filter((c) => c === MAX_TASK_TITLE_LENGTH).length;
+    expect(titles).toBeGreaterThan(0);
+    expect(caps.filter((c) => c === MAX_LONG_TEXT_LENGTH)).toHaveLength(titles);
+    expect(caps).toHaveLength(titles * 2);
   });
 });

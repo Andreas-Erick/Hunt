@@ -22,7 +22,7 @@ import {
 } from "@/lib/dateUtils";
 import type { Quest, Task } from "@/lib/domainTypes";
 import { useCommandStore } from "@/store/useCommandStore";
-import { compareRank } from "@/lib/syncTypes";
+import { compareRank, MAX_LONG_TEXT_LENGTH, MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import {
   COMPLETION_HIGHLIGHT_MS,
@@ -511,7 +511,7 @@ export function PlanWeekView() {
                   <div className="flex items-center justify-between gap-2">
                     <input
                       type="text"
-                      value={dayInput}
+                      value={dayInput} maxLength={MAX_TASK_TITLE_LENGTH}
                       onChange={(e) =>
                         setInputsByDay((prev) => ({
                           ...prev,
@@ -552,7 +552,7 @@ export function PlanWeekView() {
                   <div className="mt-1 border-t border-white/[0.05]">
                     <input
                       type="text"
-                      value={notesByDay[col.dateKey] ?? ""}
+                      value={notesByDay[col.dateKey] ?? ""} maxLength={MAX_LONG_TEXT_LENGTH}
                       onChange={(e) =>
                         setNotesByDay((prev) => ({
                           ...prev,

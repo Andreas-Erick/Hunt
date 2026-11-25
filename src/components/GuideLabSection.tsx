@@ -29,6 +29,7 @@ import {
 } from "@/lib/questScienceContent";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { SavedNotice } from "./SavedNotice";
+import { MAX_QUEST_TITLE_LENGTH, MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 
 type LabMode = "task" | "quest";
 
@@ -523,7 +524,7 @@ export function GuideLabSection() {
                 <input
                   id={taskTitleId}
                   type="text"
-                  value={taskTitle}
+                  value={taskTitle} maxLength={MAX_TASK_TITLE_LENGTH}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   onBlur={() => setTaskTouched(true)}
                   placeholder="e.g. Draft 400 words for the intro of essay #4"
@@ -617,7 +618,7 @@ export function GuideLabSection() {
                 <input
                   id={questTitleId}
                   type="text"
-                  value={questTitle}
+                  value={questTitle} maxLength={MAX_QUEST_TITLE_LENGTH}
                   onChange={(e) => setQuestTitle(e.target.value)}
                   onBlur={() => setQuestTouched(true)}
                   placeholder="e.g. Ship v1 of my audio plugin"

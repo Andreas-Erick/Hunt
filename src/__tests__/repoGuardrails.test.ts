@@ -166,7 +166,7 @@ describe("module size ratchet", () => {
   // Over budget when the ratchet was added (2026-11-22). A file may shrink; lower its number when it
   // does. A file that must grow past its number gets split instead.
   const FROZEN: Record<string, number> = {
-    "src/components/GuideLabSection.tsx": 767,
+    "src/components/GuideLabSection.tsx": 750,
     "src/components/MobileSyncModal.tsx": 702,
     "src/components/PlanWeekView.tsx": 737,
     "src/components/TelemetryDashboardView.tsx": 679,
