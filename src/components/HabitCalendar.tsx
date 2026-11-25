@@ -38,6 +38,11 @@ export const HABIT_NAV_BUTTON =
   "grid h-9 w-9 place-items-center rounded-lg text-neutral-300 transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80 disabled:opacity-30 coarse:h-11 coarse:w-11";
 const ACTION_BUTTON =
   "min-h-9 rounded-lg border border-white/[0.12] bg-white/[0.03] px-3 text-sm text-neutral-200 transition-colors duration-150 ease-out hover:bg-white/[0.07] hover:text-white active:opacity-80 coarse:min-h-11";
+/**
+ * The month grid's columns (CODING_STANDARDS: 7-column calendar exception): 8px apart while seven
+ * 44px days still fit; on a narrower screen the gap shrinks first, so each day stays 44px wide.
+ */
+const CALENDAR_COLUMNS = "grid grid-cols-7 gap-x-[clamp(0px,calc((100%_-_308px)/6),8px)]";
 
 function monthDate(monthKey: string): Date {
   const [y, m] = monthKey.split("-").map(Number);
@@ -178,16 +183,16 @@ export function HabitCalendar({
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] text-hud-muted" aria-hidden="true">
+      <div className={`mt-3 ${CALENDAR_COLUMNS} text-center text-[11px] text-hud-muted`} aria-hidden="true">
         {HABIT_WEEKDAYS.map(({ label: w }) => (
           <span key={w}>{w}</span>
         ))}
       </div>
-      <div className="mt-1 grid grid-cols-7 gap-1">
+      <div className={`mt-1 ${CALENDAR_COLUMNS} gap-y-2`}>
         {month.weeks.flat().map((d, i) => {
           if (!d) return <span key={`blank-${i}`} />;
           const label = `${dayName(d)}: ${d.outcome ? OUTCOME_LABEL[d.outcome] : "no Outcome"}`;
-          const look = `flex h-9 w-full items-center justify-center rounded-lg text-xs tabular-nums coarse:h-11 ${dayLook(d.outcome, metClass)}`;
+          const look = `flex h-11 w-full items-center justify-center rounded-lg text-xs tabular-nums ${dayLook(d.outcome, metClass)}`;
           if (!d.correctable) {
             return (
               <span key={d.dayKey} aria-label={label} title={label} className={look}>
