@@ -3,9 +3,17 @@
 import React, { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Habit } from "@/lib/domainTypes";
-import { habitMonth, habitStartKey, type HabitCalendarDay, type HabitDayMark } from "@/lib/habitCalendar";
+import {
+  habitMonth,
+  habitStartKey,
+  habitWeekSkipMark,
+  type HabitCalendarDay,
+  type HabitDayMark,
+} from "@/lib/habitCalendar";
+import type { HabitWeek } from "@/lib/habitWeek";
 import type { HabitOutcome } from "@/lib/habitOutcome";
 import { countProgressLabel, formatCountAmount, habitKindOf, parseCountAmount } from "@/lib/habitKind";
+import { isHabitScheduledOn } from "@/lib/habitFrequency";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 
@@ -104,7 +112,8 @@ function DayTotalForm({
 /**
  * The Habit detail's Calendar tab: a month of Outcomes with previous and next
  * month buttons, the Habit's notes, and, for a chosen day, Tick / Untick and
- * Skip / Undo skip (the shared correctHabitDayRow rule, so the change syncs).
+ * Skip / Undo skip (the shared correctHabitDayRow rule, so the change syncs;
+ * an N per week Habit's Skip sets its whole Habit Week aside, habitSkipRows).
  * A Count Habit's day also shows its progress and takes an exact total.
  */
 export function HabitCalendar({
@@ -112,6 +121,7 @@ export function HabitCalendar({
   todayKey,
   outcomeOn,
   amountOn,
+  weekOn,
   metClass,
 }: {
   habit: Habit;
@@ -119,14 +129,24 @@ export function HabitCalendar({
   outcomeOn: (dayKey: string) => HabitOutcome | null;
   /** A Count Habit's total on a day. */
   amountOn: (dayKey: string) => number;
+  /** The Habit Week holding a day of an N per week Habit, else null. */
+  weekOn: (dayKey: string) => HabitWeek | null;
   metClass: string;
 }) {
   const correctHabitDay = useCommandStore((s) => s.correctHabitDay);
+  const setHabitDaySkipped = useCommandStore((s) => s.setHabitDaySkipped);
   const logHabitAmount = useCommandStore((s) => s.logHabitAmount);
   const isCount = habitKindOf(habit) === "count";
   const [monthKey, setMonthKey] = useState(todayKey.slice(0, 7));
   const [chosenKey, setChosenKey] = useState<string | null>(null);
-  const month = habitMonth({ monthKey, todayKey, startKey: habitStartKey(habit, todayKey), outcomeOn });
+  const month = habitMonth({
+    monthKey,
+    todayKey,
+    startKey: habitStartKey(habit, todayKey),
+    outcomeOn,
+    askedOn: (dayKey) => isHabitScheduledOn(habit, dayKey),
+    weekOn,
+  });
   const monthName = monthDate(month.monthKey).toLocaleDateString("en-US", { month: "long" });
   const dayName = (d: HabitCalendarDay) => `${d.day} ${monthName}`;
   const chosen = month.weeks.flat().find((d) => d?.dayKey === chosenKey && d.correctable) ?? null;
@@ -137,9 +157,12 @@ export function HabitCalendar({
     setMonthKey(key);
     setChosenKey(null);
   };
+  const chosenWeek = chosen ? weekOn(chosen.dayKey) : null;
   const mark = (day: HabitCalendarDay, to: HabitDayMark) => {
     hudAudio.playClick();
-    void correctHabitDay(habit.id, day.dayKey, to);
+    const weekSkip = habitWeekSkipMark(habit, day.dayKey, to, day.outcome);
+    if (weekSkip === null) void correctHabitDay(habit.id, day.dayKey, to);
+    else void setHabitDaySkipped(habit.id, day.dayKey, weekSkip);
   };
 
   return (
@@ -206,6 +229,15 @@ export function HabitCalendar({
             <div className="text-sm text-white">
               {dayName(chosen)} · <span className="text-hud-muted">{chosen.outcome ? OUTCOME_LABEL[chosen.outcome] : ""}</span>
             </div>
+            {chosenWeek?.outcome && (
+              <div className="mt-0.5 text-xs text-hud-muted">
+                <span>Habit Week: {OUTCOME_LABEL[chosenWeek.outcome]}</span>
+                <span className="tabular-nums">
+                  {" "}
+                  · {chosenWeek.met} of {chosenWeek.target} Met
+                </span>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               {chosen.outcome === "met" ? (
                 <button type="button" onClick={() => mark(chosen, "none")} aria-label={`Untick ${dayName(chosen)}`} className={ACTION_BUTTON}>

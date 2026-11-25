@@ -1,10 +1,11 @@
 import { habitStreakOn, habitTaskId, outcomesBackFrom, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
-import { isHabitScheduledOn } from "./habitFrequency";
+import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habitFrequency";
 import { habitSuccessRate } from "./habitInsight";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 import { habitDayAmount } from "./habitKind";
 import { habitScore } from "./habitStats";
+import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, weekOutcomesBackFrom, type HabitWeek } from "./habitWeek";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -42,15 +43,38 @@ export interface HabitDaySummary {
   todayTask: Task | undefined;
   /** Every day this habit was completed (completionDateKey). */
   completedDates: ReadonlySet<string>;
-  /** Met days in a row ending today, or yesterday while today is Open. */
+  /**
+   * The Streak in `streakUnit`s: Met days in a row ending today (or yesterday
+   * while today is Open), or Met Habit Weeks for an N per week Habit.
+   */
   streak: number;
+  /** "week" when today's Frequency is N per week (the Streak reads "3w"), else "day". */
+  streakUnit: "day" | "week";
+  /**
+   * Whether today is asked of the user: scheduled by today's Frequency and,
+   * for N per week, the Habit Week not yet Met on its other days.
+   */
+  askedToday: boolean;
+  /**
+   * The Outcome a Skip acts on: today's for a daily Habit; for N per week the
+   * current Habit Week's, "met" once N are Met, "skipped" once set aside on
+   * purpose (a Partial Week still reads "open": it can be set aside too).
+   */
+  skipState: HabitOutcome | null;
+  /** The Habit Week holding today, or null when today is not N per week. */
+  week: HabitWeek | null;
+  /** The Outcome of the Habit Week holding `dayKey`, or null when it was not N per week. */
+  weekOutcomeOn: (dayKey: string) => HabitOutcome | null;
+  /** The Habit Week holding `dayKey` (habitWeekOf), or null when it was not N per week. */
+  weekOn: (dayKey: string) => HabitWeek | null;
   /** Whether today is Met (a Check Habit ticked, a Count Habit at its target). */
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
   /**
-   * The Success Rate (habitSuccessRate) over every day since the Habit began,
-   * or null before any day was Met or Missed. Worked out on first call only.
+   * The Success Rate (habitSuccessRate) over every day since the Habit began
+   * (every Habit Week for an N per week Habit), or null before any was Met or
+   * Missed. Worked out on first call only.
    */
   successRate: () => number | null;
   /**
@@ -148,24 +172,47 @@ export function summarizeHabitDays(
         const completedDates = datesByHabit.get(habitId) ?? EMPTY_DATES;
         const dayTasks = dayTasksByHabit.get(habitId);
         const habit = habitById.get(habitId) ?? { id: habitId };
-        const outcomeOn = (dayKey: string) =>
-          habitDayOutcome({ habit, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
-        const firstDayKey = firstHabitDay(habit, dayTasks, todayKey);
+        const dayTaskOn = (dayKey: string) => dayTasks?.get(dayKey);
+        const outcomeOn = (dayKey: string) => habitDayOutcome({ habit, dayKey, dayTask: dayTaskOn(dayKey), todayKey });
+        const firstDay = firstHabitDay(habit, dayTasks, todayKey);
+        const weekDays = { dayTaskOn, dayOutcomeOn: outcomeOn, firstDayKey: firstDay };
+        const weekOn = (dayKey: string) => habitWeekOf(habit, dayKey, weekDays, todayKey);
+        const weekOutcomeOn = (dayKey: string) => weekOn(dayKey)?.outcome ?? null;
+        const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
         let rate: number | null | undefined;
         let score: number | null | undefined;
+        // The units the Success Rate and Habit Score judge, newest first: days, or Habit Weeks.
+        const units = () =>
+          weekly ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn) : outcomesBackFrom(todayKey, firstDay, outcomeOn);
+        const week = weekly ? weekOn(todayKey) : null;
+        const doneToday = outcomeOn(todayKey) === "met";
+        const unitStart = frequencyUnitStart(habit, todayKey);
+        const streakFrom = unitStart > firstDay ? unitStart : firstDay;
         summary = {
           todayTask,
           completedDates,
-          streak: habitStreakOn(todayKey, outcomeOn, firstDayKey),
-          doneToday: outcomeOn(todayKey) === "met",
+          streak: weekly
+            ? habitWeekStreakOn(todayKey, weekOutcomeOn, streakFrom)
+            : habitStreakOn(todayKey, outcomeOn, streakFrom),
+          streakUnit: weekly ? "week" : "day",
+          doneToday,
+          askedToday: week
+            ? week.met - (doneToday ? 1 : 0) < week.target
+            : isHabitScheduledOn(habit, todayKey),
+          skipState: !week
+            ? outcomeOn(todayKey)
+            : week.met >= week.target
+            ? "met"
+            : week.skipped
+            ? "skipped"
+            : "open",
+          week,
+          weekOutcomeOn,
+          weekOn,
           outcomeOn,
-          successRate: () =>
-            rate === undefined
-              ? (rate = habitSuccessRate(outcomesBackFrom(todayKey, firstDayKey, outcomeOn)))
-              : rate,
-          score: () =>
-            score === undefined ? (score = habitScore(outcomesBackFrom(todayKey, firstDayKey, outcomeOn))) : score,
-          amountOn: (dayKey) => habitDayAmount(dayTasks?.get(dayKey)),
+          successRate: () => (rate === undefined ? (rate = habitSuccessRate(units())) : rate),
+          score: () => (score === undefined ? (score = habitScore(units())) : score),
+          amountOn: (dayKey) => habitDayAmount(dayTaskOn(dayKey)),
         };
         cache.set(habitId, summary);
       }
@@ -175,20 +222,29 @@ export function summarizeHabitDays(
 }
 
 /**
- * SHARED "done today" tally: the Habits asked of `todayKey` (scheduled by
- * their Frequency and not Skipped) and how many of them are done.
+ * SHARED "asks for a day Task today" rule: asked today (askedToday) and not
+ * set aside, so an N per week Habit stops showing in Today once N are Met or
+ * its Habit Week is Skipped.
+ */
+export function habitWantsDayTask(summary: Pick<HabitDaySummary, "askedToday" | "skipState">): boolean {
+  return summary.askedToday && summary.skipState !== "skipped";
+}
+
+/**
+ * SHARED "done today" tally: the Habits asked of today (habitWantsDayTask) and
+ * how many of them are done. Today is the day `summaryFor` was built for; the
+ * third argument is kept for existing callers.
  */
 export function habitTodayTally(
   habits: readonly Habit[],
   summaryFor: (habitId: string) => HabitDaySummary,
-  todayKey: string
+  _todayKey?: string
 ): { done: number; asked: number } {
   let done = 0;
   let asked = 0;
   for (const habit of habits) {
-    if (!isHabitScheduledOn(habit, todayKey)) continue;
     const summary = summaryFor(habit.id);
-    if (summary.outcomeOn(todayKey) === "skipped") continue;
+    if (!habitWantsDayTask(summary)) continue;
     asked += 1;
     if (summary.doneToday) done += 1;
   }

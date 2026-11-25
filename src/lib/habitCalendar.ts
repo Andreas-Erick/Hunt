@@ -4,6 +4,8 @@ import { completeTaskRow, nextStamp } from "./taskQueue";
 import { setHabitDayAmount } from "./habitCount";
 import { countTargetOf, habitDayAmount, habitKindOf } from "./habitKind";
 import type { HabitOutcome } from "./habitOutcome";
+import { habitFrequencyOn, isPerWeekFrequency } from "./habitFrequency";
+import type { HabitWeek } from "./habitWeek";
 
 /** One day cell of a Habit's month calendar. */
 export interface HabitCalendarDay {
@@ -53,19 +55,27 @@ export function habitStartKey(habit: Pick<Habit, "createdAt">, todayKey: string)
  * SHARED month calendar of one Habit's Outcomes. `monthKey` is clamped to the
  * months from the Habit's first day (`startKey`) to today's. A day before
  * `startKey`, or one `outcomeOn` gives no Outcome, shows no Outcome and cannot
- * be corrected; any other day up to today can.
+ * be corrected; any other day up to today can. `askedOn` (the Habit's
+ * isHabitScheduledOn) also lets a day with no Outcome be corrected: a day of an
+ * N per week Habit is never Missed on its own, yet can still be ticked.
+ * `weekOn` (the day summary's) shows every day of a Skipped Habit Week up to
+ * today as Skipped, except a Met one, since a Skip sets the whole week aside.
  */
 export function habitMonth({
   monthKey,
   todayKey,
   startKey,
   outcomeOn,
+  askedOn,
+  weekOn,
 }: {
   monthKey: string;
   todayKey: string;
   /** The Habit's first day (YYYY-MM-DD). */
   startKey: string;
   outcomeOn: (dayKey: string) => HabitOutcome | null;
+  askedOn?: (dayKey: string) => boolean;
+  weekOn?: (dayKey: string) => Pick<HabitWeek, "skipped"> | null;
 }): HabitMonth {
   const firstMonth = startKey.slice(0, 7);
   const lastMonth = todayKey.slice(0, 7) < firstMonth ? firstMonth : todayKey.slice(0, 7);
@@ -76,8 +86,11 @@ export function habitMonth({
   const slots: (HabitCalendarDay | null)[] = Array.from({ length: lead }, () => null);
   for (let day = 1; day <= daysInMonth; day++) {
     const dayKey = `${shown}-${pad(day)}`;
-    const outcome = dayKey < startKey ? null : outcomeOn(dayKey);
-    slots.push({ dayKey, day, outcome, correctable: outcome !== null && dayKey <= todayKey });
+    const own = dayKey < startKey ? null : outcomeOn(dayKey);
+    const weekSkipped = own !== "met" && dayKey >= startKey && dayKey <= todayKey && Boolean(weekOn?.(dayKey)?.skipped);
+    const outcome = weekSkipped ? "skipped" : own;
+    const asked = outcome !== null || (dayKey >= startKey && Boolean(askedOn?.(dayKey)));
+    slots.push({ dayKey, day, outcome, correctable: asked && dayKey <= todayKey });
   }
   while (slots.length % 7 !== 0) slots.push(null);
   const weeks: (HabitCalendarDay | null)[][] = [];
@@ -92,6 +105,23 @@ export function habitMonth({
 
 /** What a habit day is corrected to from the calendar: ticked, set aside, or neither. */
 export type HabitDayMark = "met" | "skipped" | "none";
+
+/**
+ * SHARED routing of a calendar mark on an N per week Habit's day: Skip (true)
+ * and Undo skip (false: "none" on a Skipped day) act on the whole Habit Week
+ * through habitSkipRows. Null for any other mark, or a daily Habit's day, which
+ * correctHabitDayRow writes.
+ */
+export function habitWeekSkipMark(
+  habit: Readonly<Partial<Habit>>,
+  dayKey: string,
+  mark: HabitDayMark,
+  outcome: HabitOutcome | null
+): boolean | null {
+  if (!isPerWeekFrequency(habitFrequencyOn(habit, dayKey))) return null;
+  if (mark === "skipped") return true;
+  return mark === "none" && outcome === "skipped" ? false : null;
+}
 
 
 /**

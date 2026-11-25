@@ -32,7 +32,7 @@ export function HabitDetail({
   habit: Habit;
   todayKey: string;
   /** The Habit's day summary: its Outcomes, Count totals and Habit Score. */
-  summary: Pick<HabitDaySummary, "outcomeOn" | "amountOn" | "score">;
+  summary: Pick<HabitDaySummary, "outcomeOn" | "amountOn" | "score" | "weekOn">;
   /** The Habit's accent background class for a Met day. */
   metClass: string;
   onClose: () => void;
@@ -130,6 +130,7 @@ export function HabitDetail({
               todayKey={todayKey}
               outcomeOn={summary.outcomeOn}
               amountOn={summary.amountOn}
+              weekOn={summary.weekOn}
               metClass={metClass}
             />
           </div>

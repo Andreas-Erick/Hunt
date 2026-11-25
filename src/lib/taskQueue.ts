@@ -1,5 +1,6 @@
 import { habitTaskId, isTaskVisibleToday, toLocalDateKey } from "./dateUtils";
 import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
+import { habitWantsDayTask, summarizeHabitDays } from "./habitDay";
 import { isHabitScheduledOn } from "./habitFrequency";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
@@ -207,17 +208,20 @@ export function buildHabitTaskRow(habit: Habit, dateKey: string): Task {
  * The daily Habit rows for `dateKey` that Hunt has not created yet, built by
  * their fixed ids (buildHabitTaskRow), so the Widgets can list and tick a
  * Habit before the app has run that day. A row that exists is left out, and so
- * is one deleted elsewhere: a tombstoned row stays deleted. Pure.
+ * is one deleted elsewhere: a tombstoned row stays deleted. Only Habits that
+ * ask for the day get one (habitWantsDayTask): an N per week Habit stops once
+ * its Habit Week is Met or Skipped, so `state.tasks` must hold that week. Pure.
  */
 export function missingHabitRows(
-  state: Pick<SyncPayload, "tasks" | "habits" | "deletedTaskIds">,
+  state: Partial<Pick<SyncPayload, "tasks" | "habits" | "deletedTaskIds">>,
   dateKey: string
 ): Task[] {
   const known = new Set((state.tasks ?? []).map((t) => t.id));
   for (const id of state.deletedTaskIds ?? []) known.add(id);
-  return (state.habits ?? [])
-    .filter((h) => isHabitScheduledOn(h, dateKey) && !known.has(habitTaskId(h.id, dateKey)))
-    .map((h) => buildHabitTaskRow(h, dateKey));
+  const habits = (state.habits ?? []).filter((h) => !known.has(habitTaskId(h.id, dateKey)));
+  if (habits.length === 0) return [];
+  const { summaryFor } = summarizeHabitDays(state.tasks ?? [], dateKey, habits);
+  return habits.filter((h) => habitWantsDayTask(summaryFor(h.id))).map((h) => buildHabitTaskRow(h, dateKey));
 }
 
 /**

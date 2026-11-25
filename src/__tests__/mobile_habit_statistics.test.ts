@@ -127,6 +127,24 @@ describe("phone Habit detail: Statistics tab", () => {
   });
 });
 
+describe("phone Habit detail: Calendar tab on an N per week Habit", () => {
+  it("Skip sets the whole Habit Week aside, every day reads Skipped, and Undo skip on another day brings it back", () => {
+    const p = load([], { frequencyHistory: [{ effectiveFrom: "2026-10-20", frequency: { type: "perWeek", times: 3 } }] });
+    // Week of Mon 9 - Sun 15 November 2026.
+    click(p, sheet(p).querySelector('[aria-label^="10 November: "]'));
+    click(p, inSheet(p, "Skip 10 November"));
+    expect(row(p, "2026-11-10")?.skipped).toBe(true);
+    expect(inSheet(p, "13 November: Skipped")).not.toBeNull();
+    expect(inSheet(p, "9 November: Skipped")).not.toBeNull();
+    expect(sheet(p).textContent).toContain("Habit Week: Skipped");
+    click(p, inSheet(p, "13 November: Skipped"));
+    click(p, inSheet(p, "Undo skip 13 November"));
+    expect(row(p, "2026-11-10")).not.toHaveProperty("skipped");
+    expect(inSheet(p, "13 November: Skipped")).toBeNull();
+    expect(pageErrors(p)).toEqual([]);
+  });
+});
+
 describe("phone Habit detail: Calendar tab on a Count Habit", () => {
   it("Tick sets the day's total to the target, Untick and Skip clear it, and a day takes an exact total", () => {
     const p = load([dayRow("2026-11-12", { amount: 1 })], COUNT);

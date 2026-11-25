@@ -1,7 +1,7 @@
 // Habit detail Calendar tab (#25): the shared month grid of Outcomes and the shared "correct a
 // habit day" row both apps write.
 import { describe, expect, it } from "vitest";
-import { correctHabitDayRow, habitMonth, habitStartKey, summarizeHabitDays } from "@/mobile/huntCore";
+import { correctHabitDayRow, habitMonth, habitStartKey, habitWeekSkipMark, summarizeHabitDays } from "@/mobile/huntCore";
 import { habitTaskId } from "@/lib/dateUtils";
 import type { Task } from "@/lib/domainTypes";
 import type { HabitOutcome } from "@/lib/habitOutcome";
@@ -41,6 +41,21 @@ describe("habitMonth (shared month grid of Outcomes)", () => {
     expect(day("2026-11-06")).toMatchObject({ outcome: "skipped", correctable: true });
     expect(day("2026-11-07")).toMatchObject({ outcome: null, correctable: false });
     expect(day(TODAY)).toMatchObject({ outcome: "open", correctable: true });
+    expect(day("2026-11-19")).toMatchObject({ outcome: null, correctable: false });
+  });
+
+  it("lets an asked day with no Outcome be corrected (an N per week day is never Missed alone)", () => {
+    const month = habitMonth({
+      monthKey: "2026-11",
+      todayKey: TODAY,
+      startKey: "2026-11-03",
+      outcomeOn: () => null,
+      askedOn: (dayKey) => dayKey !== "2026-11-07",
+    });
+    const day = (key: string) => month.weeks.flat().find((d) => d?.dayKey === key);
+    expect(day("2026-11-02")).toMatchObject({ outcome: null, correctable: false });
+    expect(day("2026-11-04")).toMatchObject({ outcome: null, correctable: true });
+    expect(day("2026-11-07")).toMatchObject({ outcome: null, correctable: false });
     expect(day("2026-11-19")).toMatchObject({ outcome: null, correctable: false });
   });
 
@@ -157,6 +172,37 @@ describe("correctHabitDayRow on a Count Habit day (the Count rules hold)", () =>
 
   it("Untick clears a partial total too", () => {
     expect(correctHabitDayRow(dayTask({ amount: 2 }), "none", 9_000, COUNT).amount).toBe(0);
+  });
+});
+
+describe("an N per week Habit's calendar (Skips act on the whole Habit Week)", () => {
+  // 3 times per week since long ago; week of Mon 9 - Sun 15 Nov 2026.
+  const WEEKLY = {
+    id: "h1",
+    createdAt: new Date(2026, 9, 1).getTime(),
+    frequencyHistory: [{ effectiveFrom: "2026-10-01", frequency: { type: "perWeek" as const, times: 3 } }],
+  };
+  const weekDay = (dayKey: string, extra: Partial<Task> = {}) =>
+    dayTask({ id: habitTaskId("h1", dayKey), scheduledDate: dayKey, ...extra });
+
+  it("shows every day of a Skipped Habit Week as Skipped, a Met day still Met", () => {
+    const tasks = [weekDay("2026-11-11", { skipped: true }), weekDay("2026-11-12", { status: "completed", completedAt: 1 })];
+    const summary = summarizeHabitDays(tasks, TODAY, [WEEKLY]).summaryFor("h1");
+    const month = habitMonth({ monthKey: "2026-11", todayKey: TODAY, startKey: "2026-10-01", outcomeOn: summary.outcomeOn, weekOn: summary.weekOn });
+    const outcomeOf = (key: string) => month.weeks.flat().find((d) => d?.dayKey === key)?.outcome;
+    expect(outcomeOf("2026-11-09")).toBe("skipped");
+    expect(outcomeOf("2026-11-11")).toBe("skipped");
+    expect(outcomeOf("2026-11-12")).toBe("met");
+    expect(outcomeOf("2026-11-15")).toBe("skipped");
+    expect(outcomeOf("2026-11-16")).not.toBe("skipped");
+  });
+
+  it("routes Skip and Undo skip of a weekly Habit's day to the Habit Week's Skip; other marks stay per day", () => {
+    expect(habitWeekSkipMark(WEEKLY, "2026-11-10", "skipped", null)).toBe(true);
+    expect(habitWeekSkipMark(WEEKLY, "2026-11-10", "none", "skipped")).toBe(false);
+    expect(habitWeekSkipMark(WEEKLY, "2026-11-10", "met", "skipped")).toBeNull();
+    expect(habitWeekSkipMark(WEEKLY, "2026-11-10", "none", "met")).toBeNull();
+    expect(habitWeekSkipMark({ id: "h1" }, "2026-11-10", "skipped", "missed")).toBeNull();
   });
 });
 

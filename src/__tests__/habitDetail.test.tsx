@@ -132,6 +132,25 @@ describe("desktop Habit detail: Calendar tab", () => {
     expect(await within(dialog).findByRole("button", { name: "12 November: Met" })).toBeInTheDocument();
   });
 
+  it("on an N per week Habit, Skip sets the whole Habit Week aside and Undo skip on another day of it brings it back", async () => {
+    await db.habits.update("h1", {
+      frequencyHistory: [{ effectiveFrom: "2026-10-20", frequency: { type: "perWeek", times: 3 } }],
+    });
+    const dialog = await openDetail();
+    // Week of Mon 9 - Sun 15 November 2026.
+    fireEvent.click(within(dialog).getByRole("button", { name: /^10 November: / }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Skip 10 November" }));
+    await waitFor(async () => expect((await db.tasks.get(habitTaskId("h1", "2026-11-10")))?.skipped).toBe(true));
+    expect(await within(dialog).findByRole("button", { name: "13 November: Skipped" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "9 November: Skipped" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Habit Week: Skipped")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "13 November: Skipped" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Undo skip 13 November" }));
+    await waitFor(async () => expect((await db.tasks.get(habitTaskId("h1", "2026-11-10")))?.skipped).toBeUndefined());
+    expect(await within(dialog).findByRole("button", { name: /^10 November: (?!Skipped)/ })).toBeInTheDocument();
+  });
+
   it("closes on Escape", async () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });

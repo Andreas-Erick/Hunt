@@ -26,8 +26,10 @@ export interface WidgetQuestStat {
 
 export interface WidgetHabitStreak {
   title: string;
-  /** Consecutive completed days, the app's streak rule. */
+  /** The Habit's Streak (the app's rule): Met days, or Met Habit Weeks when `unit` is "week". */
   days: number;
+  /** "week" for an N per week Habit, drawn as "3w"; absent for a Streak in days ("3d"). */
+  unit?: "week";
 }
 
 /** What the Stats Widget shows when `dateKey` is the current local date. */
@@ -76,7 +78,10 @@ function statsFor(state: SyncPayload, dateKey: string): WidgetStatsEntry {
     streaks: (state.habits ?? [])
       .slice()
       .sort(compareRank)
-      .map((h) => ({ title: h.title, days: summaryFor(h.id).streak })),
+      .map((h): WidgetHabitStreak => {
+        const { streak, streakUnit } = summaryFor(h.id);
+        return streakUnit === "week" ? { title: h.title, days: streak, unit: "week" } : { title: h.title, days: streak };
+      }),
   };
 }
 

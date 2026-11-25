@@ -62,14 +62,17 @@ function StripDay({ day, isToday, metClass }: { day: HabitStripDay; isToday: boo
 
 /**
  * A Habit card's insight row: the week strip of the last 7 days' Outcomes,
- * oldest first, then the Streak and the Success Rate (shared rules).
+ * oldest first, then (for an N per week Habit) the Habit Week's progress
+ * ("2 / 3 this week"), the Streak ("4d", or "3w" in Habit Weeks) and the
+ * Success Rate (shared rules).
  */
 export function HabitCardStats({
   summary,
   todayKey,
   metClass,
 }: {
-  summary: Pick<HabitDaySummary, "outcomeOn" | "streak" | "successRate">;
+  summary: Pick<HabitDaySummary, "outcomeOn" | "streak" | "successRate"> &
+    Partial<Pick<HabitDaySummary, "streakUnit" | "week">>;
   todayKey: string;
   /** The Habit's accent background class for a Met day. */
   metClass: string;
@@ -83,13 +86,21 @@ export function HabitCardStats({
           <StripDay key={day.dayKey} day={day} isToday={day.dayKey === todayKey} metClass={metClass} />
         ))}
       </ul>
+      {summary.week && (
+        <span className="font-mono text-xs tabular-nums text-hud-muted">
+          {summary.week.met} / {summary.week.target} this week
+        </span>
+      )}
       {summary.streak > 0 && (
-        <span className="font-mono text-xs tabular-nums text-neutral-300">{summary.streak}d streak</span>
+        <span className="font-mono text-xs tabular-nums text-neutral-300">
+          {summary.streak}
+          {summary.streakUnit === "week" ? "w" : "d"} streak
+        </span>
       )}
       {rate !== null && (
         <span
           aria-label={`Success Rate ${rate}`}
-          title="Success Rate: Met days out of Met and Missed ones since the habit began"
+          title={`Success Rate: Met ${summary.streakUnit === "week" ? "weeks" : "days"} out of Met and Missed ones since the habit began`}
           className="font-mono text-xs tabular-nums text-hud-muted"
         >
           {rate}
