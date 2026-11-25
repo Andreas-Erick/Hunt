@@ -5,6 +5,7 @@ import { MotionConfig } from "framer-motion";
 import { db } from "@/lib/db";
 import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
+import { startDesktopReminders } from "@/lib/desktopReminders";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
@@ -113,6 +114,12 @@ export default function HomePage() {
       context: { view: activeView },
     });
   }, [booted, activeView]);
+
+  // Task reminders as Windows notifications while this window is open (ADR-0007).
+  useEffect(() => {
+    if (!booted) return;
+    return startDesktopReminders();
+  }, [booted]);
 
   // Background auto-sync between PC and Phone/Tablet (via the local server). Paused
   // while the window is hidden; catches up as soon as it becomes visible. The

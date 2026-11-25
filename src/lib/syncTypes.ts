@@ -1,7 +1,12 @@
 import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
+import { sanitizeChecklist } from "./checklist";
+import { isReminderTime } from "./reminders";
+import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
 import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
 
 export type { ActiveFocusState } from "./domainTypes";
+export { MAX_CHECKLIST_ITEMS, MAX_CHECKLIST_TEXT_LENGTH } from "./checklist";
+export { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH, SAFE_ID_CHARS_RE, SAFE_ID_RE } from "./syncIds";
 
 export interface SyncPayload {
   quests: Quest[];
@@ -258,27 +263,6 @@ export const MAX_QUEST_TITLE_LENGTH = 300;
 export const MAX_HABIT_TITLE_LENGTH = 300;
 /** Longest task title (and log title snapshot) kept; longer ones are cut. */
 export const MAX_TASK_TITLE_LENGTH = 1000;
-/** Longest quest/task id, quest/task tombstone, questId or log taskId accepted. */
-export const MAX_ENTITY_ID_LENGTH = 128;
-/** Longest time-log id or log tombstone accepted (`log-<sessionStartedAt>-<taskId>`). */
-export const MAX_LOG_ID_LENGTH = 160;
-/** Characters of every generated id (`tsk-<ms>-<4>`, `quest-<ms>-<4>`, `log-<ms>-<taskId>`, seeds). */
-export const SAFE_ID_CHARS_RE = /^[A-Za-z0-9_.:-]+$/;
-/** A safe quest/task id: same as `isSafeSyncId(value, MAX_ENTITY_ID_LENGTH)`. */
-export const SAFE_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
-
-/** True for a non-empty id of SAFE_ID_CHARS_RE characters, at most `maxLength` long. */
-export function isSafeSyncId(
-  value: unknown,
-  maxLength: number = MAX_ENTITY_ID_LENGTH
-): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    SAFE_ID_CHARS_RE.test(value)
-  );
-}
 
 // History is never pruned, so a count cap normal use can reach would one day
 // reject every sync. These sit above what the server's 16 MB byte cap
@@ -321,7 +305,7 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
@@ -485,6 +469,11 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (typeof rank === "number" && Number.isFinite(rank)) task.rank = rank;
   if (scheduledDate === null || isDateKey(scheduledDate)) task.scheduledDate = scheduledDate;
   if (isSafeSyncId(raw.habitId)) task.habitId = raw.habitId;
+  // A habit day Task never holds a Checklist (its Outcome comes from its Habit Kind).
+  if (task.habitId === undefined && Array.isArray(raw.checklist)) {
+    task.checklist = sanitizeChecklist(raw.checklist);
+  }
+  if (isReminderTime(raw.reminderTime)) task.reminderTime = raw.reminderTime;
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;
