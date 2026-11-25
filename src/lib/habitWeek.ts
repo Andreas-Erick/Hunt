@@ -127,3 +127,30 @@ export function* weekOutcomesBackFrom(
     yield weekOutcomeOn(week);
   }
 }
+
+/**
+ * SHARED unit walk of the Success Rate and the Habit Score: one Outcome per
+ * unit from `todayKey` back to `firstDayKey`, newest first, where a day under a
+ * daily Frequency (every day, chosen weekdays) is a unit and a Habit Week under
+ * N per week is one. So all history counts across a switch between the two;
+ * the Partial Week at a switch reads Skipped (habitWeekOf), and the days in it
+ * still under a daily Frequency are judged one by one.
+ */
+export function* habitUnitOutcomesBackFrom(
+  habit: FrequencySource,
+  todayKey: string,
+  firstDayKey: string,
+  { dayOutcomeOn, weekOutcomeOn }: {
+    dayOutcomeOn: (dayKey: string) => HabitOutcome | null;
+    weekOutcomeOn: (dayKey: string) => HabitOutcome | null;
+  }
+): Generator<HabitOutcome | null> {
+  let lastWeek = "";
+  for (let day = todayKey; day >= firstDayKey; day = dateKeyFromOffset(day, -1)) {
+    if (!isPerWeekFrequency(habitFrequencyOn(habit, day))) yield dayOutcomeOn(day);
+    else if (habitWeekStart(day) !== lastWeek) {
+      lastWeek = habitWeekStart(day);
+      yield weekOutcomeOn(day);
+    }
+  }
+}

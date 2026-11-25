@@ -3782,6 +3782,16 @@ var HuntCore = (() => {
       yield weekOutcomeOn(week);
     }
   }
+  function* habitUnitOutcomesBackFrom(habit, todayKey, firstDayKey, { dayOutcomeOn, weekOutcomeOn }) {
+    let lastWeek = "";
+    for (let day = todayKey; day >= firstDayKey; day = dateKeyFromOffset(day, -1)) {
+      if (!isPerWeekFrequency(habitFrequencyOn(habit, day))) yield dayOutcomeOn(day);
+      else if (habitWeekStart(day) !== lastWeek) {
+        lastWeek = habitWeekStart(day);
+        yield weekOutcomeOn(day);
+      }
+    }
+  }
 
   // src/lib/habitDay.ts
   var DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -3865,7 +3875,7 @@ var HuntCore = (() => {
           const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
           let rate;
           let score;
-          const units = () => weekly ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn) : outcomesBackFrom(todayKey, firstDay, outcomeOn);
+          const units = () => habitUnitOutcomesBackFrom(habit, todayKey, firstDay, { dayOutcomeOn: outcomeOn, weekOutcomeOn });
           const week = weekly ? weekOn(todayKey) : null;
           const doneToday = outcomeOn(todayKey) === "met";
           const unitStart = frequencyUnitStart(habit, todayKey);

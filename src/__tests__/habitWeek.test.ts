@@ -202,7 +202,8 @@ describe("weekly Streak", () => {
   });
 
   it("reads the Success Rate in Habit Weeks: Met weeks out of Met and Missed ones", () => {
-    const h = habit({ frequencyHistory: [{ effectiveFrom: "2026-04-20", frequency: THREE_A_WEEK }] });
+    const began = new Date(2026, 3, 20, 9).getTime(); // created N per week, so no daily days before
+    const h = habit({ createdAt: began, frequencyHistory: [{ effectiveFrom: "2026-04-20", frequency: THREE_A_WEEK }] });
     // 04-20 Met, 04-27 Missed, 05-04 Met, current week Open (ignored).
     const tasks = [...metWeek("2026-04-20"), ticked("2026-04-27"), ...metWeek("2026-05-04"), ticked("2026-05-11")];
     expect(summary(tasks, h).successRate()).toBeCloseTo(2 / 3);
@@ -221,6 +222,53 @@ describe("weekly Streak", () => {
     const b = summary([...metWeek("2026-05-04"), ticked("2026-05-11"), ticked("2026-05-12")], back);
     expect(b.streakUnit).toBe("day");
     expect(b.streak).toBe(2);
+  });
+});
+
+describe("Success Rate and Habit Score across a switch between daily and N per week", () => {
+  // The Habit began on Monday 2026-04-20 (local time), so no older day counts.
+  const began = new Date(2026, 3, 20, 9).getTime();
+  const days = (from: number, to: number, month = "04") =>
+    Array.from({ length: to - from + 1 }, (_, i) => `2026-${month}-${String(from + i).padStart(2, "0")}`);
+
+  it("daily then N per week: keeps the daily days and adds the Habit Weeks", () => {
+    const h = habit({ createdAt: began, frequencyHistory: [{ effectiveFrom: "2026-05-04", frequency: THREE_A_WEEK }] });
+    // 04-20..05-03 daily: 10 of 14 days ticked (4 Missed). Week of 05-04 Met; this week Open.
+    const tasks = [...days(20, 29).map(ticked), ...metWeek("2026-05-04"), ticked("2026-05-11")];
+    const s = summary(tasks, h);
+    expect(s.streakUnit).toBe("week");
+    expect(s.streak).toBe(1); // the Streak still never counts across the switch
+    expect(s.successRate()).toBeCloseTo(11 / 15);
+    expect(s.score()).toBeGreaterThan(0);
+    expect(s.score()).toBeLessThan(100);
+  });
+
+  it("N per week then daily: keeps the Habit Weeks and adds the days", () => {
+    const back = habit({
+      createdAt: began,
+      frequencyHistory: [
+        { effectiveFrom: "2026-04-20", frequency: THREE_A_WEEK },
+        { effectiveFrom: "2026-05-11", frequency: { type: "everyDay" } },
+      ],
+    });
+    // Weeks of 04-20 and 05-04 Met, 04-27 Missed; 05-11 and 05-12 ticked, today Open.
+    const tasks = [...metWeek("2026-04-20"), ticked("2026-04-27"), ...metWeek("2026-05-04"), ticked("2026-05-11"), ticked("2026-05-12")];
+    const s = summary(tasks, back);
+    expect(s.streakUnit).toBe("day");
+    expect(s.streak).toBe(2);
+    expect(s.successRate()).toBeCloseTo(4 / 5);
+  });
+
+  it("judges the Partial Week at a mid-week switch Skipped, and its daily days one by one", () => {
+    // Daily until Thursday 05-07, then 3 a week: the week of 05-04 is a Partial Week.
+    const h = habit({ createdAt: began, frequencyHistory: [{ effectiveFrom: "2026-05-07", frequency: THREE_A_WEEK }] });
+    // 04-20..05-06 daily, all 17 days ticked; the Partial Week has 3 more ticks but is Skipped.
+    const tasks = [...days(20, 30).map(ticked), ...days(1, 6, "05").map(ticked), ticked("2026-05-07"), ticked("2026-05-08"), ticked("2026-05-09")];
+    const s = summary(tasks, h);
+    expect(s.successRate()).toBe(1);
+    expect(s.score()).toBe(100);
+    const missedWednesday = summary(tasks.filter((t) => t.scheduledDate !== "2026-05-06"), h);
+    expect(missedWednesday.successRate()).toBeCloseTo(16 / 17);
   });
 });
 
