@@ -355,6 +355,13 @@ test.describe(`desktop app geometry (${look})`, () => {
       await checkChecklistEditor(page, longRow.getByRole("group", { name: "Checklist" }), 32, `${label(vp)} desktop Home`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Home drawer`);
 
+      // The long Habit's edit panel: its reminder time chips and Add control.
+      await clickDesktopNav(page, "Habits");
+      await page.locator("[data-habit-id='habit-long']").getByRole("button", { name: /^Edit habit/ }).click();
+      const reminders = page.locator("[data-habit-id='habit-long']").getByRole("group", { name: /^Reminders/ });
+      await checkChecklistEditor(page, reminders, 32, `${label(vp)} desktop Habits reminders`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habits edit`);
+
       // The seeded List's card: its item editor and actions stay inside the card, 32px targets.
       await clickDesktopNav(page, "Lists");
       await checkChecklistEditor(page, page.getByRole("region", { name: LONG_LIST_TITLE }), 32, `${label(vp)} desktop Lists`, failures);
@@ -481,6 +488,14 @@ test.describe(`phone app geometry (${look})`, () => {
       const habitPanel = page.locator("#sheetContainer [role=dialog]");
       await checkHabitDetail(page, habitPanel, { minTarget: 48, minDayWidth: 40 }, `${label(vp)} phone-app`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit detail`);
+
+      // The long Habit's sheet: its reminder time chips and Add control (48px Android targets).
+      await page.evaluate(() => {
+        (window as unknown as { openHabitEditorSheet: (id: string) => void }).openHabitEditorSheet("habit-long");
+      });
+      const habitReminders = page.locator("#sheetContainer").getByRole("group", { name: "Habit reminders" });
+      await checkChecklistEditor(page, habitReminders, 48, `${label(vp)} phone-app Habit reminders`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit sheet`);
 
       expect(failures, failures.join("\n")).toEqual([]);
     });

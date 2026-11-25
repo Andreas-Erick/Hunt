@@ -1211,6 +1211,32 @@
       margin: 0;
       color: var(--slate);
     }
+    .habit-reminder-times {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .habit-reminder-times:empty {
+      display: none;
+    }
+    .habit-reminder-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      min-height: var(--touch-min);
+      padding-left: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-variant-numeric: tabular-nums;
+      font-size: 14px;
+    }
+    .habit-reminder-chip .text-action {
+      margin: 0;
+      min-width: var(--touch-min);
+      justify-content: center;
+      color: var(--slate);
+    }
     .reminder-notice {
       display: flex;
       align-items: center;
@@ -3193,6 +3219,7 @@ var HuntCore = (() => {
     HABIT_WEEKDAYS: () => HABIT_WEEKDAYS,
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
     MAX_COUNT_UNIT_LENGTH: () => MAX_COUNT_UNIT_LENGTH,
+    MAX_HABIT_REMINDER_TIMES: () => MAX_HABIT_REMINDER_TIMES,
     MAX_LIST_TITLE_LENGTH: () => MAX_LIST_TITLE_LENGTH,
     MAX_TIMES_PER_WEEK: () => MAX_TIMES_PER_WEEK,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
@@ -3265,6 +3292,7 @@ var HuntCore = (() => {
     reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
     sameHabitFrequency: () => sameHabitFrequency,
+    sanitizeHabitReminderTimes: () => sanitizeHabitReminderTimes,
     sanitizeList: () => sanitizeList,
     sessionLogId: () => sessionLogId,
     setHabitDayAmount: () => setHabitDayAmount,
@@ -3651,7 +3679,7 @@ var HuntCore = (() => {
   function summarizeHabitDays(habitTasks, todayKey, habits = []) {
     const todayByHabit = /* @__PURE__ */ new Map();
     const datesByHabit = /* @__PURE__ */ new Map();
-    const dayTasksByHabit = /* @__PURE__ */ new Map();
+    const dayTasksByHabit2 = /* @__PURE__ */ new Map();
     for (const task of habitTasks) {
       const habitId = task.habitId;
       if (!habitId) continue;
@@ -3659,10 +3687,10 @@ var HuntCore = (() => {
       if (canonical || task.scheduledDate === todayKey && !todayByHabit.has(habitId)) {
         todayByHabit.set(habitId, task);
       }
-      let dayTasks = dayTasksByHabit.get(habitId);
+      let dayTasks = dayTasksByHabit2.get(habitId);
       if (!dayTasks) {
         dayTasks = /* @__PURE__ */ new Map();
-        dayTasksByHabit.set(habitId, dayTasks);
+        dayTasksByHabit2.set(habitId, dayTasks);
       }
       const day = completionDateKey(task);
       if (day) {
@@ -3687,7 +3715,7 @@ var HuntCore = (() => {
         if (!summary) {
           const todayTask = todayByHabit.get(habitId);
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
-          const dayTasks = dayTasksByHabit.get(habitId);
+          const dayTasks = dayTasksByHabit2.get(habitId);
           const habit = (_b = habitById.get(habitId)) != null ? _b : { id: habitId };
           const dayTaskOn = (dayKey) => dayTasks == null ? void 0 : dayTasks.get(dayKey);
           const outcomeOn = (dayKey) => habitDayOutcome({ habit, dayKey, dayTask: dayTaskOn(dayKey), todayKey });
@@ -3827,7 +3855,7 @@ var HuntCore = (() => {
     return { done: items.filter((i) => i.done === true).length, total: items.length };
   }
 
-  // src/lib/reminders.ts
+  // src/lib/reminderTime.ts
   var REMINDER_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   var DATE_KEY_RE2 = /^(\d{4})-(\d{2})-(\d{2})$/;
   function isReminderTime(value) {
@@ -3840,33 +3868,11 @@ var HuntCore = (() => {
     const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, minute).getTime();
     return Number.isFinite(at) ? at : null;
   }
-  function isUndone(task) {
-    return task.status === "queued" || task.status === "active";
-  }
-  function taskReminder(task) {
-    const { scheduledDate, reminderTime } = task;
-    if (!isUndone(task) || !scheduledDate || !isReminderTime(reminderTime)) return null;
-    const fireAt = localFireAt(scheduledDate, reminderTime);
-    if (fireAt === null) return null;
-    return {
-      kind: "task",
-      key: `task:${task.id}:${scheduledDate}T${reminderTime}`,
-      itemId: task.id,
-      title: task.title,
-      dateKey: scheduledDate,
-      time: reminderTime,
-      fireAt
-    };
-  }
-  function dueReminders(sources, window) {
-    const due = [];
-    for (const task of sources.tasks) {
-      const reminder = taskReminder(task);
-      if (reminder && reminder.fireAt >= window.from && reminder.fireAt < window.to) {
-        due.push(reminder);
-      }
-    }
-    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  var MAX_HABIT_REMINDER_TIMES = 6;
+  function sanitizeHabitReminderTimes(raw) {
+    if (!Array.isArray(raw)) return void 0;
+    const times = Array.from(new Set(raw.filter(isReminderTime))).sort().slice(0, MAX_HABIT_REMINDER_TIMES);
+    return times.length > 0 ? times : void 0;
   }
 
   // src/lib/syncRowExtras.ts
@@ -4631,6 +4637,88 @@ var HuntCore = (() => {
     return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
   }
 
+  // src/lib/habitReminders.ts
+  var MAX_WINDOW_DAYS = 31;
+  function wantsReminder(habit, dayKey, dayTask) {
+    return habitDayOutcome({ habit, dayKey, dayTask, todayKey: dayKey }) === "open";
+  }
+  function dayTasksByHabit(tasks, habitIds) {
+    var _a;
+    const byHabit = /* @__PURE__ */ new Map();
+    for (const task of tasks) {
+      if (!task.habitId || !habitIds.has(task.habitId)) continue;
+      const day = (_a = completionDateKey(task)) != null ? _a : task.scheduledDate;
+      if (!day) continue;
+      let days = byHabit.get(task.habitId);
+      if (!days) byHabit.set(task.habitId, days = /* @__PURE__ */ new Map());
+      const held = days.get(day);
+      if (!held || held.status !== "completed" && task.status === "completed") days.set(day, task);
+    }
+    return byHabit;
+  }
+  function dueHabitReminders(habits, tasks, window) {
+    var _a;
+    const timed = habits.map((habit) => {
+      var _a2;
+      return { habit, times: (_a2 = sanitizeHabitReminderTimes(habit.reminderTimes)) != null ? _a2 : [] };
+    }).filter((h) => h.times.length > 0);
+    if (timed.length === 0 || !(window.to > window.from)) return [];
+    const dayTasks = dayTasksByHabit(tasks, new Set(timed.map((h) => h.habit.id)));
+    const lastDay = toLocalDateKey(window.to - 1);
+    const due = [];
+    let dayKey = toLocalDateKey(window.from);
+    for (let n = 0; n < MAX_WINDOW_DAYS && dayKey <= lastDay; n++, dayKey = dateKeyFromOffset(dayKey, 1)) {
+      for (const { habit, times } of timed) {
+        if (!wantsReminder(habit, dayKey, (_a = dayTasks.get(habit.id)) == null ? void 0 : _a.get(dayKey))) continue;
+        for (const time of times) {
+          const fireAt = localFireAt(dayKey, time);
+          if (fireAt === null || fireAt < window.from || fireAt >= window.to) continue;
+          due.push({
+            kind: "habit",
+            key: `habit:${habit.id}:${dayKey}T${time}`,
+            itemId: habit.id,
+            title: habit.title,
+            dateKey: dayKey,
+            time,
+            fireAt
+          });
+        }
+      }
+    }
+    return due;
+  }
+
+  // src/lib/reminders.ts
+  function isUndone(task) {
+    return task.status === "queued" || task.status === "active";
+  }
+  function taskReminder(task) {
+    const { scheduledDate, reminderTime } = task;
+    if (!isUndone(task) || !scheduledDate || !isReminderTime(reminderTime)) return null;
+    const fireAt = localFireAt(scheduledDate, reminderTime);
+    if (fireAt === null) return null;
+    return {
+      kind: "task",
+      key: `task:${task.id}:${scheduledDate}T${reminderTime}`,
+      itemId: task.id,
+      title: task.title,
+      dateKey: scheduledDate,
+      time: reminderTime,
+      fireAt
+    };
+  }
+  function dueReminders(sources, window) {
+    const due = [];
+    for (const task of sources.tasks) {
+      const reminder = taskReminder(task);
+      if (reminder && reminder.fireAt >= window.from && reminder.fireAt < window.to) {
+        due.push(reminder);
+      }
+    }
+    if (sources.habits) due.push(...dueHabitReminders(sources.habits, sources.tasks, window));
+    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  }
+
   // src/lib/reminderAlarm.ts
   var REMINDER_LATE_LIMIT_MS = 10 * 6e4;
   var MAX_WAIT_MS = 60 * 6e4;
@@ -4737,6 +4825,8 @@ var HuntCore = (() => {
     var newListId = HuntCore.newListId;
     var sanitizeList = HuntCore.sanitizeList;
     var isReminderTime = HuntCore.isReminderTime;
+    var sanitizeHabitReminderTimes = HuntCore.sanitizeHabitReminderTimes;
+    var MAX_HABIT_REMINDER_TIMES = HuntCore.MAX_HABIT_REMINDER_TIMES;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
     var habitKindOf = HuntCore.habitKindOf; // Habit Kind: an old row without one is Check
     var habitDayAmount = HuntCore.habitDayAmount;
@@ -4929,7 +5019,8 @@ var HuntCore = (() => {
     // Keeps only what the screens and the merge can use (the rows the server validator keeps): objects with
     // a safe id; quests and tasks with a string title; logs with a safe taskId, a finite duration >= 0 and
     // a startTime stamp; safe tombstone ids; a valid focus (else the empty focus). A scheduledDate that is
-    // not YYYY-MM-DD, and a reminderTime that is not HH:MM, are removed. Never mutates `input` (rows are shared, fixed ones copied).
+    // not YYYY-MM-DD, and a reminderTime that is not HH:MM, are removed; a Habit keeps only its valid
+    // reminderTimes (HuntCore's sanitizeHabitReminderTimes). Never mutates `input` (rows are shared, fixed ones copied).
     // dropped = rows, ids or fields discarded.
     function guardSyncState(input) {
       const src = isPlainRecord(input) ? input : {};
@@ -4955,6 +5046,16 @@ var HuntCore = (() => {
         if (badReminder) { dropped++; delete copy.reminderTime; }
         return copy;
       });
+      const habits = keep("habits", isTitledRow).map(h => {
+        if (h.reminderTimes === undefined) return h;
+        const times = sanitizeHabitReminderTimes(h.reminderTimes);
+        if (times && JSON.stringify(times) === JSON.stringify(h.reminderTimes)) return h;
+        dropped++;
+        const copy = { ...h };
+        if (times) copy.reminderTimes = times;
+        else delete copy.reminderTimes;
+        return copy;
+      });
       // Lists: the server validator's own rule (HuntCore.sanitizeList); a row it would change is replaced.
       const lists = keep("lists", isTitledRow).map(l => {
         const clean = sanitizeList(l);
@@ -4972,7 +5073,7 @@ var HuntCore = (() => {
         quests: keep("quests", isTitledRow),
         tasks,
         timeLogs: keep("timeLogs", isLogRow),
-        habits: keep("habits", isTitledRow),
+        habits,
         lists,
         deletedQuestIds: keep("deletedQuestIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
         deletedTaskIds: keep("deletedTaskIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
@@ -5531,14 +5632,23 @@ var HuntCore = (() => {
       if (text) text.textContent = problem;
     }
 
-    // A reminder notification was tapped (ADR-0007): open the item. A Task that is gone (deleted, or
-    // synced away) just leaves Hunt open where it was.
+    // A reminder notification was tapped (ADR-0007): open the item, a Task's options or a Habit's sheet
+    // on the Habits screen. An item that is gone (deleted, or synced away) just leaves Hunt open where it was.
     window.__huntOpenReminder = function (target) {
-      if (!target || typeof target !== "object" || target.kind !== "task") return;
-      const t = state.tasks.find((x) => x.id === target.itemId);
-      if (!t) return;
+      if (!target || typeof target !== "object") return;
+      const isTask = target.kind === "task";
+      if (!isTask && target.kind !== "habit") return;
+      const item = isTask
+        ? state.tasks.find((x) => x.id === target.itemId)
+        : asArray(state.habits).find((x) => x.id === target.itemId);
+      if (!item) return;
       try {
-        openTaskInspectorSheet(t.id);
+        if (isTask) {
+          openTaskInspectorSheet(item.id);
+        } else {
+          if (activeView !== "habits") switchView("habits");
+          openHabitEditorSheet(item.id);
+        }
       } catch (e) {
         recordMobileBreadcrumb("WARN", "reminders", "open_failed", { message: e && e.message });
       }
@@ -9309,6 +9419,8 @@ var HuntCore = (() => {
           <div id="habitFrequencyPicker">${habitFrequencyPickerHtml()}</div>
 
           ${habitEndDateFieldHtml(h)}
+          <div class="sheet-label">Reminders · on scheduled days still open</div>
+          <div id="habitReminderField" role="group" aria-label="Habit reminders">${habitReminderFieldHtml(h)}</div>
 
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -9439,6 +9551,59 @@ var HuntCore = (() => {
             </button>
             ${endedHabitsOpen ? `<div class="habits-grid ended-habits" style="margin-top:10px;">${cards}</div>` : ""}
           </div>`;
+    }
+
+    // A Habit's reminder times (ADR-0007) in its sheet: one chip per time with Remove, then a time input
+    // and Add (hidden once the Habit holds MAX_HABIT_REMINDER_TIMES), and the permission notice.
+    function habitReminderFieldHtml(h) {
+      const times = sanitizeHabitReminderTimes(h.reminderTimes) || [];
+      const problem = times.length > 0 ? reminderPermissionProblem() : "";
+      return `
+          <div class="habit-reminder-times">${times.map(time => `<span class="habit-reminder-chip"><span>${escapeHtml(time)}</span><button class="text-action" aria-label="Remove reminder at ${escapeHtml(time)}" onclick="removeHabitReminder(${jsArg(h.id)}, ${jsArg(time)})">✕</button></span>`).join("")}</div>
+          ${times.length < MAX_HABIT_REMINDER_TIMES ? `
+          <div class="reminder-row">
+            <input type="time" id="habitReminderDraft" class="sheet-input" aria-label="New reminder time" />
+            <button class="text-action" aria-label="Add reminder" onclick="addHabitReminder(${jsArg(h.id)})" style="color:var(--cyan);">+ Add</button>
+          </div>` : ""}
+          ${problem ? `
+          <div class="reminder-notice" role="status">
+            <span class="reminder-notice-text">${escapeHtml(problem)}</span>
+            <button class="text-action" onclick="allowReminders()">Allow</button>
+          </div>` : ""}`;
+    }
+
+    // Saves a Habit's reminder times right away (sanitized: valid, in order, no repeats) and redraws
+    // the field. Quiet commit, so the rest of the open sheet keeps what was typed.
+    function setHabitReminderTimes(habitId, next) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h) return;
+      const times = sanitizeHabitReminderTimes(next);
+      if (JSON.stringify(times || []) === JSON.stringify(sanitizeHabitReminderTimes(h.reminderTimes) || [])) return;
+      if (times) h.reminderTimes = times;
+      else delete h.reminderTimes;
+      h.updatedAt = nextStamp(h);
+      commitLocalChange({ render: false });
+      if (times) askForReminderPermissionsOnce();
+      const field = document.getElementById("habitReminderField");
+      if (field) field.innerHTML = habitReminderFieldHtml(h);
+    }
+
+    function addHabitReminder(habitId) {
+      playClickSound();
+      const input = document.getElementById("habitReminderDraft");
+      const value = input ? input.value : "";
+      if (!isReminderTime(value)) {
+        flagInvalidField(input);
+        return;
+      }
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (h) setHabitReminderTimes(habitId, asArray(h.reminderTimes).concat(value));
+    }
+
+    function removeHabitReminder(habitId, time) {
+      playClickSound();
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (h) setHabitReminderTimes(habitId, asArray(h.reminderTimes).filter(t => t !== time));
     }
 
     // The sheet's "Skip today" row: only for a scheduled day still waiting to be done (not ticked,

@@ -28,6 +28,7 @@ import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
 import { HabitEndDateField } from "./HabitEndDateField";
+import { HabitReminderBadge, HabitReminderTimes } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
 
@@ -482,6 +483,7 @@ export function HabitsView() {
                         <Repeat className="h-3 w-3" aria-hidden="true" />
                         <span>{habitFrequencyLabel(habitFrequencyOn(habit, todayKey))}</span>
                       </span>
+                      <HabitReminderBadge times={habit.reminderTimes} />
 
                       {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => setAmountHabitId(habit.id)} />}
                       {isAvoid && <Avoid.AvoidSlipControls habit={habit} slips={habitDaySlips(todayTask)} onLog={() => handleEditSlip(habit, "log")} onUndo={() => handleEditSlip(habit, "undo")} />}
@@ -550,12 +552,7 @@ export function HabitsView() {
                     </div>
 
                     <div>
-                      <label
-                        htmlFor={editNotesId}
-                        className="mb-1 block text-xs text-neutral-400"
-                      >
-                        Default Notes
-                      </label>
+                      <label htmlFor={editNotesId} className="mb-1 block text-xs text-neutral-400">Default Notes</label>
                       <input
                         id={editNotesId}
                         type="text"
@@ -579,6 +576,8 @@ export function HabitsView() {
                       />
                     </div>
                     <HabitEndDateField value={editEndDate} onChange={setEditEndDate} />
+
+                    <HabitReminderTimes habitId={habit.id} habitTitle={habit.title} times={habit.reminderTimes} />
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <EditHabitQuestPicker quests={activeQuests} questId={editQuestId} onSelect={setEditQuestId} />

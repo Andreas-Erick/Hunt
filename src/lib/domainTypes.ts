@@ -78,6 +78,8 @@ export interface Habit {
    * moved), ascending. Their days have no Outcome, so a restart never counts them against it.
    */
   endedSpans?: HabitEndedSpan[];
+  /** Local "HH:MM" times to remind on each Open scheduled day, ascending (ADR-0007). */
+  reminderTimes?: string[];
 }
 
 /** Days `from`..`to` (YYYY-MM-DD, inclusive) a restarted Habit spent Ended. */
