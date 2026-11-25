@@ -179,6 +179,7 @@ describe("Macro Architecture & State Topology Invariants", () => {
         "lib/focusSession.ts",
         "lib/taskQueue.ts",
         "lib/pendingTicks.ts",
+        "lib/reminders.ts",
         "mobile/huntCore.ts",
         "lib/questAccents.ts",
         "lib/reviewAnalytics.ts",

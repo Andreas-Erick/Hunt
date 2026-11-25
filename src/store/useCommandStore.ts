@@ -23,6 +23,7 @@ import {
   onLocalChange,
   type HabitChanges,
   type QuestChanges,
+  type TaskChanges,
 } from "@/lib/localStore";
 import { SnapshotFormatError, importAndMergeSnapshotJson } from "@/lib/applySnapshot";
 import {
@@ -69,7 +70,7 @@ export interface CompletedDirectiveFeedback {
   timestamp: number;
 }
 
-export type { HabitChanges, QuestChanges } from "@/lib/localStore";
+export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
 interface CommandStoreState {
   activeView: HudView;
@@ -147,15 +148,7 @@ interface CommandStoreState {
    * The title is trimmed and cut to MAX_TASK_TITLE_LENGTH; an empty one keeps
    * the old title. Resolves to false when the local write failed, true otherwise.
    */
-  updateTask: (
-    taskId: string,
-    updates: Partial<{
-      title: string;
-      notes: string;
-      questId: string | null;
-      scheduledDate: string;
-    }>
-  ) => Promise<boolean>;
+  updateTask: (taskId: string, updates: TaskChanges) => Promise<boolean>;
   deleteTask: (taskId: string) => Promise<void>;
   /**
    * Puts the given tasks in this order by rewriting as FEW rows as possible

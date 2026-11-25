@@ -40,3 +40,4 @@ export {
 } from "../lib/taskQueue";
 export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
 export { applyPendingTicks } from "../lib/pendingTicks";
+export { dueReminders, isReminderTime } from "../lib/reminders";
