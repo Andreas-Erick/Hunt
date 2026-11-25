@@ -1,6 +1,8 @@
 import { toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { completeTaskRow, nextStamp } from "./taskQueue";
+import { setHabitDayAmount } from "./habitCount";
+import { countTargetOf, habitDayAmount, habitKindOf } from "./habitKind";
 import type { HabitOutcome } from "./habitOutcome";
 
 /** One day cell of a Habit's month calendar. */
@@ -93,14 +95,41 @@ export type HabitDayMark = "met" | "skipped" | "none";
 
 
 /**
+ * A Count Habit day corrected through the shared Count rule (setHabitDayAmount),
+ * so its total and its tick never disagree: Met raises the total to at least
+ * the target; Untick and Skip clear it to 0.
+ */
+function correctCountDayRow(
+  task: Task,
+  habit: Readonly<Pick<Partial<Habit>, "target">>,
+  mark: HabitDayMark,
+  at: number
+): Task {
+  const amount = habitDayAmount(task);
+  const target = countTargetOf(habit);
+  const skipped = Boolean(task.skipped);
+  if (mark === "met" ? amount >= target : amount === 0 && skipped === (mark === "skipped")) return task;
+  const row = setHabitDayAmount(task, habit, mark === "met" ? Math.max(amount, target) : 0, at);
+  return { ...row, completedAt: row.completedAt, skipped: mark === "skipped" ? true : undefined };
+}
+
+/**
  * SHARED "correct a habit day" rule: the day Task `task` ticked (Met), set
  * aside (Skipped) or neither, stamped newer at `at`. Skipping a ticked day
- * unticks it. Returns `task` itself when the day already reads that way, or
- * while a focus runs on it, so callers write nothing. Pure: `task` is not
- * modified. Cleared fields stay as explicit undefined so a Dexie update drops them.
+ * unticks it. On a Count Habit's day (pass `habit`) ticking sets the total to
+ * at least the target, and unticking or Skipping clears it to 0. Returns
+ * `task` itself when the day already reads that way, or while a focus runs on
+ * it, so callers write nothing. Pure: `task` is not modified. Cleared fields
+ * stay as explicit undefined so a Dexie update drops them.
  */
-export function correctHabitDayRow(task: Task, mark: HabitDayMark, at: number): Task {
+export function correctHabitDayRow(
+  task: Task,
+  mark: HabitDayMark,
+  at: number,
+  habit?: Readonly<Pick<Partial<Habit>, "kind" | "target">>
+): Task {
   if (task.status === "active") return task;
+  if (habit && habitKindOf(habit) === "count") return correctCountDayRow(task, habit, mark, at);
   const met = task.status === "completed";
   const skipped = !met && Boolean(task.skipped);
   if ((mark === "met" && met) || (mark === "skipped" && skipped) || (mark === "none" && !met && !skipped)) {

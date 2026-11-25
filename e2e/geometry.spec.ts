@@ -193,6 +193,46 @@ async function checkHabitDetail(
 }
 
 /**
+ * The Habit detail's Statistics tab (#26) of a Count Habit: the Habit Score, the month chart and
+ * the yearly totals lie inside the screen's box, the chart's columns inside the chart, and each
+ * control is at least `minTarget` px tall and wide.
+ */
+async function checkHabitStatistics(
+  page: Page,
+  root: ReturnType<Page["locator"]>,
+  minTarget: number,
+  where: string,
+  failures: string[]
+): Promise<void> {
+  await root.getByRole("tab", { name: "Statistics" }).click();
+  await expect(root.getByText("Habit Score")).toBeVisible();
+  await expect(root.getByRole("table", { name: /^Totals per month/ })).toBeVisible();
+  await settle(page);
+  const problems = await root.evaluate((el, minTarget) => {
+    const box = el.getBoundingClientRect();
+    const out: string[] = [];
+    const inside = (r: DOMRect, outer: DOMRect) => r.left >= outer.left - 1 && r.right <= outer.right + 1;
+    const chart = el.querySelector<HTMLElement>('[aria-label^="Daily amounts,"]');
+    if (!chart) out.push("no month chart");
+    const chartBox = chart?.getBoundingClientRect();
+    for (const bar of Array.from(chart?.querySelectorAll<HTMLElement>("li") ?? [])) {
+      if (chartBox && !inside(bar.getBoundingClientRect(), chartBox)) out.push(`column "${bar.getAttribute("aria-label")}" leaves the chart`);
+    }
+    for (const node of Array.from(el.querySelectorAll<HTMLElement>("section, table, tr, td, th, ol"))) {
+      if (!inside(node.getBoundingClientRect(), box)) out.push(`${node.tagName.toLowerCase()} "${(node.getAttribute("aria-label") || node.textContent || "").trim().slice(0, 40)}" leaves the screen`);
+    }
+    for (const b of Array.from(el.querySelectorAll<HTMLElement>("button:not(.sheet-close)"))) {
+      const r = b.getBoundingClientRect();
+      const name = b.getAttribute("aria-label") || (b.textContent || "").trim();
+      if (!inside(r, box)) out.push(`"${name.slice(0, 40)}" leaves the screen`);
+      if (r.height < minTarget - 0.5 || r.width < minTarget - 0.5) out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px`);
+    }
+    return out;
+  }, minTarget);
+  for (const problem of problems) failures.push(`${where} Habit Statistics: ${problem}`);
+}
+
+/**
  * Every phone Habit card keeps its rows (Count progress, week strip, Streak, Success Rate) inside
  * the card: the card clips, so the page-level overflow check cannot see a row that runs past it.
  */
@@ -338,6 +378,13 @@ test.describe(`desktop app geometry (${look})`, () => {
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
 
+      // The Count Habit's detail, Statistics tab (month chart, yearly totals), long unit and all.
+      await page.getByRole("button", { name: `Open habit: ${LONG_TASK_TITLE}` }).click();
+      await checkHabitStatistics(page, page.getByRole("dialog"), 32, `${label(vp)} desktop`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habit Statistics`);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+
       // The Checklist editor inside the long Task's drawer (n/m progress shows on its row).
       await clickDesktopNav(page, "Home");
       const longRow = page.locator("[data-testid='task-row'][data-task-id='task-long']");
@@ -465,6 +512,12 @@ test.describe(`phone app geometry (${look})`, () => {
       const habitPanel = page.locator("#sheetContainer [role=dialog]");
       await checkHabitDetail(page, habitPanel, { minTarget: 48, minDayWidth: 40 }, `${label(vp)} phone-app`, failures);
       await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit detail`);
+      await page.evaluate(() => (window as unknown as { closeSheet: () => void }).closeSheet());
+
+      // The Count Habit's detail sheet, Statistics tab.
+      await page.getByLabel(`Open habit ${LONG_TASK_TITLE}`, { exact: true }).click();
+      await checkHabitStatistics(page, habitPanel, 48, `${label(vp)} phone-app`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habit Statistics`);
 
       expect(failures, failures.join("\n")).toEqual([]);
     });

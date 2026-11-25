@@ -133,6 +133,22 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
     },
   ];
 
+  // A Count day over its target two days ago, so the Statistics chart and yearly totals have a value.
+  const countDay = dateKey(now - 2 * DAY_MS);
+  tasks.push(
+    task({
+      id: `habtsk-${countDay}-habit-count`,
+      title: LONG_TASK_TITLE,
+      questId: null,
+      habitId: "habit-count",
+      status: "completed",
+      completedAt: now - 2 * DAY_MS,
+      scheduledDate: countDay,
+      amount: 14,
+      rank: 6000,
+    })
+  );
+
   // A standalone List with an unbreakable name and long items, one of them ticked.
   const lists: List[] = [
     {

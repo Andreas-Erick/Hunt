@@ -3,6 +3,8 @@ import type { Habit, Task } from "./domainTypes";
 import { isHabitScheduledOn } from "./habitFrequency";
 import { habitSuccessRate } from "./habitInsight";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
+import { habitDayAmount } from "./habitKind";
+import { habitScore } from "./habitStats";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -51,6 +53,13 @@ export interface HabitDaySummary {
    * or null before any day was Met or Missed. Worked out on first call only.
    */
   successRate: () => number | null;
+  /**
+   * The Habit Score (habitScore) over the same units as the Success Rate, or
+   * null before any was Met or Missed. Worked out on first call only.
+   */
+  score: () => number | null;
+  /** A Count Habit's total on `dayKey` (habitDayAmount): 0 when none was logged. */
+  amountOn: (dayKey: string) => number;
 }
 
 const EMPTY_DATES: ReadonlySet<string> = new Set<string>();
@@ -143,6 +152,7 @@ export function summarizeHabitDays(
           habitDayOutcome({ habit, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
         const firstDayKey = firstHabitDay(habit, dayTasks, todayKey);
         let rate: number | null | undefined;
+        let score: number | null | undefined;
         summary = {
           todayTask,
           completedDates,
@@ -153,6 +163,9 @@ export function summarizeHabitDays(
             rate === undefined
               ? (rate = habitSuccessRate(outcomesBackFrom(todayKey, firstDayKey, outcomeOn)))
               : rate,
+          score: () =>
+            score === undefined ? (score = habitScore(outcomesBackFrom(todayKey, firstDayKey, outcomeOn))) : score,
+          amountOn: (dayKey) => habitDayAmount(dayTasks?.get(dayKey)),
         };
         cache.set(habitId, summary);
       }

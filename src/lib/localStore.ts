@@ -545,10 +545,11 @@ async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boo
 async function correctHabitDay(habitId: string, dateKey: string, mark: HabitDayMark): Promise<boolean> {
   const day = await ensureHabitTaskForDay(habitId, dateKey);
   if (!day) return false;
+  const habit = await db.habits.get(habitId);
   const at = Date.now();
   return changed(
     await writeTask(day.id, (row) => {
-      const next = correctHabitDayRow(row, mark, at);
+      const next = correctHabitDayRow(row, mark, at, habit);
       return next === row ? null : next;
     })
   );

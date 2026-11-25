@@ -116,6 +116,50 @@ describe("correctHabitDayRow (shared calendar correction)", () => {
   });
 });
 
+describe("correctHabitDayRow on a Count Habit day (the Count rules hold)", () => {
+  const COUNT = { id: "h1", kind: "count" as const, target: 3, createdAt: 1 };
+  const countOutcome = (task: Task) =>
+    summarizeHabitDays([task], TODAY, [COUNT]).summaryFor("h1").outcomeOn("2026-11-10");
+
+  it("ticking a Count day raises its total to the target, keeping a larger one", () => {
+    const met = correctHabitDayRow(dayTask({ amount: 1 }), "met", 9_000, COUNT);
+    expect(met.amount).toBe(3);
+    expect(met.status).toBe("completed");
+    expect(countOutcome(met)).toBe("met");
+    const over = dayTask({ amount: 5, status: "completed", completedAt: 700 });
+    expect(correctHabitDayRow(over, "met", 9_000, COUNT)).toBe(over);
+  });
+
+  it("unticking or Skipping a Count day clears its total to 0", () => {
+    const met = dayTask({ amount: 4, status: "completed", completedAt: 700 });
+    const none = correctHabitDayRow(met, "none", 9_000, COUNT);
+    expect(none.amount).toBe(0);
+    expect(none.status).toBe("queued");
+    expect("completedAt" in none && none.completedAt === undefined).toBe(true);
+    expect(countOutcome(none)).toBe("missed");
+
+    const skipped = correctHabitDayRow(dayTask({ amount: 2 }), "skipped", 9_000, COUNT);
+    expect(skipped.amount).toBe(0);
+    expect(skipped.skipped).toBe(true);
+    expect(countOutcome(skipped)).toBe("skipped");
+    expect(countOutcome(correctHabitDayRow(met, "skipped", 9_000, COUNT))).toBe("skipped");
+  });
+
+  it("un-Skips a Skipped Count day, and writes nothing when the day already reads that way", () => {
+    const skipped = dayTask({ skipped: true });
+    const none = correctHabitDayRow(skipped, "none", 9_000, COUNT);
+    expect(none.skipped).toBeUndefined();
+    expect(countOutcome(none)).toBe("missed");
+    const plain = dayTask({ amount: 0 });
+    expect(correctHabitDayRow(plain, "none", 9_000, COUNT)).toBe(plain);
+    expect(correctHabitDayRow(skipped, "skipped", 9_000, COUNT)).toBe(skipped);
+  });
+
+  it("Untick clears a partial total too", () => {
+    expect(correctHabitDayRow(dayTask({ amount: 2 }), "none", 9_000, COUNT).amount).toBe(0);
+  });
+});
+
 describe("habitStartKey (a Habit's first calendar day)", () => {
   it("is the local day the Habit was made, or today for a row without a usable createdAt", () => {
     expect(habitStartKey({ createdAt: new Date(2026, 10, 3, 9, 30).getTime() }, TODAY)).toBe("2026-11-03");

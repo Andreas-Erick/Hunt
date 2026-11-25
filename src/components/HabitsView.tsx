@@ -592,7 +592,7 @@ export function HabitsView() {
                   </form>
                 </HeightReveal>
                 {detailHabitId === habit.id && (
-                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                  <HabitDetail habit={habit} todayKey={todayKey} summary={habitDays.summaryFor(habit.id)} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
                 )}
               </div>
             );

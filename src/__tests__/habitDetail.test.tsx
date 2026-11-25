@@ -112,6 +112,26 @@ describe("desktop Habit detail: Calendar tab", () => {
     expect(within(dialog).getByRole("button", { name: "16 November: Missed" })).toBeInTheDocument();
   });
 
+  it("on a Count Habit, Tick sets the day's total to the target, Untick clears it, and the day takes an exact total", async () => {
+    await db.habits.update("h1", { kind: "count", target: 3, unit: "sets" });
+    await db.tasks.put(dayTask("2026-11-12", { amount: 1 }));
+    const dialog = await openDetail();
+    const tid = habitTaskId("h1", "2026-11-12");
+    fireEvent.click(within(dialog).getByRole("button", { name: "12 November: Missed" }));
+    expect(within(dialog).getByText("1 / 3 sets")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tick 12 November" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 3, status: "completed" }));
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Untick 12 November" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 0, status: "queued" }));
+
+    const field = await within(dialog).findByRole("textbox", { name: "Total for 12 November" });
+    fireEvent.change(field, { target: { value: "4.5" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set total" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 4.5, status: "completed" }));
+    expect(await within(dialog).findByRole("button", { name: "12 November: Met" })).toBeInTheDocument();
+  });
+
   it("closes on Escape", async () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });

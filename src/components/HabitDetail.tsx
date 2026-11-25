@@ -4,30 +4,35 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import type { Habit } from "@/lib/domainTypes";
-import type { HabitOutcome } from "@/lib/habitOutcome";
+import type { HabitDaySummary } from "@/lib/habitDay";
 import { HabitCalendar } from "./HabitCalendar";
+import { HabitStatistics } from "./HabitStatistics";
 
-/** The detail screen's tabs, in order. Statistics and Edit join this list. */
-const TABS = [{ id: "calendar", label: "Calendar" }] as const;
+/** The detail screen's tabs, in order. Edit joins this list. */
+const TABS = [
+  { id: "calendar", label: "Calendar" },
+  { id: "statistics", label: "Statistics" },
+] as const;
 type TabId = (typeof TABS)[number]["id"];
 
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /**
  * A Habit's detail screen: a dialog with one tab per view of the Habit
- * (Calendar for now). Escape, the close button and a press on the backdrop
+ * (Calendar, Statistics). Escape, the close button and a press on the backdrop
  * close it; focus stays inside while it is open and returns to the opener.
  */
 export function HabitDetail({
   habit,
   todayKey,
-  outcomeOn,
+  summary,
   metClass,
   onClose,
 }: {
   habit: Habit;
   todayKey: string;
-  outcomeOn: (dayKey: string) => HabitOutcome | null;
+  /** The Habit's day summary: its Outcomes, Count totals and Habit Score. */
+  summary: Pick<HabitDaySummary, "outcomeOn" | "amountOn" | "score">;
   /** The Habit's accent background class for a Met day. */
   metClass: string;
   onClose: () => void;
@@ -120,7 +125,24 @@ export function HabitDetail({
 
         {tab === "calendar" && (
           <div id={`${ids}-panel-calendar`} role="tabpanel" aria-labelledby={`${ids}-tab-calendar`} className="pt-4">
-            <HabitCalendar habit={habit} todayKey={todayKey} outcomeOn={outcomeOn} metClass={metClass} />
+            <HabitCalendar
+              habit={habit}
+              todayKey={todayKey}
+              outcomeOn={summary.outcomeOn}
+              amountOn={summary.amountOn}
+              metClass={metClass}
+            />
+          </div>
+        )}
+        {tab === "statistics" && (
+          <div id={`${ids}-panel-statistics`} role="tabpanel" aria-labelledby={`${ids}-tab-statistics`} className="pt-4">
+            <HabitStatistics
+              habit={habit}
+              todayKey={todayKey}
+              score={summary.score()}
+              amountOn={summary.amountOn}
+              metClass={metClass}
+            />
           </div>
         )}
       </div>
