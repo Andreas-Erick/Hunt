@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import QRCode from "qrcode";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -21,15 +21,13 @@ import { hudAudio } from "@/lib/hudAudio";
 import { toLocalDateKey } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { formatAgo, usePhoneLink, useServerLink } from "./SyncStatus";
-import { useDocumentScrollLock } from "./useDocumentScrollLock";
+import { useModalDialog } from "./useModalDialog";
 
 interface MobileSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-/** What Tab / Shift+Tab cycle through inside the dialog. */
-const FOCUSABLE_SELECTOR = 'button, a[href], input:not([type="hidden"])';
 /** How long "Copied" / "Saved" stay on their buttons. */
 const ACK_MS = 2000;
 /** How long a success message stays in the footer status line. */
@@ -145,7 +143,6 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
   const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState<FooterStatus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   /** Export / import in flight (a ref, so a second click in the same tick is refused too). */
   const busyRef = useRef(false);
@@ -153,8 +150,10 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
   const aliveRef = useRef(true);
   /** The current click started on the backdrop (a drag out of the card must not close). */
   const pressOnBackdropRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const { dialogRef, onKeyDown: handleDialogKeyDown } = useModalDialog<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  });
 
   const activeUrl =
     (selectedUrl && lanUrls.includes(selectedUrl) ? selectedUrl : null) ??
@@ -172,58 +171,10 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Scroll locked; focus moves in, siblings go `inert`, and both are undone (layout effect) before the nodes go.
-  useDocumentScrollLock();
-  useLayoutEffect(() => {
-    const active = document.activeElement;
-    const opener =
-      active instanceof HTMLElement && active !== document.body ? active : null;
-
-    const inerted: HTMLElement[] = [];
-    let current: HTMLElement | null = dialogRef.current;
-    while (current && current !== document.body) {
-      const parent: HTMLElement | null = current.parentElement;
-      if (!parent) break;
-      for (const sibling of Array.from(parent.children)) {
-        if (
-          sibling !== current &&
-          sibling instanceof HTMLElement &&
-          sibling.tagName !== "SCRIPT" &&
-          sibling.tagName !== "STYLE" &&
-          !sibling.inert &&
-          !sibling.hasAttribute("inert")
-        ) {
-          sibling.inert = true;
-          sibling.setAttribute("inert", "");
-          inerted.push(sibling);
-        }
-      }
-      current = parent;
-    }
-
-    closeButtonRef.current?.focus();
-    return () => {
-      for (const el of inerted) {
-        el.inert = false;
-        el.removeAttribute("inert");
-      }
-      if (opener && opener.isConnected) opener.focus();
-    };
-  }, []);
-
   // Fresh status as soon as the modal opens.
   useEffect(() => {
     void syncNow();
   }, [syncNow]);
-
-  // Escape closes the modal.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   // Acknowledgements revert after a moment; each timer is cleared on unmount.
   useEffect(() => {
@@ -277,24 +228,6 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       alive = false;
     };
   }, [pairingUrl]);
-
-  /** Tab / Shift+Tab wrap between the first and last controls of the dialog. */
-  const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const root = dialogRef.current;
-    if (!root) return;
-    const items = Array.from(
-      root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ).filter((el) => el.tabIndex >= 0 && !el.hasAttribute("disabled"));
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey ? active === first || active === root : active === last) {
-      e.preventDefault();
-      (e.shiftKey ? last : first).focus();
-    }
-  };
 
   const handleManualSync = async () => {
     if (syncing) return;

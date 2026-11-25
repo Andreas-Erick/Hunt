@@ -170,6 +170,36 @@ describe("desktop Habit detail: Calendar tab", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
+
+  it("locks page scroll and makes the page behind inert while open, and undoes both on close", async () => {
+    render(<HabitsView />);
+    const opener = within(await screen.findByTestId("habit-row")).getByRole("button", { name: "Open habit: Stretch" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Stretch" });
+    const appRoot = document.body.firstElementChild as HTMLElement;
+    expect(appRoot.contains(dialog)).toBe(false);
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(appRoot.hasAttribute("inert")).toBe(true);
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.documentElement.style.overflow).toBe("");
+    expect(appRoot.hasAttribute("inert")).toBe(false);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("wraps Tab from the last control back to the close button", async () => {
+    const dialog = await openDetail();
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    const focusables = Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled])"));
+    focusables[focusables.length - 1].focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(focusables[focusables.length - 1]);
+  });
 });
 
 describe("desktop Habit detail: Edit tab", () => {
