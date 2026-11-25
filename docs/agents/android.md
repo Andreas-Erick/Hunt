@@ -3,7 +3,8 @@
 The phone app is `public/hunt-mobile.html` in a WebView, wrapped by the
 Java shell in `android-app/app/src/main/java/com/hunt/companion/`.
 Decisions: ADR-0003 (one-file page + HuntCore), ADR-0004 (no Gradle),
-ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks).
+ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks),
+ADR-0007 (reminders).
 
 ## Invariants
 

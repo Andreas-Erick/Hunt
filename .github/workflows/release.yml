@@ -15,10 +15,16 @@ on:
 permissions:
   contents: read
 
+# Two runs for one tag would race on `gh release create`; queue the second instead.
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     name: Verify Suite & Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
@@ -103,6 +109,7 @@ jobs:
     name: Build Android APK
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -150,9 +157,10 @@ jobs:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS || 'android' }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASS || 'android' }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'androiddebugkey' }}
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           mkdir -p dist/release
-          bash android-app/build-apk.sh "./android-app" "./dist/release/Hunt-Mobile-${{ needs.verify.outputs.version }}.apk"
+          bash android-app/build-apk.sh "./android-app" "./dist/release/Hunt-Mobile-${VERSION}.apk"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -163,6 +171,10 @@ jobs:
     name: Build Windows Desktop Installer & Portable Zip
     needs: [verify, build-android]
     runs-on: windows-latest
+    timeout-minutes: 30
+    # Tag-derived values reach scripts through env, never pasted into the script text.
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -182,7 +194,7 @@ jobs:
       - name: Copy APK into public/Hunt-Mobile.apk for desktop Phone & Sync download
         shell: pwsh
         run: |
-          Copy-Item -Force "dist/apk/Hunt-Mobile-${{ needs.verify.outputs.version }}.apk" "public/Hunt-Mobile.apk"
+          Copy-Item -Force "dist/apk/Hunt-Mobile-$env:VERSION.apk" "public/Hunt-Mobile.apk"
 
       - name: Install dependencies
         run: npm ci
@@ -215,7 +227,7 @@ jobs:
       - name: Build portable Windows ZIP
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\desktop-stage\*" -DestinationPath "dist\release\Hunt-Desktop-Windows-${{ needs.verify.outputs.version }}.zip" -Force
+          Compress-Archive -Path "dist\desktop-stage\*" -DestinationPath "dist\release\Hunt-Desktop-Windows-$env:VERSION.zip" -Force
 
       - name: Build Inno Setup Windows Installer (.exe)
         shell: pwsh
@@ -229,7 +241,7 @@ jobs:
             $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           }
           & $iscc `
-            "/DAppVersion=${{ needs.verify.outputs.version }}" `
+            "/DAppVersion=$env:VERSION" `
             "/DStageDir=$(Resolve-Path dist\desktop-stage)" `
             "/DOutputDir=$(Resolve-Path dist\release)" `
             "installer\hunt-desktop.iss"
@@ -245,6 +257,10 @@ jobs:
     name: Publish GitHub Release
     needs: [verify, build-android, build-desktop]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ needs.verify.outputs.tag }}
+      VERSION: ${{ needs.verify.outputs.version }}
     permissions:
       contents: write
     steps:
@@ -270,8 +286,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          TAG="${{ needs.verify.outputs.tag }}"
-          VERSION="${{ needs.verify.outputs.version }}"
           printf '%s\n' \
             "### Installers" \
             "- **Windows Desktop Installer:** \`Hunt-Desktop-Setup-${VERSION}.exe\` (bundles Node.js runtime + Start Menu/Desktop shortcuts)" \
@@ -286,5 +300,6 @@ jobs:
             gh release create "$TAG" release-assets/* \
               --repo "$REPO" \
               --title "Hunt ${TAG}" \
-              --notes-file release-notes.md
+              --notes-file release-notes.md \
+              --generate-notes
           fi

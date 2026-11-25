@@ -2,6 +2,11 @@
   "name": "hunt",
   "version": "1.14.1",
   "private": true,
+  "description": "Local-first focus timer, habits and weekly quests. Windows desktop + Android, synced over LAN.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Andreas-Erick/Hunt.git"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -37,7 +42,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^20.17.10",
+    "@types/node": "^22.20.7",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

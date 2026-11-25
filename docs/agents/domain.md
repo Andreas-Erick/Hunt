@@ -12,31 +12,21 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## File structure
 
-Single-context repo (most repos):
+Hunt is a single-context repo:
 
 ```
 /
-├── GLOSSARY.md
+├── GLOSSARY.md      ← local only (git-ignored)
 ├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+│   ├── 0001-row-level-lww-merge.md
+│   ├── 0002-laptop-as-sync-hub.md
+│   └── …
 └── src/
 ```
 
-Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
-
-```
-/
-├── GLOSSARY-MAP.md
-├── docs/adr/        ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── GLOSSARY.md
-    │   └── docs/adr/  ← context-specific decisions
-    └── billing/
-        ├── GLOSSARY.md
-        └── docs/adr/
-```
+`GLOSSARY.md` is kept on the maintainer's machine and
+copied into worktrees by `scripts/worktree.sh`; it is not
+in the public repo. The ADRs are.
 
 ## Use the glossary's vocabulary
 
@@ -48,4 +38,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0001 (row-level LWW merge), but worth reopening because…_

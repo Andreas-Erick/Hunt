@@ -54,6 +54,14 @@ queue **tasks** and daily **habits** under them, work on one
 task at a time in **Focus**, and see where the hours went in
 **Review** (day to year, plus an activity heatmap).
 
+Habits come in three kinds: done-or-not, **counted**
+(glasses of water, toward a daily number), or things to
+**avoid**, where a Slip is logged instead of a tick. Each
+habit has a Habit Score and a Success Rate. Tasks and
+habits can carry **reminders** that fire on both the
+desktop and the phone; on the phone, a notification's
+Done, +1 and Snooze work without opening Hunt.
+
 The desktop app keeps its data in IndexedDB. The phone keeps
 an atomic JSON file through its Android shell. When both are
 on the same network (or Tailscale), they converge through a
@@ -185,8 +193,9 @@ npm run check          # lint, types, tests, build
 npm run test:geometry  # Playwright, 360–2560px
 ```
 
-`check` runs the same steps as CI's `verify` job, and CI
-runs the geometry suite as a second job. The 1,250+ Vitest
+`check` runs the same steps as CI's `verify` job. CI also
+runs the geometry suite and builds the APK with a
+throwaway key, each as its own job. The 1,900+ Vitest
 tests are hermetic: virtual clocks, seeded random inputs,
 `fake-indexeddb`, and temp directories.
 
