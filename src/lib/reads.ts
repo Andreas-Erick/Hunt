@@ -40,6 +40,9 @@ export const reads = {
   /** Every materialized daily habit instance (any day, any status). */
   habitTasks: (): Promise<Task[]> => db.tasks.where("habitId").above("").toArray(),
 
+  /** One habit, or undefined when it is gone. */
+  habit: (id: string): Promise<Habit | undefined> => db.habits.get(id),
+
   /** Every habit in rank order. */
   habits: async (): Promise<Habit[]> => (await db.habits.toArray()).sort(compareRank),
 

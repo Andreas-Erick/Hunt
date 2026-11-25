@@ -1,6 +1,6 @@
 import type { Habit, Task } from "./domainTypes";
 import { habitFrequencyOn, isHabitScheduledOn } from "./habitFrequency";
-import { countTargetOf, habitDayAmount, habitKindOf } from "./habitKind";
+import { countTargetOf, habitDayAmount, habitDaySlips, habitKindOf } from "./habitKind";
 
 /**
  * How a scheduled Habit day ended (GLOSSARY: Outcome). Derived, never stored.
@@ -23,7 +23,7 @@ export interface HabitDay {
    * belongs to its scheduled day (completionDateKey), so a task ticked after
    * midnight is passed as the Task of the day before.
    */
-  dayTask: Pick<Task, "status" | "skipped" | "amount"> | undefined;
+  dayTask: Pick<Task, "status" | "skipped" | "amount" | "slips"> | undefined;
   /** Today's local YYYY-MM-DD key. */
   todayKey: string;
 }
@@ -37,10 +37,12 @@ export interface HabitDay {
  * past day whose focus is still running across midnight, are Open; any other
  * past day is Missed, a Count day that got only partway included, except a
  * day of an N per week Habit, which has no Outcome of its own (its Habit Week
- * has one).
+ * has one). An Avoid Habit's day is judged by its Slips instead
+ * (avoidDayOutcome).
  */
 export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
   if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
+  if (habitKindOf(habit) === "avoid") return avoidDayOutcome(dayKey, dayTask, todayKey);
   const met =
     habitKindOf(habit) === "count"
       ? habitDayAmount(dayTask) >= countTargetOf(habit)
@@ -50,6 +52,19 @@ export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay):
   if (dayKey === todayKey || dayTask?.status === "active") return "open";
   // N per week: the Habit Week is judged (habitWeek.ts); a single day is never Missed.
   return habitFrequencyOn(habit, dayKey).type === "perWeek" ? null : "missed";
+}
+
+/**
+ * A scheduled Avoid Habit day's Outcome: Skipped when set aside (a Slip that
+ * day included), Missed once a Slip is logged, Open while the day is under way,
+ * and Met once it has ended with no Slip, so midnight needs no write. Its
+ * tick status means nothing here.
+ */
+function avoidDayOutcome(dayKey: string, dayTask: HabitDay["dayTask"], todayKey: string): HabitOutcome {
+  if (dayTask?.skipped) return "skipped";
+  if (habitDaySlips(dayTask) > 0) return "missed";
+  if (dayKey === todayKey || dayTask?.status === "active") return "open";
+  return "met";
 }
 
 /**

@@ -15,6 +15,9 @@ import {
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 
+/** A Habit Kind as the edit form names it (read-only: the Kind never changes). */
+const HABIT_KIND_LABEL: Record<HabitKind, string> = { check: "Check Habit", count: "Count Habit", avoid: "Avoid Habit" };
+
 /** How long a press on +1 is held before it opens exact entry instead. */
 export const LONG_PRESS_MS = 500;
 
@@ -83,7 +86,7 @@ export function useHabitKindEdit() {
         <div>
           <span className="mb-1 block text-xs text-neutral-400">Kind</span>
           <span className="inline-flex min-h-8 items-center rounded-full border border-white/[0.07] px-3 text-xs text-neutral-300">
-            {isCount(h) ? "Count Habit" : "Check Habit"}
+            {HABIT_KIND_LABEL[habitKindOf(h)]}
           </span>
         </div>
         {isCount(h) && (
@@ -131,8 +134,8 @@ export function useLogHabitAmount(todayKey: string, summaryFor: (habitId: string
 }
 
 /**
- * The Habit Kind choice of the new-habit form (GLOSSARY: Habit Kind): Check or
- * Count, with a Count Habit's daily target and unit. Native radios inside
+ * The Habit Kind choice of the new-habit form (GLOSSARY: Habit Kind): Check,
+ * Count (with a daily target and unit) or Avoid. Native radios inside
  * 44px labels on touch, so it works by finger, mouse and keyboard.
  */
 export function HabitKindPicker({
@@ -154,6 +157,7 @@ export function HabitKindPicker({
   const options: { value: HabitKind; label: string }[] = [
     { value: "check", label: "Check" },
     { value: "count", label: "Count" },
+    { value: "avoid", label: "Avoid" },
   ];
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">

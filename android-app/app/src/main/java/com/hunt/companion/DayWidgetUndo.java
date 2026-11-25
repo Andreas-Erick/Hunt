@@ -90,9 +90,11 @@ final class DayWidgetUndo {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
             // A Task's row has one kind of tick (its Habit Kind never changes): Undo closes whichever window it has.
-            String plusKey = TickKeys.taskDay(taskId, dateKey, TickKeys.PLUS_ONE);
-            String key = prefs.contains(plusKey) || UNDONE.contains(plusKey) || RECENTLY_UNDONE.containsKey(plusKey)
-                    ? plusKey : TickKeys.taskDay(taskId, dateKey);
+            String key = TickKeys.taskDay(taskId, dateKey);
+            for (String kind : new String[] {TickKeys.PLUS_ONE, TickKeys.SLIP}) {
+                String kindKey = TickKeys.taskDay(taskId, dateKey, kind);
+                if (prefs.contains(kindKey) || UNDONE.contains(kindKey) || RECENTLY_UNDONE.containsKey(kindKey)) key = kindKey;
+            }
             long now = System.currentTimeMillis();
             RECENTLY_UNDONE.values().removeIf(at -> now - at > UndoWindow.WINDOW_MS + UndoWindow.LATE_UNDO_MS);
             if (!prefs.contains(key) && !UNDONE.contains(key)) {

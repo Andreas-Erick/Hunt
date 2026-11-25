@@ -2,6 +2,7 @@ import { habitStreakOn, habitTaskId, outcomesBackFrom, toLocalDateKey } from "./
 import type { Habit, Task } from "./domainTypes";
 import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habitFrequency";
 import { habitSuccessRate } from "./habitInsight";
+import { habitKindOf } from "./habitKind";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, weekOutcomesBackFrom, type HabitWeek } from "./habitWeek";
 
@@ -221,8 +222,9 @@ export function habitWantsDayTask(summary: Pick<HabitDaySummary, "askedToday" | 
 
 /**
  * SHARED "done today" tally: the Habits asked of today (habitWantsDayTask) and
- * how many of them are done. Today is the day `summaryFor` was built for; the
- * third argument is kept for existing callers.
+ * how many of them are done, leaving Avoid Habits out (they ask nothing to be
+ * done). Today is the day `summaryFor` was built for; the third argument is
+ * kept for existing callers.
  */
 export function habitTodayTally(
   habits: readonly Habit[],
@@ -232,6 +234,8 @@ export function habitTodayTally(
   let done = 0;
   let asked = 0;
   for (const habit of habits) {
+    // An Avoid Habit asks nothing to be done: it is kept unless a Slip is logged.
+    if (habitKindOf(habit) === "avoid") continue;
     const summary = summaryFor(habit.id);
     if (!habitWantsDayTask(summary)) continue;
     asked += 1;

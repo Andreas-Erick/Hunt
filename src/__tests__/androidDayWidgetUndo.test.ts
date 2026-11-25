@@ -145,6 +145,25 @@ describe.skipIf(!hasJdk)("UndoWindow, run on the JDK", () => {
     expect(lines).toEqual(["t|jog 2026-11-22 [+1]", "[]", "[t|jog@10000[+1], t-done@11000[]]"]);
   }, 60_000);
 
+  it("an Avoid Habit row's Slip has its own window kind and, once ended, hides its row like a done tick", () => {
+    const lines = runUndo(
+      [
+        "Map<String, Long> held = new HashMap<>();",
+        'String slip = TickKeys.taskDay("t|dry", "2026-11-22", TickKeys.SLIP);',
+        "held.put(slip, 10_000L); // ended, not queued yet",
+        'held.put(TickKeys.taskDay("t-sober", "2026-11-22", TickKeys.SLIP), 15_000L); // still open: "Slip · Undo"',
+        'System.out.println(TickKeys.taskIdOf(slip) + " " + TickKeys.dateKeyOf(slip) + " [" + TickKeys.kindOf(slip) + "]");',
+        'System.out.println(new TreeSet<>(UndoWindow.hiddenTaskIds(new HashSet<String>(), held, "2026-11-22", 16_500L)));',
+        'System.out.println(new TreeSet<>(UndoWindow.openTaskIds(held, "2026-11-22", 16_500L)));',
+        'System.out.println(new TreeMap<>(UndoWindow.pendingPlus(new HashMap<String, Integer>(), held, "2026-11-22", 16_500L)));',
+        "List<String> offered = new ArrayList<>();",
+        'UndoWindow.commit(held, 17_000L, (taskId, dateKey, tickedAt, kind) -> { offered.add(taskId + "[" + kind + "]"); return true; });',
+        "System.out.println(offered);",
+      ].join("\n"),
+    );
+    expect(lines).toEqual(["t|dry 2026-11-22 [slip]", "[t|dry]", "[t-sober]", "{}", "[t|dry[slip]]"]);
+  }, 60_000);
+
   it("a +1 never hides its Count row: queued and ended +1s are counted for the row to show instead", () => {
     const lines = runUndo(
       [

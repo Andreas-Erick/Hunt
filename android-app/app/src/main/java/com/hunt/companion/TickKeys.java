@@ -4,7 +4,9 @@ package com.hunt.companion;
  * Identity keys of a Day Widget tick, in one place. A tick names a Task on a day: one Undo
  * window and one queued Pending Tick per Task and day ({@link #taskDay}). A Count Habit row's
  * tap is a "+1" ({@link #PLUS_ONE}) rather than a done tick: its window key carries that kind,
- * so the queue gets it with the tick, and the queue holds one entry per tap. An acknowledgement
+ * so the queue gets it with the tick, and the queue holds one entry per tap. An Avoid Habit
+ * row's tap is a Slip ({@link #SLIP}): a kind of its own, but like a done tick it is queued once
+ * per Task and day and hides its row, since one Slip decides the day. An acknowledgement
  * also matches the tap time ({@link #ack}), so a tick queued again after the page read the
  * queue survives the ack. The phone page keys its own not-yet-removed acks the same way
  * (pendingTickKey in hunt-mobile.html). Plain Java, so the test suite runs it on the JDK.
@@ -12,6 +14,8 @@ package com.hunt.companion;
 final class TickKeys {
     /** The kind of a Count Habit row's tick: one more (the snapshot row's habitKind is "count"). */
     static final String PLUS_ONE = "+1";
+    /** The kind of an Avoid Habit row's tick: a Slip (the snapshot row's habitKind is "avoid"). */
+    static final String SLIP = "slip";
 
     private TickKeys() {
     }
@@ -42,7 +46,7 @@ final class TickKeys {
         return bar < 0 ? taskDayKey : taskDayKey.substring(bar + 1);
     }
 
-    /** The tick kind of a window key: "" for a done tick, {@link #PLUS_ONE} for a Count +1. */
+    /** The tick kind of a window key: "" for a done tick, {@link #PLUS_ONE} or {@link #SLIP}. */
     static String kindOf(String taskDayKey) {
         int bar = taskDayKey.indexOf('|');
         String head = bar < 0 ? "" : taskDayKey.substring(0, bar);

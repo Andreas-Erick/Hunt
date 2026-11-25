@@ -141,6 +141,16 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       createdAt: now - 20 * DAY_MS,
       endDate: dateKey(now - 3 * DAY_MS),
     },
+    // An Avoid Habit: its mark, "Kept so far" and the "Log a Slip" button must fit beside a long title.
+    {
+      id: "habit-avoid",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 4000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "avoid",
+    },
   ];
 
   // A standalone List with an unbreakable name and long items, one of them ticked.

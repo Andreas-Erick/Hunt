@@ -138,6 +138,43 @@ describe("applyPendingTicks", () => {
     });
   });
 
+  describe("a slip tick on an Avoid Habit row", () => {
+    const dry: Habit = { ...habit, id: "hab-dry", title: "No alcohol", kind: "avoid" };
+    const dryId = habitTaskId(dry.id, DAY);
+    const slip = (tickedAt: number, taskId = dryId) => ({ taskId, dateKey: DAY, tickedAt, kind: "slip" as const });
+
+    it("logs a Slip on the day's row, creating it when Hunt has not yet", () => {
+      const { state: after, skipped } = applyPendingTicks(state({ habits: [dry] }), [slip(TICKED_AT)]);
+      expect(skipped).toEqual([]);
+      expect(after.tasks[0]).toMatchObject({ id: dryId, slips: 1, status: "queued", updatedAt: TICKED_AT });
+    });
+
+    it("is applied once: read again, or on a day that already has a Slip, it changes nothing", () => {
+      const once = applyPendingTicks(state({ habits: [dry] }), [slip(TICKED_AT)]).state;
+      const twice = applyPendingTicks(once, [slip(TICKED_AT), slip(TICKED_AT + 1000)]);
+      expect(twice.state).toEqual(once);
+      expect(twice.skipped.map((s) => s.reason)).toEqual(["already-slipped", "already-slipped"]);
+    });
+
+    it("never mixes up the kinds: a slip on a Check row, or a done or +1 tick on an Avoid row, is skipped", () => {
+      const before = state({ habits: [habit, dry], tasks: [task()] });
+      const wrong = [
+        slip(TICKED_AT, "tsk-1"),
+        { taskId: dryId, dateKey: DAY, tickedAt: TICKED_AT },
+        { taskId: dryId, dateKey: DAY, tickedAt: TICKED_AT, kind: "+1" as const },
+      ];
+      const { state: after, skipped } = applyPendingTicks(before, wrong);
+      expect(skipped.map((s) => s.reason)).toEqual(["wrong-kind", "wrong-kind", "wrong-kind"]);
+      expect(after).toEqual(before);
+    });
+
+    it("skips a slip on an archived day", () => {
+      const archived = { ...buildHabitTaskRow(dry, DAY), status: "archived" as const };
+      const { skipped } = applyPendingTicks(state({ habits: [dry], tasks: [archived] }), [slip(TICKED_AT)]);
+      expect(skipped.map((s) => s.reason)).toEqual(["archived"]);
+    });
+  });
+
   it("skips a malformed tick as missing", () => {
     const before = state({ tasks: [task()] });
     const bad = { taskId: "tsk-1", dateKey: DAY, tickedAt: Number.NaN };

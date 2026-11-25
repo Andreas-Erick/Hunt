@@ -135,6 +135,8 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     // A Count Habit day's total and +1 tick time ride on the row (merged whole, ADR-0001).
     if (chance(0.3)) task.amount = pick([0, 1, 2.5, 7]);
     if (chance(0.2)) task.countTickedAt = pick(STAMPS);
+    // An Avoid Habit day's Slips ride on the row too (merged whole, like a Count total).
+    if (chance(0.25)) task.slips = pick([1, 2, 5]);
     tasks.push(task);
   });
 
@@ -190,7 +192,7 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     const history = pick(FREQUENCY_HISTORIES);
     if (history) habit.frequencyHistory = history;
     // Habits of every Kind; old rows without one read as Check.
-    const kind = pick([undefined, "check", "count"] as const);
+    const kind = pick([undefined, "check", "count", "avoid"] as const);
     if (kind) habit.kind = kind;
     if (kind === "count") {
       habit.target = pick([1, 3, 2.5]);

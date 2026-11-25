@@ -33,6 +33,8 @@ export {
 } from "../lib/habitKind";
 export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
 export { habitEndDateLabel, isEndedHabit, withHabitEndDate } from "../lib/habitEnd";
+export { avoidDayLabel, habitDaySlips } from "../lib/habitKind";
+export { logHabitSlip, undoHabitSlip } from "../lib/habitAvoid";
 export {
   applyChecklistEdit,
   canHoldChecklist,

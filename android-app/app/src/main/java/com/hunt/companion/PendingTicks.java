@@ -17,7 +17,8 @@ import java.util.Set;
  * The Pending Tick queue (GLOSSARY.md, ADR-0006): Tasks ticked done on the Day Widget that Hunt
  * has not applied yet. The file is a JSON array of {"taskId", "dateKey", "tickedAt"} objects
  * (tickedAt in epoch ms), plus "kind": "+1" on a Count Habit row's tap, which adds one instead
- * of ticking the Task done. It is the only file the widget writes, and it only ever appends; the
+ * of ticking the Task done, or "kind": "slip" on an Avoid Habit row's tap, which logs a Slip. It
+ * is the only file the widget writes, and it only ever appends; the
  * phone page reads it on start, applies the ticks through HuntCore and acknowledges them through
  * the bridge, which removes exactly the acknowledged entries, so a tick that arrives meanwhile
  * survives. No Hunt rule lives here: the queue holds what was tapped, HuntCore decides.
@@ -87,8 +88,8 @@ final class PendingTicks {
     }
 
     /**
-     * Widget: queues a tick of `kind` ({@link TickKeys#kindOf}). A second done tap on the same
-     * Task and day is not queued twice; a "+1" on a Count Habit row is written with "kind":"+1"
+     * Widget: queues a tick of `kind` ({@link TickKeys#kindOf}). A second done (or Slip) tap on
+     * the same Task and day is not queued twice; a "+1" on a Count Habit row is written with "kind":"+1"
      * and queued once per tap (the same tap twice is still queued once), since each adds one. A
      * queue that cannot be read is never written over. Any thread. A newly queued tick is
      * announced to the listener (a running Hunt) once the file is written.
@@ -117,7 +118,7 @@ final class PendingTicks {
             Log.w(TAG, "Pending Tick queue " + HuntFiles.PENDING_TICKS_FILE + " is unreadable; the tick waits", e);
             return Queued.UNREADABLE;
         }
-        boolean plus = !kind.isEmpty();
+        boolean plus = TickKeys.PLUS_ONE.equals(kind);
         String wanted = plus ? TickKeys.ack(taskId, dateKey, tickedAt) : TickKeys.taskDay(taskId, dateKey);
         for (int i = 0; i < queue.length(); i++) {
             JSONObject t = queue.optJSONObject(i);
@@ -131,7 +132,7 @@ final class PendingTicks {
         }
         try {
             JSONObject tick = new JSONObject().put("taskId", taskId).put("dateKey", dateKey).put("tickedAt", tickedAt);
-            if (plus) tick.put("kind", kind);
+            if (!kind.isEmpty()) tick.put("kind", kind);
             queue.put(tick);
             HuntFiles.writeText(queueFile(dir), queue.toString());
             return Queued.ADDED;
@@ -217,7 +218,10 @@ final class PendingTicks {
 
     /** What the widget knows of the queue, for hiding queued Tasks ({@link #queued}). */
     static final class Listing {
-        /** {@link TickKeys#taskDay} of every queued done tick: a Task is hidden only on the day it was ticked for. */
+        /**
+         * {@link TickKeys#taskDay} of every queued done or Slip tick: a Task is hidden only on the
+         * day it was ticked for.
+         */
         final Set<String> keys;
         /**
          * {@link TickKeys#taskDay} -> how many "+1" ticks are queued for that Count row. They never
