@@ -4,6 +4,10 @@ import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
 import { copyScalarExtras } from "./syncRowExtras";
 import { MAX_SYNC_LISTS, sanitizeList } from "./lists";
+import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
+import {
+  clamp, clampText, finiteOr, isDateKey, isRecord, isStamp, isTableKey, type UnknownRecord,
+} from "./syncValues";
 
 export type { ActiveFocusState } from "./domainTypes";
 export { MAX_CHECKLIST_ITEMS, MAX_CHECKLIST_TEXT_LENGTH } from "./checklist";
@@ -283,7 +287,6 @@ export const MAX_LONG_TEXT_LENGTH = 20_000; // notes, description; localStore cu
 const MAX_COUNTER_SECONDS = 1e9;
 const MAX_WEEKLY_HOURS = 168;
 const DEFAULT_WEEKLY_HOURS = 10;
-const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** 9999-12-31T00:00Z: the local date stays 4-digit-year in every time zone up to here. */
 const MAX_DATE_KEY_MS = 253_402_214_400_000;
 
@@ -311,10 +314,10 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "skipped", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -351,41 +354,6 @@ type LogRow = Omit<TimeLog, "taskTitleSnapshot" | "endTime" | "questCodeSnapshot
   taskTitleSnapshot?: string;
   endTime?: number;
 };
-
-type UnknownRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Own-key lookup, so "constructor" or "__proto__" never match a table entry. */
-function isTableKey<K extends string>(table: Record<K, true>, value: unknown): value is K {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(table, value);
-}
-
-/** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
-function isStamp(value: unknown): value is number {
-  return typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-}
-
-function isDateKey(value: unknown): value is string {
-  return typeof value === "string" && DATE_KEY_RE.test(value);
-}
-
-function finiteOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/** Cuts `text` to at most `max` UTF-16 units without splitting a surrogate pair. */
-function clampText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
 
 function entityIdOrNull(value: unknown): string | null {
   return isSafeSyncId(value) ? value : null;
@@ -450,6 +418,8 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (typeof rank === "number" && Number.isFinite(rank)) task.rank = rank;
   if (scheduledDate === null || isDateKey(scheduledDate)) task.scheduledDate = scheduledDate;
   if (isSafeSyncId(raw.habitId)) task.habitId = raw.habitId;
+  // A Skipped habit day carries `skipped: true`; not Skipped is no flag at all.
+  if (raw.skipped === true) task.skipped = true;
   // A habit day Task never holds a Checklist (its Outcome comes from its Habit Kind).
   if (task.habitId === undefined && Array.isArray(raw.checklist)) {
     task.checklist = sanitizeChecklist(raw.checklist);
@@ -479,6 +449,8 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
+  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
+  if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
   copyScalarExtras(habit, raw, HABIT_FIELDS);
   return habit as Habit;
 }

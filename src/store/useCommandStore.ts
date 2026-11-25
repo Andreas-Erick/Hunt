@@ -5,15 +5,12 @@ import { persist } from "zustand/middleware";
 import { reads } from "@/lib/reads";
 import { isMissedHabitTask, toLocalDateKey } from "@/lib/dateUtils";
 import type { ChecklistEdit } from "@/lib/checklist";
-import type { ListEdit } from "@/lib/lists";
-import { localLists } from "@/lib/localLists";
 import {
   fromFocusSession,
   toFocusSession,
   type ActiveFocusState,
   type FocusSession,
   type QuestAccent,
-  type Task,
 } from "@/lib/domainTypes";
 import {
   logDiagnostic,
@@ -25,6 +22,7 @@ import {
   localStore,
   onLocalChange,
   type HabitChanges,
+  type NewHabit,
   type QuestChanges,
   type TaskChanges,
 } from "@/lib/localStore";
@@ -45,6 +43,8 @@ import {
 } from "@/lib/syncScheduler";
 import { compareRank, type SyncPayload } from "@/lib/syncTypes";
 import { pickNextFocusTask } from "@/lib/taskQueue";
+import { habitDayActions, type HabitDayActions } from "./habitDayActions";
+import { listActions, type ListActions } from "./listActions";
 import { mergePersistedFocus } from "./persistedFocus";
 
 export {
@@ -71,7 +71,7 @@ export interface CompletedDirectiveFeedback {
 
 export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
-interface CommandStoreState {
+interface CommandStoreState extends HabitDayActions, ListActions {
   activeView: HudView;
   activeTaskId: string | null;
   isRunning: boolean;
@@ -188,12 +188,8 @@ interface CommandStoreState {
 
   // Daily Habit CRUD & Materialization
   /** Resolves to false when the local write failed (actionError is then set), true otherwise. */
-  createHabit: (params: {
-    title: string;
-    notes?: string;
-    questId: string | null;
-  }) => Promise<boolean>;
-  updateHabit: (habitId: string, changes: HabitChanges) => Promise<boolean>;
+  createHabit: (params: NewHabit) => Promise<boolean>;
+  updateHabit:(habitId: string, changes: HabitChanges) => Promise<boolean>;
   deleteHabit: (habitId: string) => Promise<void>;
   /**
    * Ensures every daily habit has a task materialized for `dateKey` (default: today),
@@ -201,23 +197,10 @@ interface CommandStoreState {
    * Returns the number of newly created tasks.
    */
   materializeDailyHabits: (dateKey?: string) => Promise<number>;
-  /**
-   * Today's (or `dateKey`'s) daily instance of one habit, materializing it first
-   * when missing. Undefined when the habit is gone, the instance is tombstoned,
-   * or the local write failed (actionError is then set).
-   */
-  ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
 
   // Time Log Operations
   /** Deletes a logged session here and, through its tombstone, on every synced device. */
   deleteTimeLog: (logId: string) => Promise<void>;
-
-  // Standalone Lists (rules in lists.ts): each resolves to true only when the List changed and was saved.
-  createList: (title: string) => Promise<boolean>;
-  renameList: (listId: string, title: string) => Promise<boolean>;
-  /** One item edit, Clear ticked or Untick all. */
-  editList: (listId: string, edit: ListEdit) => Promise<boolean>;
-  deleteList: (listId: string) => Promise<void>;
 }
 
 /** Trailing debounce for mutation-triggered syncs. */
@@ -344,15 +327,6 @@ async function runAction(
     reportActionFailure(set, name, err);
     return false;
   }
-}
-
-/** runAction for a write that may change nothing: true only when it ran and wrote. */
-async function runWrite(set: StoreSet, name: string, write: () => Promise<boolean>): Promise<boolean> {
-  let wrote = false;
-  const ok = await runAction(set, name, async () => {
-    wrote = await write();
-  });
-  return ok && wrote;
 }
 
 /**
@@ -801,23 +775,11 @@ export const useCommandStore = create<CommandStoreState>()(
           return added;
         },
 
-        ensureHabitTaskForDay: async (habitId, dateKey) => {
-          let task: Task | undefined;
-          await runAction(set, "ensureHabitTaskForDay", async () => {
-            task = await localStore.ensureHabitTaskForDay(habitId, dateKey);
-          });
-          return task;
-        },
+        ...habitDayActions((name, action) => runAction(set, name, action)),
+        ...listActions((name, action) => runAction(set, name, action)),
 
         deleteTimeLog: async (logId) => {
           await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));
-        },
-
-        createList: (title) => runWrite(set, "createList", () => localLists.createList(title)),
-        renameList: (listId, title) => runWrite(set, "renameList", () => localLists.renameList(listId, title)),
-        editList: (listId, edit) => runWrite(set, "editList", () => localLists.editList(listId, edit)),
-        deleteList: async (listId) => {
-          await runAction(set, "deleteList", () => localLists.deleteList(listId));
         },
       };
     },

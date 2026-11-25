@@ -28,6 +28,23 @@ export interface Quest {
   completedAt?: number;
 }
 
+/** A day of the week as Date#getDay counts it: 0 = Sunday … 6 = Saturday. */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
+ * Which days a Habit asks for (GLOSSARY: Frequency). Tagged by `type` so later
+ * Frequencies (N per Habit Week) join the union without reshaping stored rows.
+ */
+export type HabitFrequency =
+  | { type: "everyDay" }
+  | { type: "weekdays"; weekdays: Weekday[] }; // non-empty, ascending, unique
+
+/** One Frequency change: `frequency` is in force from `effectiveFrom` (YYYY-MM-DD) on. */
+export interface HabitFrequencyChange {
+  effectiveFrom: string;
+  frequency: HabitFrequency;
+}
+
 export interface Habit {
   id: string;
   title: string;
@@ -36,6 +53,11 @@ export interface Habit {
   rank: number;
   createdAt: number;
   updatedAt?: number;
+  /**
+   * Frequency changes, ascending by `effectiveFrom` (habitFrequency.ts). Days
+   * before the first change, and rows without the field, are every day.
+   */
+  frequencyHistory?: HabitFrequencyChange[];
 }
 
 /** One item to tick inside a Task's Checklist. */
@@ -70,6 +92,8 @@ export interface Task {
   accumulatedSeconds: number;
   scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
   habitId?: string; // Source Habit.id when materialized from a daily habit
+  /** A habit day set aside on purpose: its Outcome is Skipped (GLOSSARY). Habit day Tasks only. */
+  skipped?: boolean;
   checklist?: ChecklistItem[]; // ordered; never on a habit day Task
   reminderTime?: string; // Local "HH:MM" on a dated Task; none = date-only (ADR-0007)
   createdAt: number;

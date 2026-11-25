@@ -88,6 +88,12 @@ describe("buildWidgetSnapshot (Day Widget, today view)", () => {
     expect(todayIds(state({ habits: [habit], deletedTaskIds: ["habtsk-2026-11-22-h1"] }))).toEqual([]);
   });
 
+  it("leaves a Skipped Habit out, and lists it again once un-Skipped", () => {
+    const made = task("habtsk-2026-11-22-h1", { habitId: "h1", scheduledDate: TODAY });
+    expect(todayIds(state({ habits: [habit], tasks: [{ ...made, skipped: true }] }))).toEqual([]);
+    expect(todayIds(state({ habits: [habit], tasks: [made] }))).toEqual([made.id]);
+  });
+
   it("leaves done and archived Tasks out, and yesterday's missed Habit", () => {
     const s = state({
       tasks: [

@@ -149,12 +149,13 @@ describe("Day Widget Undo window (#9): boundaries", () => {
     expect(code("DayWidgetTaps.java")).toMatch(/DayWidgetUndo\.open\(/);
   });
 
-  it("windows live in private preferences, and end on an inexact alarm: no exact-alarm or wake permission", () => {
+  it("windows live in private preferences, and end on an inexact alarm: no exact alarm or wake lock", () => {
     const prefs = [...undo.matchAll(/getSharedPreferences\(\s*(\w+)\s*,\s*([\w.]+)\s*\)/g)];
     expect(prefs.length).toBeGreaterThan(0);
     for (const [, , mode] of prefs) expect(mode).toBe("Context.MODE_PRIVATE");
     expect(undo).not.toMatch(/setExact|setAlarmClock|RTC_WAKEUP|setAndAllowWhileIdle/);
-    expect(manifest).not.toMatch(/SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|WAKE_LOCK/);
+    // SCHEDULE_EXACT_ALARM is declared for reminders only (ADR-0007); the Undo window never uses it.
+    expect(manifest).not.toMatch(/USE_EXACT_ALARM|WAKE_LOCK/);
     // The alarm is an explicit, immutable broadcast to the non-exported provider; nothing outside can send it.
     expect(undo).toMatch(/new Intent\(ctx, DayWidgetProvider\.class\)\s*\.setAction\(DayWidgetProvider\.ACTION_UNDO_DUE\)/);
     expect(undo).toMatch(/PendingIntent\.FLAG_IMMUTABLE/);

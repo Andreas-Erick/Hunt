@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { applyListEdit, buildList, cleanListTitle, newListId, type ListEdit } from "./lists";
-import { emitChange } from "./localStore";
+import { emitChange } from "./localChange";
 import { recordDeletedListTombstone } from "./syncTombstones";
 import { compareRank } from "./syncTypes";
 import { nextStamp, RANK_STEP } from "./taskQueue";

@@ -447,6 +447,13 @@ describe("enums and dates", () => {
     expect(sanitizeOne("task", taskRow({ scheduledDate: "2024-02-29" }))?.get("scheduledDate")).toBe("2024-02-29");
   });
 
+  it("keeps a Skipped habit day's skipped: true and drops any other skipped value", () => {
+    expect(sanitizeOne("task", taskRow({ skipped: true }))?.get("skipped")).toBe(true);
+    for (const skipped of [false, "yes", "true", 1, {}, null]) {
+      expect(sanitizeOne("task", taskRow({ skipped }))?.has("skipped"), JSON.stringify(skipped)).toBe(false);
+    }
+  });
+
   it("keeps a reminderTime only when it is a local 24-hour HH:MM", () => {
     for (const reminderTime of ["9:30", "24:00", "09:30:00", "noon", 930, null, {}]) {
       expect(sanitizeOne("task", taskRow({ reminderTime }))?.has("reminderTime"), String(reminderTime)).toBe(false);
@@ -836,5 +843,70 @@ describe("quest completion boundary validation", () => {
     expect(qs[4].completedAt).toBeUndefined();
     expect(qs[5].archived).toBeUndefined();
     expect(qs[5].completedAt).toBeUndefined();
+  });
+});
+
+describe("habit Frequency history", () => {
+  const HABIT_ID = "hab-1763400000000-a1b2";
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: HABIT_ID,
+    title: "Gym",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOf = (raw: Row) => validated(rawPayload({ habits: [raw] })).payload.habits?.[0];
+
+  it("keeps an old Habit row without a Frequency as it is (it reads as every day)", () => {
+    const habit = habitOf(habitRow());
+    expect(habit).toBeDefined();
+    expect(habit?.frequencyHistory).toBeUndefined();
+  });
+
+  it("keeps a valid history, weekdays ascending and unique, in date order", () => {
+    const history = [
+      { effectiveFrom: "2026-11-20", frequency: { type: "everyDay" } },
+      { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [5, 1, 3, 1] } },
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [1, 3, 5] } },
+      { effectiveFrom: "2026-11-20", frequency: { type: "everyDay" } },
+    ]);
+  });
+
+  it("drops changes with a bad date, an unknown or empty Frequency, or out-of-range weekdays", () => {
+    const history = [
+      { effectiveFrom: "2026-11-1", frequency: { type: "everyDay" } },
+      { effectiveFrom: "2026-11-02", frequency: { type: "hourly" } },
+      { effectiveFrom: "2026-11-03", frequency: { type: "weekdays", weekdays: [] } },
+      { effectiveFrom: "2026-11-04", frequency: { type: "weekdays", weekdays: [7, -1, 2.5, "1"] } },
+      { effectiveFrom: "2026-11-05", frequency: { type: "weekdays", weekdays: [0, 9], extra: { deep: 1 } } },
+      "2026-11-06",
+      null,
+    ];
+    expect(habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory).toEqual([
+      { effectiveFrom: "2026-11-05", frequency: { type: "weekdays", weekdays: [0] } },
+    ]);
+    expect(habitOf(habitRow({ frequencyHistory: "every day" }))?.frequencyHistory).toBeUndefined();
+    expect(
+      habitOf(habitRow({ frequencyHistory: [{ effectiveFrom: "x", frequency: {} }] }))?.frequencyHistory
+    ).toBeUndefined();
+  });
+
+  it("keeps at most the newest 100 changes, and validating its own output changes nothing", () => {
+    const history = Array.from({ length: 150 }, (_, i) => ({
+      effectiveFrom: localDateKey(new Date(2026, 0, 1 + i, 12).getTime()),
+      frequency: i % 2 ? { type: "everyDay" } : { type: "weekdays", weekdays: [i % 7] },
+    }));
+    const kept = habitOf(habitRow({ frequencyHistory: history }))?.frequencyHistory ?? [];
+    expect(kept).toHaveLength(100);
+    expect(kept[99].effectiveFrom).toBe(history[149].effectiveFrom);
+    const once = validated(rawPayload({ habits: [habitRow({ frequencyHistory: history })] })).payload;
+    const again = validated(JSON.parse(JSON.stringify(once)));
+    expect(again.dropped).toBe(0);
+    expect(syncContentKey(again.payload)).toBe(syncContentKey(once));
   });
 });

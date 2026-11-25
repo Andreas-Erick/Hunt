@@ -105,8 +105,9 @@ describe("habitStreakOf (Streak from Outcomes, newest day first)", () => {
     expect(streak("met", "open", "met")).toBe(1);
   });
 
-  it("is ended by a day with no Outcome and is 0 for no days", () => {
-    expect(streak("met", null, "met")).toBe(1);
+  it("passes over a day with no Outcome (unscheduled) and is 0 for no days", () => {
+    expect(streak("met", null, "met")).toBe(2);
+    expect(streak(null, "met", null, null, "met", "missed")).toBe(2);
     expect(streak()).toBe(0);
   });
 
@@ -154,5 +155,53 @@ describe("summarizeHabitDays outcomeOn (a Habit's Outcome on any day)", () => {
       summarizeHabitDays([...base, yesterday, dayTask(TODAY)], TODAY).summaryFor(HABIT.id);
     expect(summary(ticked("2026-05-10")).streak).toBe(3);
     expect(summary(dayTask("2026-05-10", { status: "active" })).streak).toBe(0);
+  });
+});
+
+describe("Skipped habit days", () => {
+  it("is Skipped for a day set aside, today or earlier", () => {
+    for (const dayKey of [TODAY, "2026-05-01"]) {
+      const outcome = habitDayOutcome({
+        habit: HABIT,
+        dayKey,
+        dayTask: dayTask(dayKey, { skipped: true }),
+        todayKey: TODAY,
+      });
+      expect(outcome, dayKey).toBe("skipped");
+    }
+  });
+
+  it("is Met, not Skipped, once the day is ticked", () => {
+    expect(
+      habitDayOutcome({
+        habit: HABIT,
+        dayKey: TODAY,
+        dayTask: dayTask(TODAY, { skipped: true, status: "completed" }),
+        todayKey: TODAY,
+      })
+    ).toBe("met");
+  });
+
+  it("lets the Streak pass over Skipped days, neither adding to nor breaking it", () => {
+    expect(habitStreakOf(["met", "skipped", "skipped", "met", "missed"])).toBe(2);
+    expect(habitStreakOf(["skipped", "met", "met"])).toBe(2);
+    expect(habitStreakOf(["open", "skipped", "met"])).toBe(1);
+    expect(habitStreakOf(["skipped", "missed", "met"])).toBe(0);
+  });
+
+  it("carries a Skipped day through summarizeHabitDays", () => {
+    const at8 = (k: string) => {
+      const [y, m, d] = k.split("-").map(Number);
+      return new Date(y, m - 1, d, 8).getTime();
+    };
+    const tasks = [
+      dayTask("2026-05-08", { status: "completed", completedAt: at8("2026-05-08") }),
+      dayTask("2026-05-09", { skipped: true }),
+      dayTask("2026-05-10", { status: "completed", completedAt: at8("2026-05-10") }),
+      dayTask(TODAY),
+    ];
+    const s = summarizeHabitDays(tasks, TODAY).summaryFor(HABIT.id);
+    expect(s.outcomeOn("2026-05-09")).toBe("skipped");
+    expect(s.streak).toBe(2);
   });
 });
