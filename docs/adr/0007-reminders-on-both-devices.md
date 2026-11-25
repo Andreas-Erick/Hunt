@@ -59,7 +59,8 @@ Each device re-plans after every save and every sync.
   into a Windows notification. The notification tag is the
   reminder key, so two windows replace each other's toast
   instead of stacking. A click focuses Hunt; a Habit's
-  opens Habits at its card.
+  opens Habits at its card (with the service worker, the
+  worker hands the click to the window, which opens it).
 - **Phone.** After every save (a sync's merge is saved
   too), at boot and at the start of each day, the page
   hands the shell a Reminder Plan: HuntCore's

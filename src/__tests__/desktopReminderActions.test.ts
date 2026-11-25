@@ -5,10 +5,11 @@
 // notification stays (desktopReminders.test.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
-import type { Task } from "@/lib/domainTypes";
+import type { Habit, Task } from "@/lib/domainTypes";
 import { startDesktopReminders } from "@/lib/desktopReminders";
 import { REMINDER_ACTION_MESSAGE, reminderNotificationActions, runReminderAction } from "@/lib/desktopReminderActions";
 import { localStore } from "@/lib/localStore";
+import { useCommandStore } from "@/store/useCommandStore";
 
 const REMINDER_AT = new Date(2026, 10, 25, 9, 30).getTime();
 const KEY = "task:tsk-1:2026-11-25T09:30";
@@ -132,6 +133,22 @@ describe("desktop notification actions", () => {
     await waitUntil(Date.now() + 10 * 60_000);
     await vi.advanceTimersByTimeAsync(1000);
     expect(shown).toHaveLength(2);
+  });
+
+  it("a Habit reminder through the worker reads as one, offers its Done, and a plain click opens Habits", async () => {
+    const check: Habit = { id: "hab-1", title: "Read", notes: "", questId: null, rank: 1000, createdAt: 10, reminderTimes: ["09:30"] };
+    await db.habits.put(check);
+    useCommandStore.setState({ activeView: "command" });
+    stop = startDesktopReminders(noDeps);
+    await waitUntil(REMINDER_AT);
+    await vi.waitFor(() => expect(shown).toHaveLength(1));
+    expect(shown[0].options).toMatchObject({
+      body: "Habit reminder · 09:30",
+      actions: reminderNotificationActions({ tick: "done", taskId: "habtsk-2026-11-25-hab-1" }),
+    });
+    vi.spyOn(window, "focus").mockImplementation(() => {});
+    press("open");
+    expect(useCommandStore.getState().activeView).toBe("habits");
   });
 
   it("routes a Habit reminder's Done to that day's habit Task and +1 to the Count rule", async () => {

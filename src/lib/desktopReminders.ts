@@ -93,6 +93,7 @@ function openReminder(reminder: DueReminder): void {
 /**
  * Shows one reminder. With a service worker it carries Done (or +1) and Snooze
  * buttons (desktopReminderActions.ts); without one, a plain notification.
+ * Either way a click opens the item (openReminder).
  */
 async function showReminder(reminder: DueReminder, worker: ServiceWorkerRegistration | null, withActions: boolean): Promise<void> {
   if (notificationAccess() !== "granted") return;
@@ -148,7 +149,8 @@ export function startDesktopReminders(actions?: ReminderActionDeps): () => void 
         ({ reminder }) => {
           if (saveDesktopSnooze(reminder, Date.now())) alarm.replan();
           else onError(new Error("Saving a snooze failed: browser storage is unavailable"));
-        }
+        },
+        ({ reminder }) => openReminder(reminder)
       )
     : () => {};
   return () => {

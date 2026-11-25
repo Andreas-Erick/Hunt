@@ -88,12 +88,14 @@ export async function reminderWorker(): Promise<ServiceWorkerRegistration | null
 }
 
 /**
- * Listens for pressed buttons; returns the stop function. `onTick` applies a
- * Done or +1, `onSnooze` stores a Snooze.
+ * Listens for pressed buttons and clicks; returns the stop function. `onTick`
+ * applies a Done or +1, `onSnooze` stores a Snooze, `onOpen` opens the item
+ * after a click on the notification itself.
  */
 export function listenForReminderActions(
   onTick: (data: ReminderNotificationData & { action: ReminderAction }) => void,
-  onSnooze: (data: ReminderNotificationData) => void
+  onSnooze: (data: ReminderNotificationData) => void,
+  onOpen?: (data: ReminderNotificationData) => void
 ): () => void {
   if (typeof navigator === "undefined" || !navigator.serviceWorker) return () => {};
   const onMessage = (event: MessageEvent) => {
@@ -101,6 +103,7 @@ export function listenForReminderActions(
     if (!msg || msg.type !== REMINDER_ACTION_MESSAGE || !msg.data?.reminder) return;
     const { data } = msg;
     if (msg.action === "snooze") onSnooze(data);
+    else if (msg.action === "open") onOpen?.(data);
     else if (msg.action === "tick" && data.action) onTick({ ...data, action: data.action });
   };
   navigator.serviceWorker.addEventListener("message", onMessage as EventListener);
