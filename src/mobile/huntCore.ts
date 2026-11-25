@@ -85,3 +85,4 @@ export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnaps
 export { applyPendingTicks } from "../lib/pendingTicks";
 export { dueReminders, isReminderTime } from "../lib/reminders";
 export { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "../lib/reminderPlan";
+export { correctHabitDayRow, habitMonth, habitStartKey, shiftMonthKey } from "../lib/habitCalendar";

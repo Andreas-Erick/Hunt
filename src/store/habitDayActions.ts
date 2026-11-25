@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/domainTypes";
+import type { HabitDayMark } from "@/lib/habitCalendar";
 import { localStore } from "@/lib/localStore";
 
 /** Runs a Local Store write as a named store action; false when it failed (actionError is set). */
@@ -14,6 +15,8 @@ export interface HabitDayActions {
   ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
   /** Marks one habit day Skipped, or un-Skips it (the shared skipHabitDayRow row). */
   setHabitDaySkipped: (habitId: string, dateKey: string, skipped: boolean) => Promise<void>;
+  /** Ticks, unticks or Skips one habit day from its calendar (the shared correctHabitDayRow row). */
+  correctHabitDay: (habitId: string, dateKey: string, mark: HabitDayMark) => Promise<void>;
 }
 
 export function habitDayActions(run: RunAction): HabitDayActions {
@@ -28,6 +31,10 @@ export function habitDayActions(run: RunAction): HabitDayActions {
 
     setHabitDaySkipped: async (habitId, dateKey, skipped) => {
       await run("setHabitDaySkipped", () => localStore.setHabitDaySkipped(habitId, dateKey, skipped));
+    },
+
+    correctHabitDay: async (habitId, dateKey, mark) => {
+      await run("correctHabitDay", () => localStore.correctHabitDay(habitId, dateKey, mark));
     },
   };
 }

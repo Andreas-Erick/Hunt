@@ -800,6 +800,19 @@
       overflow-wrap: anywhere; /* the unit is user text */
     }
 
+    /* Habit card week strip (every width): each Outcome has its own shape, so it reads without colour. */
+    .habit-strip { display: inline-flex; align-items: flex-end; gap: 4px; margin: 0; padding: 0; list-style: none; }
+    .habit-strip > li { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .habit-strip-mark { width: 13px; height: 13px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box; }
+    .habit-strip-mark svg { width: 9px; height: 9px; }
+    .habit-strip-mark.missed { border: 1px solid rgb(var(--c-ink) / 0.28); color: rgb(var(--c-ink) / 0.55); }
+    .habit-strip-mark.missed svg { width: 7px; height: 7px; }
+    .habit-strip-mark.skipped { border: 1px dashed rgb(var(--c-ink) / 0.42); }
+    .habit-strip-mark.open { border: 1px solid rgb(var(--c-ink) / 0.55); }
+    .habit-strip-mark.none::after { content: ""; width: 8px; height: 2px; border-radius: 1px; background: rgb(var(--c-ink) / 0.16); }
+    .habit-strip-day { font-size: 9px; line-height: 1; color: var(--dim); }
+    .habit-strip-day.today { color: var(--text-2); font-weight: 600; }
+
     .queue-item-body {
       flex: 1;
       min-width: 0;
@@ -1111,6 +1124,43 @@
       letter-spacing: calc(0.12em * var(--label-track));
       color: var(--dim);
       margin-bottom: 8px;
+    }
+    /* Habit detail (Calendar tab): a month of Outcomes; colour is never the only cue (each day's label names it). */
+    .habit-tabs { display: flex; gap: 8px; border-bottom: 1px solid rgb(var(--c-ink) / 0.1); margin: 0 0 12px; }
+    .habit-tab {
+      min-height: var(--touch-min); padding: 0 14px; margin-bottom: -1px; border: none;
+      border-bottom: 2px solid transparent; background: none; color: var(--muted);
+      font: inherit; font-size: 14px; cursor: pointer;
+    }
+    .habit-tab[aria-selected="true"] { color: var(--white); border-bottom-color: var(--cyan); }
+    .habit-cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .habit-cal-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--white); }
+    .habit-cal-nav {
+      width: var(--touch-min); height: var(--touch-min); border-radius: 12px; border: none;
+      background: rgb(var(--c-ink) / 0.05); color: var(--text-2); font-size: 18px; cursor: pointer;
+    }
+    .habit-cal-nav:disabled { opacity: 0.3; cursor: default; }
+    .habit-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; margin: 8px -6px 0; }
+    .habit-cal-wd { text-align: center; font-size: 11px; color: var(--dim); padding-bottom: 2px; }
+    .habit-cal-day {
+      display: flex; align-items: center; justify-content: center; min-width: 0;
+      height: var(--touch-min); border-radius: 10px; border: 1px solid transparent;
+      background: rgb(var(--c-ink) / 0.03); color: rgb(var(--p-muted) / 0.6);
+      font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; padding: 0;
+    }
+    button.habit-cal-day { cursor: pointer; transition: transform 150ms ease-out, opacity 150ms ease-out; }
+    button.habit-cal-day:active { transform: scale(0.95); }
+    .habit-cal-day.met { background: var(--habit-hex); color: rgb(var(--c-on-accent)); font-weight: 700; }
+    .habit-cal-day.missed { background: rgb(var(--c-danger) / 0.08); border-color: rgb(var(--c-danger) / 0.4); color: var(--text-2); }
+    .habit-cal-day.skipped { background: transparent; border: 1px dashed rgb(var(--c-ink) / 0.35); color: var(--muted); }
+    .habit-cal-day.open { background: transparent; border-color: rgb(var(--c-ink) / 0.5); color: var(--white); }
+    .habit-cal-day.chosen { box-shadow: 0 0 0 2px var(--cyan); }
+    .habit-cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--muted); }
+    .habit-cal-legend li { display: flex; align-items: center; gap: 6px; }
+    .habit-cal-legend .habit-cal-day { width: 12px; height: 12px; border-radius: 4px; }
+    .habit-cal-daybox {
+      margin-top: 12px; min-height: 96px; padding: 10px 12px; border-radius: 14px;
+      border: 1px solid rgb(var(--c-ink) / 0.08); background: rgb(var(--c-ink) / 0.03);
     }
     .sheet-footer-row {
       display: flex;
@@ -2912,19 +2962,6 @@
         margin-bottom: 0;
       }
 
-      /* Habit card week strip: each Outcome has its own shape, so it reads without colour. */
-      .habit-strip { display: inline-flex; align-items: flex-end; gap: 4px; margin: 0; padding: 0; list-style: none; }
-      .habit-strip > li { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-      .habit-strip-mark { width: 13px; height: 13px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box; }
-      .habit-strip-mark svg { width: 9px; height: 9px; }
-      .habit-strip-mark.missed { border: 1px solid rgb(var(--c-ink) / 0.28); color: rgb(var(--c-ink) / 0.55); }
-      .habit-strip-mark.missed svg { width: 7px; height: 7px; }
-      .habit-strip-mark.skipped { border: 1px dashed rgb(var(--c-ink) / 0.42); }
-      .habit-strip-mark.open { border: 1px solid rgb(var(--c-ink) / 0.55); }
-      .habit-strip-mark.none::after { content: ""; width: 8px; height: 2px; border-radius: 1px; background: rgb(var(--c-ink) / 0.16); }
-      .habit-strip-day { font-size: 9px; line-height: 1; color: var(--dim); }
-      .habit-strip-day.today { color: var(--text-2); font-weight: 600; }
-
       /* Plan 5-day strip: roomier cards on Tablet */
       .plan-strip {
         gap: 12px;
@@ -3170,6 +3207,7 @@ var HuntCore = (() => {
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    correctHabitDayRow: () => correctHabitDayRow,
     countProgressLabel: () => countProgressLabel,
     countTargetOf: () => countTargetOf,
     dueReminders: () => dueReminders,
@@ -3180,6 +3218,8 @@ var HuntCore = (() => {
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
     habitKindOf: () => habitKindOf,
+    habitMonth: () => habitMonth,
+    habitStartKey: () => habitStartKey,
     habitStreakOf: () => habitStreakOf,
     habitSuccessRate: () => habitSuccessRate,
     habitSuccessRateLabel: () => habitSuccessRateLabel,
@@ -3211,6 +3251,7 @@ var HuntCore = (() => {
     sanitizeList: () => sanitizeList,
     sessionLogId: () => sessionLogId,
     setHabitDayAmount: () => setHabitDayAmount,
+    shiftMonthKey: () => shiftMonthKey,
     skipHabitDayRow: () => skipHabitDayRow,
     summarizeHabitDays: () => summarizeHabitDays,
     toFocusSession: () => toFocusSession,
@@ -4407,6 +4448,64 @@ var HuntCore = (() => {
   function reminderPlan(sources, now) {
     const due = dueReminders(sources, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
     return { version: 1, reminders: due.slice(0, REMINDER_PLAN_MAX) };
+  }
+
+  // src/lib/habitCalendar.ts
+  var pad = (n) => String(n).padStart(2, "0");
+  function shiftMonthKey(monthKey, offset) {
+    const [y, m] = monthKey.split("-").map(Number);
+    const index = y * 12 + (m - 1) + offset;
+    return `${Math.floor(index / 12)}-${pad(index % 12 + 1)}`;
+  }
+  function habitStartKey(habit, todayKey) {
+    const made = Number(habit.createdAt);
+    if (!Number.isFinite(made) || made <= 0) return todayKey;
+    const key = toLocalDateKey(made);
+    return key > todayKey ? todayKey : key;
+  }
+  function habitMonth({
+    monthKey,
+    todayKey,
+    startKey,
+    outcomeOn
+  }) {
+    const firstMonth = startKey.slice(0, 7);
+    const lastMonth = todayKey.slice(0, 7) < firstMonth ? firstMonth : todayKey.slice(0, 7);
+    const shown = monthKey < firstMonth ? firstMonth : monthKey > lastMonth ? lastMonth : monthKey;
+    const [y, m] = shown.split("-").map(Number);
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+    const slots = Array.from({ length: lead }, () => null);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayKey = `${shown}-${pad(day)}`;
+      const outcome = dayKey < startKey ? null : outcomeOn(dayKey);
+      slots.push({ dayKey, day, outcome, correctable: outcome !== null && dayKey <= todayKey });
+    }
+    while (slots.length % 7 !== 0) slots.push(null);
+    const weeks = [];
+    for (let i = 0; i < slots.length; i += 7) weeks.push(slots.slice(i, i + 7));
+    return {
+      monthKey: shown,
+      weeks,
+      prevMonthKey: shown > firstMonth ? shiftMonthKey(shown, -1) : null,
+      nextMonthKey: shown < lastMonth ? shiftMonthKey(shown, 1) : null
+    };
+  }
+  function correctHabitDayRow(task, mark, at) {
+    if (task.status === "active") return task;
+    const met = task.status === "completed";
+    const skipped = !met && Boolean(task.skipped);
+    if (mark === "met" && met || mark === "skipped" && skipped || mark === "none" && !met && !skipped) {
+      return task;
+    }
+    if (mark === "met") return completeTaskRow(task, at);
+    return {
+      ...task,
+      status: "queued",
+      completedAt: void 0,
+      skipped: mark === "skipped" ? true : void 0,
+      updatedAt: nextStamp(task, at)
+    };
   }
   return __toCommonJS(huntCore_exports);
 })();
@@ -9147,6 +9246,118 @@ var HuntCore = (() => {
       commitLocalChange();
     }
 
+    // Habit detail sheet: one tab per view of the Habit (Calendar for now; Statistics and Edit join
+    // HABIT_DETAIL_TABS). The month grid is the shared HuntCore.habitMonth, the same as the desktop's.
+    const HABIT_DETAIL_TABS = [{ id: "calendar", label: "Calendar" }];
+    const HABIT_OUTCOME_LABEL = { met: "Met", missed: "Missed", skipped: "Skipped", open: "Open" };
+    let habitDetail = null; // { habitId, tab, monthKey, dayKey }
+
+    function openHabitDetailSheet(habitId) {
+      playClickSound();
+      habitDetail = { habitId, tab: "calendar", monthKey: toLocalDateKey().slice(0, 7), dayKey: null };
+      renderHabitDetailSheet();
+    }
+
+    function habitDetailMonthName(monthKey, withYear) {
+      const parts = monthKey.split("-").map(Number);
+      const opts = withYear ? { month: "long", year: "numeric" } : { month: "long" };
+      return new Date(parts[0], parts[1] - 1, 1).toLocaleDateString("en-US", opts);
+    }
+
+    function renderHabitDetailSheet() {
+      const h = habitDetail && asArray(state.habits).find(x => x.id === habitDetail.habitId);
+      if (!h) { habitDetail = null; return; }
+      const todayKey = toLocalDateKey();
+      const summary = summarizeHabitDays(state.tasks, todayKey, asArray(state.habits)).summaryFor(h.id);
+      const month = HuntCore.habitMonth({
+        monthKey: habitDetail.monthKey, todayKey, startKey: HuntCore.habitStartKey(h, todayKey), outcomeOn: summary.outcomeOn
+      });
+      habitDetail.monthKey = month.monthKey;
+      const q = state.quests.find(x => x.id === h.questId);
+      const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
+      const monthName = habitDetailMonthName(month.monthKey, false);
+      const days = month.weeks.flat();
+      const chosen = days.find(d => d && d.correctable && d.dayKey === habitDetail.dayKey) || null;
+      const dayName = d => d.day + " " + monthName;
+      const cells = days.map(d => {
+        if (!d) return `<span></span>`;
+        const label = dayName(d) + ": " + (d.outcome ? HABIT_OUTCOME_LABEL[d.outcome] : "no Outcome");
+        const cls = "habit-cal-day " + (d.outcome || "") + (chosen && chosen.dayKey === d.dayKey ? " chosen" : "");
+        return d.correctable
+          ? `<button class="${cls}" aria-label="${label}" aria-pressed="${!!(chosen && chosen.dayKey === d.dayKey)}" onclick="chooseHabitDetailDay(${jsArg(d.dayKey)})">${d.day}</button>`
+          : `<span class="${cls}" aria-label="${label}" title="${label}">${d.day}</span>`;
+      }).join("");
+      const action = (mark, text) =>
+        `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 16px;" aria-label="${text} ${dayName(chosen)}" onclick="correctHabitDetailDay(${jsArg(mark)})">${text}</button>`;
+      const dayBox = chosen ? `
+          <div style="font-size:14px;color:var(--white);">${dayName(chosen)} · <span style="color:var(--muted);">${HABIT_OUTCOME_LABEL[chosen.outcome] || ""}</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            ${chosen.outcome === "met" ? action("none", "Untick") : action("met", "Tick")}
+            ${chosen.outcome === "skipped" ? action("none", "Undo skip") : action("skipped", "Skip")}
+          </div>`
+        : `<div style="font-size:12px;color:var(--muted);line-height:1.4;">Choose a day to tick, untick or Skip it. A Skipped day neither breaks nor adds to the streak.</div>`;
+      const legend = [["met", "Met"], ["missed", "Missed"], ["skipped", "Skipped"], ["open", "Open"], ["", "No Outcome"]]
+        .map(([cls, text]) => `<li><span class="habit-cal-day ${cls}" aria-hidden="true"></span>${text}</li>`).join("");
+      const tabs = HABIT_DETAIL_TABS.map(t =>
+        `<button class="habit-tab" role="tab" id="habitTab-${t.id}" aria-selected="${habitDetail.tab === t.id}" aria-controls="habitPanel-${t.id}">${t.label}</button>`
+      ).join("");
+      showSheet("habitDetail:" + h.id, `
+          ${sheetHeaderHtml(escapeHtml(h.title))}
+          <div class="habit-tabs" role="tablist" aria-label="Habit views">${tabs}</div>
+          <div id="habitPanel-calendar" role="tabpanel" aria-labelledby="habitTab-calendar" style="--habit-hex:${hex};">
+            <div class="habit-cal-head">
+              <button class="habit-cal-nav pressable" aria-label="Previous month" ${month.prevMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.prevMonthKey || "")})">‹</button>
+              <div class="habit-cal-title" aria-live="polite">${habitDetailMonthName(month.monthKey, true)}</div>
+              <button class="habit-cal-nav pressable" aria-label="Next month" ${month.nextMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.nextMonthKey || "")})">›</button>
+            </div>
+            <div class="habit-cal-grid" aria-hidden="true">${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(x => `<span class="habit-cal-wd">${x}</span>`).join("")}</div>
+            <div class="habit-cal-grid">${cells}</div>
+            <ul class="habit-cal-legend" aria-label="Legend">${legend}</ul>
+            <div class="habit-cal-daybox">${dayBox}</div>
+            <div class="sheet-label" style="margin-top:14px;">Notes</div>
+            <div style="font-size:14px;color:var(--text-2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;">${h.notes ? escapeHtml(h.notes) : `<span style="color:var(--muted);">No notes.</span>`}</div>
+          </div>
+      `);
+    }
+
+    function shiftHabitDetailMonth(monthKey) {
+      if (!habitDetail || !monthKey) return;
+      playClickSound();
+      habitDetail.monthKey = monthKey;
+      habitDetail.dayKey = null;
+      renderHabitDetailSheet();
+    }
+
+    function chooseHabitDetailDay(dayKey) {
+      if (!habitDetail) return;
+      habitDetail.dayKey = habitDetail.dayKey === dayKey ? null : dayKey;
+      renderHabitDetailSheet();
+    }
+
+    // Ticks, unticks or Skips the chosen day with the shared rule (HuntCore.correctHabitDayRow, the
+    // desktop's too), creating the day's Task when it was never materialized.
+    function correctHabitDetailDay(mark) {
+      const h = habitDetail && asArray(state.habits).find(x => x.id === habitDetail.habitId);
+      const dayKey = habitDetail && habitDetail.dayKey;
+      if (!h || !dayKey) return;
+      const tid = habitTaskId(h.id, dayKey);
+      let t = state.tasks.find(x => x.id === tid);
+      if (!t) {
+        state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
+        t = buildHabitTaskRow(h, dayKey);
+        state.tasks.push(t);
+        state.tasks.sort(compareRank);
+      }
+      const next = HuntCore.correctHabitDayRow(t, mark, Date.now());
+      if (next !== t) {
+        playClickSound();
+        Object.assign(t, next);
+        ["skipped", "completedAt"].forEach(k => { if (t[k] === undefined) delete t[k]; });
+        commitLocalChange();
+      }
+      renderHabitDetailSheet();
+    }
+
     function focusHabitToday(habitId) {
       const todayKey = toLocalDateKey();
       const tid = habitTaskId(habitId, todayKey);
@@ -11260,17 +11471,17 @@ var HuntCore = (() => {
                 ${asked ? `<button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">` : `<button class="task-check-ring" style="margin-top:2px;" disabled aria-label="Not scheduled today: ${title}">`}
                   ${SVG_CHECK}
                 </button>`}
-                <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})">
+                <div class="queue-item-body" role="button" tabindex="0" aria-label="Open habit ${title}" onclick="openHabitDetailSheet(${jsArg(h.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHabitDetailSheet(${jsArg(h.id)})}">
                   <div class="queue-item-title" style="${doneToday ? "text-decoration:line-through;color:var(--muted);" : skippedToday ? "color:var(--muted);" : ""}">${title}</div>
                   ${skippedToday ? `<div style="font-size:12px;color:var(--muted);margin-top:-2px;">Skipped today</div>` : ""}
                   ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(h.notes)}</div>` : ""}
                   <div class="queue-item-sub" style="margin-top:8px;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;">
-                    <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1;">
+                    <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1 1 140px;">
                       <span style="width:6px;height:6px;border-radius:50%;background:${hex};flex-shrink:0;"></span>
                       <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
                       <span style="flex-shrink:0;color:var(--dim);">· ${frequencyLabel}</span>
                     </span>
-                    <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
+                    <span style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;max-width:100%;">
                       ${isCount ? `<span class="count-progress">${escapeHtml(countProgressLabel(h, habitDayAmount(todayTask)))}</span>` : ""}
                       <ul class="habit-strip" aria-label="Last 7 days">${stripHtml}</ul>
                       ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;" aria-label="Streak ${streak} days">${streak}d</span>` : ""}
