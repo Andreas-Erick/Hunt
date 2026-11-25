@@ -82,6 +82,30 @@ describe("buildWidgetSnapshot (Day Widget, today view)", () => {
     expect(rows[0]).toMatchObject({ title: "Meditate", habit: true, tickable: true });
   });
 
+  it("is version 2: a Count Habit row taps +1, which a version-1 widget would read as done", () => {
+    expect(WIDGET_SNAPSHOT_VERSION).toBe(2);
+  });
+
+  it("gives each Habit row its Kind, and a Count Habit row its progress, n / target", () => {
+    const jog: Habit = { ...habit, id: "jog", title: "Jog", rank: 600, kind: "count", target: 3, unit: "miles" };
+    const partway = task("habtsk-2026-11-22-jog", { habitId: "jog", scheduledDate: TODAY, amount: 2, rank: 600 });
+    const rows = buildWidgetSnapshot(state({ habits: [habit, jog], tasks: [partway, task("a", { rank: 2000 })] }), TODAY, "neon")
+      .days[0].today;
+    expect(rows.map((r) => [r.id, r.habitKind])).toEqual([
+      ["habtsk-2026-11-22-h1", "check"],
+      ["habtsk-2026-11-22-jog", "count"],
+      ["a", undefined],
+    ]);
+    expect(rows[1]).toMatchObject({ tickable: true, progress: "2 / 3 miles" });
+    expect(rows[0].progress).toBeUndefined();
+  });
+
+  it("shows a Count Habit Hunt has not created a row for yet at 0 / target", () => {
+    const glasses: Habit = { ...habit, id: "w", title: "Water", kind: "count", target: 7 };
+    const [row] = buildWidgetSnapshot(state({ habits: [glasses] }), TODAY, "neon").days[0].today;
+    expect(row).toMatchObject({ habitKind: "count", progress: "0 / 7" });
+  });
+
   it("does not duplicate a Habit row that exists, nor revive a deleted one", () => {
     const made = task("habtsk-2026-11-22-h1", { habitId: "h1", scheduledDate: TODAY, status: "completed" });
     expect(todayIds(state({ habits: [habit], tasks: [made] }))).toEqual([]);

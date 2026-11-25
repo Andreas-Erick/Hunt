@@ -1,5 +1,5 @@
 import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
-import type { Task } from "./domainTypes";
+import type { Habit, Task } from "./domainTypes";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +40,7 @@ export interface HabitDaySummary {
   completedDates: ReadonlySet<string>;
   /** Met days in a row ending today, or yesterday while today is Open. */
   streak: number;
-  /** Whether today's instance is completed. */
+  /** Whether today is Met (a Check Habit ticked, a Count Habit at its target). */
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
@@ -61,12 +61,15 @@ function addDayTask(days: Map<string, Task>, task: Task, day: string): void {
 /**
  * Per-habit day summary from the materialized habit tasks. Today's instance is
  * the row with the deterministic id (habitTaskId) when present, else any row of
- * that habit scheduled for `todayKey`. Pure: `habitTasks` is not modified.
- * Habits without any task still get a summary from `summaryFor`.
+ * that habit scheduled for `todayKey`. `habits` gives each Habit's Kind (and a
+ * Count Habit's target) to judge its days by; a Habit not among them reads as
+ * a daily Check Habit. Pure: `habitTasks` is not modified. Habits without any
+ * task still get a summary from `summaryFor`.
  */
 export function summarizeHabitDays(
   habitTasks: readonly Task[],
-  todayKey: string
+  todayKey: string,
+  habits: readonly Habit[] = []
 ): {
   summaryFor: (habitId: string) => HabitDaySummary;
 } {
@@ -106,13 +109,14 @@ export function summarizeHabitDays(
         const todayTask = todayByHabit.get(habitId);
         const completedDates = datesByHabit.get(habitId) ?? EMPTY_DATES;
         const dayTasks = dayTasksByHabit.get(habitId);
+        const habit = habits.find((h) => h.id === habitId) ?? { id: habitId };
         const outcomeOn = (dayKey: string) =>
-          habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
+          habitDayOutcome({ habit, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
         summary = {
           todayTask,
           completedDates,
           streak: habitStreakOn(todayKey, outcomeOn),
-          doneToday: todayTask?.status === "completed",
+          doneToday: outcomeOn(todayKey) === "met",
           outcomeOn,
         };
         cache.set(habitId, summary);

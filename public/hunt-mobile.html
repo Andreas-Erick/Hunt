@@ -770,6 +770,30 @@
       color: rgb(var(--c-on-accent));
     }
 
+    /* A Count Habit's ring reads "+1": a tap adds one, a held press types an exact total. */
+    .task-check-ring.count-plus {
+      color: var(--text-2);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+    }
+    .task-check-ring.count-plus.done {
+      color: rgb(var(--c-on-accent));
+    }
+    .count-progress {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+      min-width: 0;
+      overflow-wrap: anywhere; /* the unit is user text */
+    }
+
     .queue-item-body {
       flex: 1;
       min-width: 0;
@@ -2885,9 +2909,11 @@ var HuntCore = (() => {
   // src/mobile/huntCore.ts
   var huntCore_exports = {};
   __export(huntCore_exports, {
+    MAX_COUNT_UNIT_LENGTH: () => MAX_COUNT_UNIT_LENGTH,
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
+    addHabitDayCount: () => addHabitDayCount,
     applyPendingTicks: () => applyPendingTicks,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
@@ -2897,10 +2923,16 @@ var HuntCore = (() => {
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    countProgressLabel: () => countProgressLabel,
+    countTargetOf: () => countTargetOf,
+    formatCountAmount: () => formatCountAmount,
     fromFocusSession: () => fromFocusSession,
+    habitDayAmount: () => habitDayAmount,
     habitDayOutcome: () => habitDayOutcome,
+    habitKindOf: () => habitKindOf,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
+    isCountTarget: () => isCountTarget,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
     isSafeSyncId: () => isSafeSyncId,
@@ -2908,19 +2940,69 @@ var HuntCore = (() => {
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
     nextStamp: () => nextStamp,
+    parseCountAmount: () => parseCountAmount,
     pickNextFocusTask: () => pickNextFocusTask,
     sameContent: () => sameContent,
     sessionLogId: () => sessionLogId,
+    setHabitDayAmount: () => setHabitDayAmount,
     summarizeHabitDays: () => summarizeHabitDays,
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
     transitionFocus: () => transitionFocus
   });
 
+  // src/lib/habitKind.ts
+  var HABIT_KIND_TABLE = {
+    check: true,
+    count: true
+  };
+  var MAX_COUNT_AMOUNT = 1e6;
+  var MAX_COUNT_UNIT_LENGTH = 40;
+  function isHabitKind(value) {
+    return typeof value === "string" && Object.prototype.hasOwnProperty.call(HABIT_KIND_TABLE, value);
+  }
+  function habitKindOf(habit) {
+    const kind = habit == null ? void 0 : habit.kind;
+    return isHabitKind(kind) ? kind : "check";
+  }
+  function isCountAmount(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  }
+  function countTargetOf(habit) {
+    const target = habit.target;
+    return typeof target === "number" && Number.isFinite(target) && target > 0 ? Math.min(target, MAX_COUNT_AMOUNT) : 1;
+  }
+  function habitDayAmount(task) {
+    const amount = task == null ? void 0 : task.amount;
+    return typeof amount === "number" && Number.isFinite(amount) && amount > 0 ? amount : 0;
+  }
+  function cleanCountAmount(amount) {
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    return Math.round(Math.min(amount, MAX_COUNT_AMOUNT) * 100) / 100;
+  }
+  function formatCountAmount(amount) {
+    return String(cleanCountAmount(amount));
+  }
+  function countProgressLabel(habit, amount) {
+    const unit = typeof habit.unit === "string" ? habit.unit.trim() : "";
+    const label = `${formatCountAmount(amount)} / ${formatCountAmount(countTargetOf(habit))}`;
+    return unit ? `${label} ${unit}` : label;
+  }
+  function parseCountAmount(text) {
+    const trimmed = String(text != null ? text : "").trim().replace(",", ".");
+    if (!/^\d+(\.\d+)?$|^\.\d+$/.test(trimmed)) return null;
+    const value = Number(trimmed);
+    return Number.isFinite(value) ? cleanCountAmount(value) : null;
+  }
+  function isCountTarget(value) {
+    return isCountAmount(value) && value > 0 && value <= MAX_COUNT_AMOUNT;
+  }
+
   // src/lib/habitOutcome.ts
-  function habitDayOutcome({ dayKey, dayTask, todayKey }) {
+  function habitDayOutcome({ habit, dayKey, dayTask, todayKey }) {
     if (dayKey > todayKey) return null;
-    if ((dayTask == null ? void 0 : dayTask.status) === "completed") return "met";
+    const met = habitKindOf(habit) === "count" ? habitDayAmount(dayTask) >= countTargetOf(habit) : (dayTask == null ? void 0 : dayTask.status) === "completed";
+    if (met) return "met";
     if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
     return "missed";
   }
@@ -3004,7 +3086,7 @@ var HuntCore = (() => {
     const held = days.get(day);
     if (!held || held.status !== "completed" && task.status === "completed") days.set(day, task);
   }
-  function summarizeHabitDays(habitTasks, todayKey) {
+  function summarizeHabitDays(habitTasks, todayKey, habits = []) {
     const todayByHabit = /* @__PURE__ */ new Map();
     const datesByHabit = /* @__PURE__ */ new Map();
     const dayTasksByHabit = /* @__PURE__ */ new Map();
@@ -3036,18 +3118,19 @@ var HuntCore = (() => {
     const cache = /* @__PURE__ */ new Map();
     return {
       summaryFor(habitId) {
-        var _a;
+        var _a, _b;
         let summary = cache.get(habitId);
         if (!summary) {
           const todayTask = todayByHabit.get(habitId);
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
           const dayTasks = dayTasksByHabit.get(habitId);
-          const outcomeOn = (dayKey) => habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
+          const habit = (_b = habits.find((h) => h.id === habitId)) != null ? _b : { id: habitId };
+          const outcomeOn = (dayKey) => habitDayOutcome({ habit, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
           summary = {
             todayTask,
             completedDates,
             streak: habitStreakOn(todayKey, outcomeOn),
-            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed",
+            doneToday: outcomeOn(todayKey) === "met",
             outcomeOn
           };
           cache.set(habitId, summary);
@@ -3281,6 +3364,86 @@ var HuntCore = (() => {
     };
   }
 
+  // src/lib/taskQueue.ts
+  function sessionLogId(taskId, sessionStartedAt) {
+    return `log-${sessionStartedAt}-${taskId}`;
+  }
+  function burstSeconds(sessionStartedAt, endAt) {
+    return Math.max(1, Math.round((endAt - sessionStartedAt) / 1e3));
+  }
+  function buildBurstLog(task, quest, sessionStartedAt, endAt) {
+    return {
+      id: sessionLogId(task.id, sessionStartedAt),
+      taskId: task.id,
+      taskTitleSnapshot: task.title,
+      questId: task.questId,
+      questCodeSnapshot: quest ? quest.title : "Other",
+      accentColorSnapshot: quest ? quest.accentColor : "slate",
+      startTime: sessionStartedAt,
+      endTime: endAt,
+      durationSeconds: burstSeconds(sessionStartedAt, endAt),
+      dateKey: toLocalDateKey(endAt)
+    };
+  }
+  function pickNextFocusTask(tasks, todayKey) {
+    var _a, _b;
+    const today = tasks.filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    return (_b = (_a = today.find((t) => t.questId !== null)) != null ? _a : today[0]) != null ? _b : null;
+  }
+  var RANK_STEP = 1e3;
+  function buildHabitTaskRow(habit, dateKey) {
+    const stamp = Math.max(1, Number(habit.createdAt) || 1);
+    return {
+      id: habitTaskId(habit.id, dateKey),
+      title: habit.title,
+      notes: habit.notes || "",
+      questId: habit.questId || null,
+      habitId: habit.id,
+      status: "queued",
+      rank: Number.isFinite(habit.rank) ? habit.rank : RANK_STEP,
+      accumulatedSeconds: 0,
+      scheduledDate: dateKey,
+      createdAt: stamp,
+      updatedAt: stamp
+    };
+  }
+  function missingHabitRows(state, dateKey) {
+    var _a, _b, _c;
+    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
+    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
+    return ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
+  }
+  function nextStamp(row, now = Date.now()) {
+    return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
+  }
+  function completeTaskRow(task, completedAt) {
+    return {
+      ...task,
+      status: "completed",
+      completedAt,
+      updatedAt: nextStamp(task, completedAt)
+    };
+  }
+
+  // src/lib/habitCount.ts
+  function setHabitDayAmount(task, habit, amount, at) {
+    const total = cleanCountAmount(amount);
+    const met = total >= countTargetOf(habit);
+    const row = { ...task, amount: total, updatedAt: nextStamp(task, at) };
+    if (task.status === "active" || task.status === "archived") return row;
+    if (met) {
+      row.status = "completed";
+      row.completedAt = task.status === "completed" && task.completedAt ? task.completedAt : at;
+    } else {
+      row.status = "queued";
+      delete row.completedAt;
+    }
+    return row;
+  }
+  function addHabitDayCount(task, habit, at) {
+    return setHabitDayAmount(task, habit, habitDayAmount(task) + 1, at);
+  }
+
   // src/lib/domainTypes.ts
   var QUEST_ACCENT_KEYS = [
     "cyan",
@@ -3404,67 +3567,6 @@ var HuntCore = (() => {
     }
   }
 
-  // src/lib/taskQueue.ts
-  function sessionLogId(taskId, sessionStartedAt) {
-    return `log-${sessionStartedAt}-${taskId}`;
-  }
-  function burstSeconds(sessionStartedAt, endAt) {
-    return Math.max(1, Math.round((endAt - sessionStartedAt) / 1e3));
-  }
-  function buildBurstLog(task, quest, sessionStartedAt, endAt) {
-    return {
-      id: sessionLogId(task.id, sessionStartedAt),
-      taskId: task.id,
-      taskTitleSnapshot: task.title,
-      questId: task.questId,
-      questCodeSnapshot: quest ? quest.title : "Other",
-      accentColorSnapshot: quest ? quest.accentColor : "slate",
-      startTime: sessionStartedAt,
-      endTime: endAt,
-      durationSeconds: burstSeconds(sessionStartedAt, endAt),
-      dateKey: toLocalDateKey(endAt)
-    };
-  }
-  function pickNextFocusTask(tasks, todayKey) {
-    var _a, _b;
-    const today = tasks.filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
-    return (_b = (_a = today.find((t) => t.questId !== null)) != null ? _a : today[0]) != null ? _b : null;
-  }
-  var RANK_STEP = 1e3;
-  function buildHabitTaskRow(habit, dateKey) {
-    const stamp = Math.max(1, Number(habit.createdAt) || 1);
-    return {
-      id: habitTaskId(habit.id, dateKey),
-      title: habit.title,
-      notes: habit.notes || "",
-      questId: habit.questId || null,
-      habitId: habit.id,
-      status: "queued",
-      rank: Number.isFinite(habit.rank) ? habit.rank : RANK_STEP,
-      accumulatedSeconds: 0,
-      scheduledDate: dateKey,
-      createdAt: stamp,
-      updatedAt: stamp
-    };
-  }
-  function missingHabitRows(state, dateKey) {
-    var _a, _b, _c;
-    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
-    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
-    return ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
-  }
-  function nextStamp(row, now = Date.now()) {
-    return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
-  }
-  function completeTaskRow(task, completedAt) {
-    return {
-      ...task,
-      status: "completed",
-      completedAt,
-      updatedAt: nextStamp(task, completedAt)
-    };
-  }
-
   // src/lib/questProgress.ts
   var QUEST_WEEK_DAYS = 7;
   function rollingWeekKeys(todayKey) {
@@ -3539,10 +3641,10 @@ var HuntCore = (() => {
     return accentColor && ACCENTS.has(accentColor) ? accentColor : "slate";
   }
   function statsFor(state, dateKey) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const quests = (_a = state.quests) != null ? _a : [];
     const progress = computeQuestWeekProgress({ quests, logs: (_b = state.timeLogs) != null ? _b : [], todayKey: dateKey });
-    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey);
+    const { summaryFor } = summarizeHabitDays((_c = state.tasks) != null ? _c : [], dateKey, (_d = state.habits) != null ? _d : []);
     return {
       dateKey,
       focusSeconds: progress.total.todaySeconds,
@@ -3558,7 +3660,7 @@ var HuntCore = (() => {
           met: p.met
         };
       }),
-      streaks: ((_d = state.habits) != null ? _d : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
+      streaks: ((_e = state.habits) != null ? _e : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
     };
   }
   function buildWidgetStats(state, todayKey) {
@@ -3566,7 +3668,7 @@ var HuntCore = (() => {
   }
 
   // src/lib/widgetSnapshot.ts
-  var WIDGET_SNAPSHOT_VERSION = 1;
+  var WIDGET_SNAPSHOT_VERSION = 2;
   var WIDGET_SNAPSHOT_DAYS = 8;
   function futureTasks(state, dateKey) {
     var _a;
@@ -3577,19 +3679,28 @@ var HuntCore = (() => {
     return ((_a = state.tasks) != null ? _a : []).concat(missingHabitRows(state, todayKey)).filter((t) => isOpenTask(t, todayKey) && isTaskVisibleToday(t, todayKey)).sort(compareRank);
   }
   function buildWidgetSnapshot(state, todayKey, look) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     const accentOf = /* @__PURE__ */ new Map();
     for (const q of (_a = state.quests) != null ? _a : []) accentOf.set(q.id, widgetAccent(q.accentColor));
-    const focusId = (_c = (_b = state.activeFocus) == null ? void 0 : _b.activeTaskId) != null ? _c : null;
-    const toRow = (t) => ({
-      id: t.id,
-      title: t.title,
-      accent: t.questId && accentOf.get(t.questId) || "slate",
-      tickable: t.id !== focusId,
-      focus: t.id === focusId,
-      habit: Boolean(t.habitId)
-    });
-    const noData = !((_d = state.quests) != null ? _d : []).length && !((_e = state.tasks) != null ? _e : []).length && !((_f = state.habits) != null ? _f : []).length;
+    const habitOf = /* @__PURE__ */ new Map();
+    for (const h of (_b = state.habits) != null ? _b : []) habitOf.set(h.id, h);
+    const focusId = (_d = (_c = state.activeFocus) == null ? void 0 : _c.activeTaskId) != null ? _d : null;
+    const toRow = (t) => {
+      const row = {
+        id: t.id,
+        title: t.title,
+        accent: t.questId && accentOf.get(t.questId) || "slate",
+        tickable: t.id !== focusId,
+        focus: t.id === focusId,
+        habit: Boolean(t.habitId)
+      };
+      if (!t.habitId) return row;
+      const habit = habitOf.get(t.habitId);
+      row.habitKind = habitKindOf(habit);
+      if (habit && row.habitKind === "count") row.progress = countProgressLabel(habit, habitDayAmount(t));
+      return row;
+    };
+    const noData = !((_e = state.quests) != null ? _e : []).length && !((_f = state.tasks) != null ? _f : []).length && !((_g = state.habits) != null ? _g : []).length;
     return {
       version: WIDGET_SNAPSHOT_VERSION,
       look,
@@ -3610,18 +3721,28 @@ var HuntCore = (() => {
   // src/lib/pendingTicks.ts
   var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
   function isWellFormed(tick) {
-    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0 && (tick.kind === void 0 || tick.kind === "+1");
   }
   function habitRowFor(state, tick) {
     var _a;
     return (_a = missingHabitRows(state, tick.dateKey).find((t) => t.id === tick.taskId)) != null ? _a : null;
   }
-  function skipReason(state, task) {
+  function doneSkipReason(state, task) {
     var _a;
     if (task.status === "completed") return "already-done";
     if (task.status === "archived") return "archived";
     if (((_a = state.activeFocus) == null ? void 0 : _a.activeTaskId) === task.id) return "in-focus";
     return null;
+  }
+  function applyTick(state, task, tick) {
+    var _a, _b, _c;
+    const habit = task.habitId ? ((_a = state.habits) != null ? _a : []).find((h) => h.id === task.habitId) : void 0;
+    const isCount = !!habit && habitKindOf(habit) === "count";
+    if (tick.kind === "+1" !== isCount) return "wrong-kind";
+    if (!habit || !isCount) return (_b = doneSkipReason(state, task)) != null ? _b : completeTaskRow(task, tick.tickedAt);
+    if (task.status === "archived") return "archived";
+    if (((_c = task.countTickedAt) != null ? _c : 0) >= tick.tickedAt) return "already-counted";
+    return { ...addHabitDayCount(task, habit, tick.tickedAt), countTickedAt: tick.tickedAt };
   }
   function applyPendingTicks(state, ticks) {
     let tasks = state.tasks;
@@ -3632,15 +3753,15 @@ var HuntCore = (() => {
         continue;
       }
       const existing = tasks.find((t) => t.id === tick.taskId);
-      if (existing) {
-        const reason = skipReason(state, existing);
-        if (reason) skipped.push({ tick, reason });
-        else tasks = tasks.map((t) => t === existing ? completeTaskRow(t, tick.tickedAt) : t);
+      const task = existing != null ? existing : habitRowFor(state, tick);
+      if (!task) {
+        skipped.push({ tick, reason: "missing" });
         continue;
       }
-      const created = habitRowFor(state, tick);
-      if (!created) skipped.push({ tick, reason: "missing" });
-      else tasks = [...tasks, completeTaskRow(created, tick.tickedAt)].sort(compareRank);
+      const result = applyTick(state, task, tick);
+      if (typeof result === "string") skipped.push({ tick, reason: result });
+      else if (existing) tasks = tasks.map((t) => t === existing ? result : t);
+      else tasks = [...tasks, result].sort(compareRank);
     }
     return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
   }
@@ -3667,6 +3788,12 @@ var HuntCore = (() => {
     var computeHabitStreak = HuntCore.computeHabitStreak;
     var completionDateKey = HuntCore.completionDateKey;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
+    var habitKindOf = HuntCore.habitKindOf; // Habit Kind: an old row without one is Check
+    var habitDayAmount = HuntCore.habitDayAmount;
+    var countTargetOf = HuntCore.countTargetOf;
+    var countProgressLabel = HuntCore.countProgressLabel;
+    var formatCountAmount = HuntCore.formatCountAmount;
+    var parseCountAmount = HuntCore.parseCountAmount;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
     // "Android 10; K" UA reduction) and drives --kb frame-by-frame via WindowInsetsAnimation. Lock
@@ -6209,6 +6336,12 @@ var HuntCore = (() => {
     let lastDirectCompleteAt = -Infinity;
 
     function completeTaskDirect(taskId) {
+      // A Count Habit's day is counted, not ticked: every "complete" path adds one (shared +1 rule).
+      const countTask = state.tasks.find(x => x.id === taskId);
+      if (countTask && countHabitOfTask(countTask)) {
+        logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), "+1");
+        return;
+      }
       const tapAt = Date.now();
       if (tapAt - lastDirectCompleteAt < DOUBLE_TAP_COMPLETE_MS) return;
       lastDirectCompleteAt = tapAt;
@@ -6244,6 +6377,12 @@ var HuntCore = (() => {
     }
 
     function reopenTaskDirect(taskId) {
+      const countTask = state.tasks.find(x => x.id === taskId);
+      if (countTask && countHabitOfTask(countTask)) {
+        // A Count Habit's day is reopened by clearing its total.
+        logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), 0);
+        return;
+      }
       playClickSound();
       const firstRects = captureTaskFlipRects();
       const now = Date.now();
@@ -7654,6 +7793,7 @@ var HuntCore = (() => {
 
     function openNewHabitSheet(preselectQuestId) {
       playClickSound();
+      selectedHabitKind = "check";
       const activeQuests = activeQuestsList();
       selectedHabitQuestId = preselectQuestId !== undefined
         ? preselectQuestId
@@ -7664,6 +7804,18 @@ var HuntCore = (() => {
 
           <input id="newHabitTitleInput" class="sheet-input" placeholder="e.g. Read 20 pages, Review flashcards..." aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
           <textarea maxlength="20000" id="newHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional description copied to each day's task..." aria-label="Habit description" onkeydown="if(isSubmitKey(event)) saveNewHabit()"></textarea>
+
+          <div class="sheet-label">Kind</div>
+          <div class="sheet-pill-group" role="radiogroup" aria-label="Habit Kind">
+            <button class="sheet-pill selected" role="radio" aria-checked="true" data-habit-kind="check" onclick="selectHabitKind(this, 'check')">Check</button>
+            <button class="sheet-pill" role="radio" aria-checked="false" data-habit-kind="count" onclick="selectHabitKind(this, 'count')">Count</button>
+          </div>
+          <div id="newHabitCountFields" hidden>
+            <div style="display:flex;gap:8px;">
+              <input id="newHabitTargetInput" class="sheet-input" inputmode="decimal" placeholder="Daily target" aria-label="Daily target" style="flex:1;min-width:0;" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
+              <input id="newHabitUnitInput" class="sheet-input" maxlength="40" placeholder="Unit (e.g. miles)" aria-label="Unit" style="flex:1;min-width:0;" onkeydown="if(isSubmitKey(event)) saveNewHabit()" />
+            </div>
+          </div>
 
           <div class="sheet-label">Assign to Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -7696,6 +7848,14 @@ var HuntCore = (() => {
         flagInvalidField(tEl);
         return;
       }
+      const kind = selectedHabitKind === "count" ? "count" : "check";
+      const targetEl = document.getElementById("newHabitTargetInput");
+      const unitEl = document.getElementById("newHabitUnitInput");
+      const target = kind === "count" ? parseCountAmount(targetEl ? targetEl.value : "") : null;
+      if (kind === "count" && !HuntCore.isCountTarget(target)) {
+        flagInvalidField(targetEl);
+        return;
+      }
       playCompleteSound();
       const now = Date.now();
       const habits = asArray(state.habits).slice().sort(compareRank);
@@ -7707,8 +7867,13 @@ var HuntCore = (() => {
         questId: selectedHabitQuestId || null,
         rank,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        kind
       };
+      if (kind === "count") {
+        habit.target = target;
+        habit.unit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : "";
+      }
       const firstRects = captureTaskFlipRects();
       if (!state.habits) state.habits = [];
       state.habits.push(habit);
@@ -7731,6 +7896,15 @@ var HuntCore = (() => {
 
           <input id="editHabitTitleInput" class="sheet-input" value="${escapeHtml(h.title)}" aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveHabitEdits(${jsArg(h.id)})" />
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
+
+          <div class="sheet-label">Kind</div>
+          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${habitKindOf(h) === "count" ? "Count Habit" : "Check Habit"}</div>
+          ${habitKindOf(h) === "count" ? `
+            <div style="display:flex;gap:8px;">
+              <input id="editHabitTargetInput" class="sheet-input" inputmode="decimal" value="${escapeHtml(formatCountAmount(countTargetOf(h)))}" placeholder="Daily target" aria-label="Daily target" style="flex:1;min-width:0;" />
+              <input id="editHabitUnitInput" class="sheet-input" maxlength="40" value="${escapeHtml(h.unit || "")}" placeholder="Unit (e.g. miles)" aria-label="Unit" style="flex:1;min-width:0;" />
+            </div>
+          ` : ""}
 
           <div class="sheet-label">Assigned Quest</div>
           <div class="sheet-pill-group" role="group" aria-label="Habit quest">
@@ -7767,10 +7941,26 @@ var HuntCore = (() => {
       const prevNotes = h.notes || "";
       const nextNotes = nEl ? nEl.value.trim() : prevNotes;
       const nextQuestId = selectedHabitQuestId || null;
+      let nextTarget = null;
+      let nextUnit = null;
+      if (habitKindOf(h) === "count") {
+        const targetEl = document.getElementById("editHabitTargetInput");
+        const unitEl = document.getElementById("editHabitUnitInput");
+        nextTarget = parseCountAmount(targetEl ? targetEl.value : "");
+        if (!HuntCore.isCountTarget(nextTarget)) {
+          flagInvalidField(targetEl);
+          return;
+        }
+        nextUnit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : (h.unit || "");
+      }
       const before = JSON.stringify(h);
       h.title = title;
       h.notes = nextNotes;
       h.questId = nextQuestId;
+      if (nextTarget !== null) {
+        h.target = nextTarget;
+        h.unit = nextUnit;
+      }
       closeSheet();
       if (JSON.stringify(h) === before) return;
       const now = Date.now();
@@ -7865,6 +8055,124 @@ var HuntCore = (() => {
       initializeFocus(t.id);
     }
 
+    // =========================================================================
+    // COUNT HABITS: +1, a held press for an exact total (shared Count rule)
+    // =========================================================================
+
+    // The Count Habit a day Task belongs to, or null for any other Task.
+    function countHabitOfTask(task) {
+      if (!task || !task.habitId) return null;
+      const h = asArray(state.habits).find(x => x.id === task.habitId);
+      return h && habitKindOf(h) === "count" ? h : null;
+    }
+
+    // Writes a Count Habit's total for `dateKey`: "+1" adds one, a number sets it exactly. The day's
+    // Task is created first when missing (as toggleHabitToday does); the shared rule completes it once
+    // the total reaches the target and reopens it below.
+    function logHabitCount(habitId, dateKey, amount) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h || habitKindOf(h) !== "count") return;
+      const tid = habitTaskId(habitId, dateKey);
+      let t = state.tasks.find(x => x.id === tid);
+      if (!t) {
+        state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
+        t = buildHabitTaskRow(h, dateKey);
+        state.tasks.push(t);
+        state.tasks.sort(compareRank);
+      }
+      const wasMet = habitDayAmount(t) >= countTargetOf(h);
+      const now = Date.now();
+      const next = amount === "+1" ? HuntCore.addHabitDayCount(t, h, now) : HuntCore.setHabitDayAmount(t, h, amount, now);
+      const firstRects = captureTaskFlipRects();
+      if (!wasMet && habitDayAmount(next) >= countTargetOf(h)) playCompleteSound();
+      else playClickSound();
+      for (const k of Object.keys(t)) if (!(k in next)) delete t[k];
+      Object.assign(t, next);
+      commitLocalChange();
+      playTaskFlipGlide(firstRects, tid);
+    }
+
+    // A held press on a +1 ring: after HABIT_LONG_PRESS_MS it opens exact entry, and the click that
+    // ends the press adds nothing. A long touch in the WebView also fires `contextmenu`, which opens
+    // it at once (and right-click does on a desktop browser).
+    const HABIT_LONG_PRESS_MS = 500;
+    let countPressTimer = null;
+    let countPressLongId = null;
+    function countPressStart(habitId) {
+      countPressEnd();
+      countPressLongId = null;
+      countPressTimer = setTimeout(() => {
+        countPressTimer = null;
+        countPressLongId = habitId;
+        openHabitAmountSheet(habitId);
+      }, HABIT_LONG_PRESS_MS);
+    }
+    function countPressEnd() {
+      if (countPressTimer) clearTimeout(countPressTimer);
+      countPressTimer = null;
+    }
+    function countPressContext(event, habitId) {
+      if (event) event.preventDefault();
+      countPressEnd();
+      if (countPressLongId !== habitId) openHabitAmountSheet(habitId);
+      countPressLongId = habitId;
+    }
+    function countPressClick(habitId) {
+      if (countPressLongId === habitId) {
+        countPressLongId = null;
+        return;
+      }
+      logHabitCount(habitId, toLocalDateKey(), "+1");
+    }
+
+    // The +1 ring of a Count Habit row (Habits card and Today row).
+    function countPlusButtonHtml(h, met, hex) {
+      return `<button class="task-check-ring count-plus ${met ? "done" : ""}" style="${met ? `background:${hex};` : ""}margin-top:2px;" onclick="countPressClick(${jsArg(h.id)})" onpointerdown="countPressStart(${jsArg(h.id)})" onpointerup="countPressEnd()" onpointerleave="countPressEnd()" onpointercancel="countPressEnd()" oncontextmenu="countPressContext(event, ${jsArg(h.id)})" aria-label="Add 1 to ${escapeHtml(h.title)}" title="Add 1 (hold to type a total)">+1</button>`;
+    }
+
+    function openHabitAmountSheet(habitId) {
+      const h = asArray(state.habits).find(x => x.id === habitId);
+      if (!h || habitKindOf(h) !== "count") return;
+      const t = state.tasks.find(x => x.id === habitTaskId(habitId, toLocalDateKey()));
+      showSheet("habitAmount:" + h.id, `
+          ${sheetHeaderHtml("Today's total")}
+          <div class="sheet-label">${escapeHtml(h.title)} · target ${escapeHtml(formatCountAmount(countTargetOf(h)))}${h.unit ? " " + escapeHtml(h.unit) : ""}</div>
+          <input id="habitAmountInput" class="sheet-input" inputmode="decimal" enterkeyhint="done" value="${escapeHtml(formatCountAmount(habitDayAmount(t)))}" aria-label="Today's total for ${escapeHtml(h.title)}" onkeydown="if(isSubmitKey(event)) saveHabitAmount(${jsArg(h.id)})" />
+          <div class="sheet-actions single">
+            <button class="pressable" data-action="save-habit-amount" onclick="saveHabitAmount(${jsArg(h.id)})" style="width:100%;height:var(--touch-min);border-radius:14px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;">
+              Set total
+            </button>
+          </div>
+      `);
+      focusFieldSoon("habitAmountInput");
+    }
+
+    function saveHabitAmount(habitId) {
+      const el = document.getElementById("habitAmountInput");
+      const amount = parseCountAmount(el ? el.value : "");
+      if (amount === null) {
+        flagInvalidField(el);
+        return;
+      }
+      closeSheet();
+      logHabitCount(habitId, toLocalDateKey(), amount);
+    }
+
+    // The Habit Kind choice of the new-habit sheet (fixed once the Habit is made).
+    let selectedHabitKind = "check";
+    function selectHabitKind(btn, kind) {
+      selectedHabitKind = kind;
+      if (btn && btn.parentElement) {
+        btn.parentElement.querySelectorAll('[role="radio"]').forEach(b => {
+          const on = b === btn;
+          b.classList.toggle("selected", on);
+          b.setAttribute("aria-checked", on ? "true" : "false");
+        });
+      }
+      const fields = document.getElementById("newHabitCountFields");
+      if (fields) fields.hidden = kind !== "count";
+    }
+
     // Render Compact Queue Row Card (#02+)
     function renderCompactQueueCard(task) {
       const q = state.quests.find(x => x.id === task.questId);
@@ -7874,14 +8182,16 @@ var HuntCore = (() => {
       const delta = isRunningHere && af.sessionStartedAt ? Math.max(0, Math.floor((Date.now() - af.sessionStartedAt) / 1000)) : 0;
       const totalSec = (task.accumulatedSeconds || 0) + delta;
       const title = escapeHtml(task.title);
+      const countHabit = countHabitOfTask(task);
 
       return `
         <div class="queue-item-card" data-flip-task-id="${escapeHtml(task.id)}">
           <div class="card-edge-bar" style="background:${hex};"></div>
 
+          ${countHabit ? countPlusButtonHtml(countHabit, false, hex) : `
           <button class="task-check-ring" onclick="completeTaskDirect(${jsArg(task.id)})" aria-label="Complete ${title}">
             ${SVG_CHECK}
-          </button>
+          </button>`}
 
           <div class="queue-item-body" role="button" onclick="initializeFocus(${jsArg(task.id)})">
             <div class="queue-item-title">${title}</div>
@@ -7892,6 +8202,7 @@ var HuntCore = (() => {
                 <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
               </span>
               ${task.habitId ? `<span style="font-size:10px;color:var(--dim);padding:1px 6px;border-radius:999px;border:1px solid var(--border);flex-shrink:0;">Daily</span>` : ""}
+              ${countHabit ? `<span class="count-progress">${escapeHtml(countProgressLabel(countHabit, habitDayAmount(task)))}</span>` : ""}
             </div>
           </div>
 
@@ -9785,7 +10096,7 @@ var HuntCore = (() => {
         const recentDays = [];
         for (let i = 6; i >= 0; i--) recentDays.push(dayKeyOffset(-i, now));
 
-        const habitDays = summarizeHabitDays(state.tasks, todayKey);
+        const habitDays = summarizeHabitDays(state.tasks, todayKey, asArray(state.habits));
         const doneTodayCount = habitsList.filter(h => habitDays.summaryFor(h.id).doneToday).length;
 
         container.innerHTML = `
@@ -9815,8 +10126,9 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + habitsList.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
+            const { doneToday, streak, outcomeOn, todayTask } = habitDays.summaryFor(h.id);
             const title = escapeHtml(h.title);
+            const isCount = habitKindOf(h) === "count";
             const dotsHtml = recentDays.map(dk => {
               const hit = outcomeOn(dk) === "met";
               const isTodayDot = dk === todayKey;
@@ -9826,9 +10138,10 @@ var HuntCore = (() => {
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
                 <div class="card-edge-bar" style="background:${hex};"></div>
+                ${isCount ? countPlusButtonHtml(h, doneToday, hex) : `
                 <button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">
                   ${SVG_CHECK}
-                </button>
+                </button>`}
                 <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})">
                   <div class="queue-item-title" style="${doneToday ? "text-decoration:line-through;color:var(--muted);" : ""}">${title}</div>
                   ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(h.notes)}</div>` : ""}
@@ -9838,6 +10151,7 @@ var HuntCore = (() => {
                       <span class="quest-label-ellipsis">${escapeHtml(q ? q.title : "Other work")}</span>
                     </span>
                     <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
+                      ${isCount ? `<span class="count-progress">${escapeHtml(countProgressLabel(h, habitDayAmount(todayTask)))}</span>` : ""}
                       <span style="display:inline-flex;align-items:center;gap:4px;">${dotsHtml}</span>
                       ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">${streak}d</span>` : ""}
                     </span>

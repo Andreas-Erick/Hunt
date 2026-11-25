@@ -407,6 +407,61 @@ describe("text fields", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Habit Kinds and Count Habit fields
+// ---------------------------------------------------------------------------
+
+describe("Habit Kind and Count fields", () => {
+  const habitRow = (overrides: Row = {}): Row => ({
+    id: "hab-1763400000000-jog1",
+    title: "Jog",
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+  const habitOut = (raw: Row) => {
+    const [row] = validated(rawPayload({ habits: [raw] })).payload.habits ?? [];
+    return new Map<string, unknown>(Object.entries(row));
+  };
+
+  it("keeps an old Habit row without a Kind exactly as it was (it reads as Check)", () => {
+    const out = habitOut(habitRow());
+    expect(out.has("kind")).toBe(false);
+    expect(out.has("target")).toBe(false);
+  });
+
+  it("keeps a Count Habit's Kind, target and unit", () => {
+    const out = habitOut(habitRow({ kind: "count", target: 2.5, unit: "miles" }));
+    expect([out.get("kind"), out.get("target"), out.get("unit")]).toEqual(["count", 2.5, "miles"]);
+  });
+
+  it.each(["countdown", "__proto__", "", 3, null])("removes Kind %j that Hunt does not know", (kind) => {
+    expect(habitOut(habitRow({ kind })).has("kind")).toBe(false);
+  });
+
+  it.each([0, -1, Number.NaN, "3", null])("removes target %j that is not a positive number", (target) => {
+    expect(habitOut(habitRow({ kind: "count", target })).has("target")).toBe(false);
+  });
+
+  it("caps a huge target, cuts a long unit and removes a unit that is not text", () => {
+    expect(habitOut(habitRow({ target: 1e12 })).get("target")).toBe(1_000_000);
+    expect(habitOut(habitRow({ unit: "m".repeat(100) })).get("unit")).toBe("m".repeat(40));
+    expect(habitOut(habitRow({ unit: 7 })).has("unit")).toBe(false);
+  });
+
+  it("keeps a day Task's total and +1 tick time, removing invalid ones", () => {
+    const ok = sanitizeOne("task", taskRow({ amount: 2.5, countTickedAt: 1234 }));
+    expect([ok?.get("amount"), ok?.get("countTickedAt")]).toEqual([2.5, 1234]);
+    for (const amount of [-1, "2", Number.POSITIVE_INFINITY, null]) {
+      expect(sanitizeOne("task", taskRow({ amount }))?.has("amount"), String(amount)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ amount: 1e12 }))?.get("amount")).toBe(1_000_000);
+    expect(sanitizeOne("task", taskRow({ countTickedAt: -5 }))?.has("countTickedAt")).toBe(false);
+  });
+});
+
 // Enums and dates
 // ---------------------------------------------------------------------------
 

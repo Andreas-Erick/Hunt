@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
+import type { Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   mergeSyncPayloads,
@@ -50,6 +50,7 @@ const TASK_IDS = [
   "tsk-1763400000003-dddd",
   "tsk-01",
 ];
+const HABIT_IDS = ["hab-1763400000000-jog1", "hab-1763400000001-read"];
 const STAMPS = [1000, 2000, 3000]; // few values, so equal stamps are frequent
 const LOG_STARTS = [10_000, 20_000];
 const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${start}-${taskId}`));
@@ -96,7 +97,31 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     };
     if (chance(0.3)) task.completedAt = updatedAt;
     if (chance(0.5)) task.scheduledDate = pick(["2026-11-18", "2026-11-19"]);
+    // A Count Habit day's total and +1 tick time ride on the row (merged whole, ADR-0001).
+    if (chance(0.3)) task.amount = pick([0, 1, 2.5, 7]);
+    if (chance(0.2)) task.countTickedAt = pick(STAMPS);
     tasks.push(task);
+  });
+
+  // Habits of every Kind; old rows without one read as Check. questId stays null so the
+  // equal-stamp questId exception above cannot arise.
+  const habits: Habit[] = HABIT_IDS.filter(() => chance(0.7)).map((id) => {
+    const habit: Habit = {
+      id,
+      title: pick(["Jog", "Read"]),
+      notes: pick(["", "n"]),
+      questId: null,
+      rank: pick([1000, 2000]),
+      createdAt: 500,
+      updatedAt: pick(STAMPS),
+    };
+    const kind = pick([undefined, "check", "count"] as const);
+    if (kind) habit.kind = kind;
+    if (kind === "count") {
+      habit.target = pick([1, 3, 2.5]);
+      habit.unit = pick(["", "miles"]);
+    }
+    return habit;
   });
 
   const timeLogs: TimeLog[] = [];
@@ -132,6 +157,8 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     quests,
     tasks,
     timeLogs,
+    habits,
+    deletedHabitIds: HABIT_IDS.filter(() => chance(0.1)),
     deletedQuestIds: QUEST_IDS.filter(() => chance(0.15)),
     deletedTaskIds: TASK_IDS.filter(() => chance(0.15)),
     deletedLogIds: LOG_IDS.filter(() => chance(0.1)),

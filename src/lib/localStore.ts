@@ -2,6 +2,7 @@ import { db, loadSortedQuests } from "./db";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, Quest, QuestAccent, Task } from "./domainTypes";
+import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabit } from "./localHabitCount";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -20,7 +21,6 @@ import {
 import {
   buildBurstLog,
   buildHabitTaskRow,
-  completeTaskRow,
   nextStamp,
   planRankMoves,
   RANK_STEP,
@@ -202,21 +202,23 @@ async function updateTask(
 }
 
 /**
- * Completes a task with the shared rule (completeTaskRow, the phone's too),
- * reading the row in the same rw transaction. False when it does not exist.
+ * Completes a task with the shared rule (completeTaskRow, the phone's too; a
+ * Count Habit's day counts +1 instead: completedRow), reading the row in the
+ * same rw transaction. False when it does not exist.
  */
 async function completeTask(taskId: string, completedAt: number = Date.now()): Promise<boolean> {
-  const done = await db.transaction("rw", db.tasks, async () => {
+  const done = await db.transaction("rw", db.tasks, db.habits, async () => {
     const row = await db.tasks.get(taskId);
     if (!row) return false;
-    await db.tasks.update(taskId, completeTaskRow(row, completedAt));
+    await db.tasks.update(taskId, await completedRow(row, completedAt));
     return true;
   });
   return changed(done);
 }
 
+/** Reopens a task; a Count Habit's day by clearing its total (reopenTaskRow). */
 async function reopenTask(taskId: string): Promise<boolean> {
-  return changed(await writeTask(taskId, { status: "queued", completedAt: undefined }));
+  return changed(await reopenTaskRow(taskId));
 }
 
 /** Deletes a task here and, through its tombstone, on every synced device. */
@@ -436,13 +438,15 @@ async function deleteQuest(questId: string): Promise<void> {
 
 // ── Daily habits ─────────────────────────────────────────────────────────
 
-/** Daily habit fields the edit form can change. */
-export type HabitChanges = Partial<Pick<Habit, "title" | "notes" | "questId">>;
+/** Daily habit fields the edit form can change (never the Habit Kind, fixed at creation). */
+export type HabitChanges = Partial<Pick<Habit, "title" | "notes" | "questId" | "target" | "unit">>;
+export type { NewHabit };
 
-/** Adds a habit at the end and materializes today's instance (unless tombstoned). */
-async function createHabit(params: { title: string; notes?: string; questId: string | null }): Promise<boolean> {
+/** Adds a habit at the end and materializes today's instance (unless tombstoned). False for no title, or a Count Habit with no target. */
+async function createHabit(params: NewHabit): Promise<boolean> {
   const title = clampTitle(params.title, MAX_HABIT_TITLE_LENGTH);
-  if (!title) return false;
+  const kindFields = newHabitKindFields(params);
+  if (!title || !kindFields) return false;
   const now = Date.now();
   const todayKey = toLocalDateKey(now);
   await db.transaction("rw", db.habits, db.tasks, async () => {
@@ -455,6 +459,7 @@ async function createHabit(params: { title: string; notes?: string; questId: str
       rank: existing.length > 0 ? rankValue(existing[existing.length - 1]) + RANK_STEP : RANK_STEP,
       createdAt: now,
       updatedAt: now,
+      ...kindFields,
     };
     await db.habits.add(habit);
     if (!hasLocalTaskTombstone(habitTaskId(habit.id, todayKey))) {
@@ -480,6 +485,7 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
     }
     if (typeof changes.notes === "string") patch.notes = clampTitle(changes.notes, MAX_LONG_TEXT_LENGTH);
     if (changes.questId !== undefined) patch.questId = changes.questId;
+    Object.assign(patch, countFieldChanges(row, changes));
     await db.habits.update(habitId, { ...patch, updatedAt: nextStamp(row) });
 
     const todayTaskId = habitTaskId(habitId, todayKey);
@@ -584,5 +590,7 @@ export const localStore = {
   deleteHabit,
   materializeHabits,
   ensureHabitTaskForDay,
+  /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
+  logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
   deleteTimeLog,
 };

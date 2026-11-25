@@ -156,3 +156,39 @@ describe("summarizeHabitDays outcomeOn (a Habit's Outcome on any day)", () => {
     expect(summary(dayTask("2026-05-10", { status: "active" })).streak).toBe(0);
   });
 });
+
+describe("Count Habit Outcomes (target reached, or Missed below it)", () => {
+  const MILES: Habit = { ...HABIT, id: "jog", title: "Jog", kind: "count", target: 3, unit: "miles" };
+  const day = (dayKey: string, amount: number | undefined, status: Task["status"] = "queued") =>
+    habitDayOutcome({ habit: MILES, dayKey, dayTask: { status, amount }, todayKey: TODAY });
+
+  it("is Met once the day's total reaches the target, and when it goes over", () => {
+    expect(day(TODAY, 3)).toBe("met");
+    expect(day(TODAY, 5)).toBe("met");
+    expect(day("2026-05-01", 3.5)).toBe("met");
+  });
+
+  it("is Open today below the target, and Missed for a past day that ended below it", () => {
+    expect(day(TODAY, 2)).toBe("open");
+    expect(day(TODAY, undefined)).toBe("open");
+    expect(day("2026-05-10", 2.5)).toBe("missed");
+    expect(day("2026-05-10", undefined)).toBe("missed");
+  });
+
+  it("judges by the total, not the tick: a ticked day below the target is not Met", () => {
+    expect(day("2026-05-10", 1, "completed")).toBe("missed");
+  });
+
+  it("summarizeHabitDays judges a Count Habit's days by its target", () => {
+    const tasks = [
+      dayTask("2026-05-09", { habitId: "jog", id: "j9", amount: 3, status: "completed" }),
+      dayTask("2026-05-10", { habitId: "jog", id: "j10", amount: 2 }),
+      dayTask(TODAY, { habitId: "jog", id: habitTaskId("jog", TODAY), amount: 4, status: "completed" }),
+    ];
+    const s = summarizeHabitDays(tasks, TODAY, [MILES]).summaryFor("jog");
+    expect(s.outcomeOn("2026-05-09")).toBe("met");
+    expect(s.outcomeOn("2026-05-10")).toBe("missed");
+    expect(s.outcomeOn(TODAY)).toBe("met");
+    expect(s.streak).toBe(1);
+  });
+});

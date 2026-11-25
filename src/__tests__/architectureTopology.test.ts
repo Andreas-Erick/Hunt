@@ -175,6 +175,8 @@ describe("Macro Architecture & State Topology Invariants", () => {
         "lib/domainTypes.ts",
         "lib/dateUtils.ts",
         "lib/habitDay.ts",
+        "lib/habitKind.ts",
+        "lib/habitCount.ts",
         "lib/questProgress.ts",
         "lib/focusSession.ts",
         "lib/taskQueue.ts",

@@ -1,12 +1,5 @@
-import type {
-  ActiveFocusState,
-  Habit,
-  Quest,
-  QuestAccent,
-  Task,
-  TaskStatus,
-  TimeLog,
-} from "./domainTypes";
+import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
+import { sanitizeCountDayFields, sanitizeHabitKindFields } from "./habitKind";
 
 export type { ActiveFocusState } from "./domainTypes";
 
@@ -328,10 +321,10 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "createdAt", "updatedAt", "completedAt", "amount", "countTickedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "kind", "target", "unit",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -495,7 +488,7 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;
-  copyScalarExtras(task, raw, TASK_FIELDS);
+  copyScalarExtras(Object.assign(task, sanitizeCountDayFields(raw)), raw, TASK_FIELDS);
   return task as Task;
 }
 
@@ -516,7 +509,7 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
-  copyScalarExtras(habit, raw, HABIT_FIELDS);
+  copyScalarExtras(Object.assign(habit, sanitizeHabitKindFields(raw)), raw, HABIT_FIELDS);
   return habit as Habit;
 }
 

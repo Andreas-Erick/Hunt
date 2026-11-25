@@ -18,6 +18,9 @@ import { dateKeyFromOffset } from "@/lib/dateUtils";
 import type { Habit, Quest } from "@/lib/domainTypes";
 import { computeHabitStreak } from "@/lib/dateUtils";
 import { summarizeHabitDays } from "@/lib/habitDay";
+import { habitDayAmount, habitKindOf } from "@/lib/habitKind";
+import * as Count from "./CountHabitControls";
+import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
@@ -79,6 +82,10 @@ export function HabitsView() {
   // New Habit form state
   const [newTitle, setNewTitle] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const newKind = Count.useNewHabitKind();
+  const editKind = Count.useHabitKindEdit();
+  // The Count Habit whose exact-entry form is open (one at a time).
+  const [amountHabitId, setAmountHabitId] = useState<string | null>(null);
   const [questChoice, setQuestChoice] = useState<string | null | undefined>(
     undefined
   );
@@ -130,8 +137,8 @@ export function HabitsView() {
 
   // Today's instance, completed days and streak per habit (shared Habit Day rules).
   const habitDays = useMemo(
-    () => summarizeHabitDays(habitTasks ?? [], todayKey),
-    [habitTasks, todayKey]
+    () => summarizeHabitDays(habitTasks ?? [], todayKey, habits ?? []),
+    [habitTasks, todayKey, habits]
   );
 
   const completedTodayCount = useMemo(() => {
@@ -143,14 +150,15 @@ export function HabitsView() {
     editingHabit !== null &&
     (editTitle !== editingHabit.title ||
       editNotes !== (editingHabit.notes ?? "") ||
-      editQuestId !== editingHabit.questId);
+      editQuestId !== editingHabit.questId ||
+      editKind.isDirty(editingHabit));
 
   useDiscardGuard(editIsDirty(), confirmLeaveDirty);
 
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const title = newTitle.trim();
-    if (!title || addingRef.current) return;
+    if (!title || addingRef.current || !newKind.valid) return;
     addingRef.current = true;
     const notes = newNotes;
     setNewTitle("");
@@ -162,10 +170,12 @@ export function HabitsView() {
         title,
         notes,
         questId: selectedQuestId,
+        ...newKind.fields(),
       });
     } finally {
       addingRef.current = false;
-      if (!created) {
+      if (created) newKind.reset();
+      else {
         setNewTitle((cur) => (cur === "" ? title : cur));
         setNewNotes((cur) => (cur === "" ? notes : cur));
       }
@@ -184,6 +194,7 @@ export function HabitsView() {
     setEditTitle(habit.title);
     setEditNotes(habit.notes ?? "");
     setEditQuestId(habit.questId);
+    editKind.load(habit);
   };
 
   const closeEdit = () => {
@@ -210,6 +221,7 @@ export function HabitsView() {
         title,
         notes: editNotes,
         questId: editQuestId,
+        ...editKind.changes(editingHabit),
       });
       if (saved) {
         setEditingHabit((cur) => (cur?.id === habitId ? null : cur));
@@ -234,6 +246,8 @@ export function HabitsView() {
       await completeTaskById(todayTask.id);
     }
   };
+
+  const handleLogAmount = Count.useLogHabitAmount(todayKey, habitDays.summaryFor);
 
   const handleFocusToday = async (habit: Habit) => {
     const todayTask =
@@ -290,7 +304,7 @@ export function HabitsView() {
 
           <button
             type="submit"
-            disabled={!newTitle.trim()}
+            disabled={!newTitle.trim() || !newKind.valid}
             className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -309,54 +323,14 @@ export function HabitsView() {
           />
         </div>
 
-        <div
-          role="group"
-          aria-label="Quest for new habit"
-          className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3"
-        >
-          {activeQuests.map((q) => {
-            const st = accentStyle(q.accentColor);
-            const isSelected = selectedQuestId === q.id;
-            return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => {
-                  hudAudio.playClick();
-                  setQuestChoice(q.id);
-                }}
-                aria-pressed={isSelected}
-                className={`flex min-w-0 max-w-full sm:max-w-[230px] items-center gap-2 rounded-full border min-h-8 coarse:min-h-11 px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
-                  isSelected
-                    ? `${st.border} bg-white/[0.06] text-white font-medium`
-                    : "border-white/[0.07] bg-transparent text-neutral-400 hover:border-white/15 hover:text-neutral-200"
-                }`}
-              >
-                <span className={`h-2 w-2 shrink-0 rounded-full ${st.bg}`} />
-                <span className="truncate" title={q.title}>
-                  {q.title}
-                </span>
-              </button>
-            );
-          })}
+        {newKind.picker}
 
-          <button
-            type="button"
-            onClick={() => {
-              hudAudio.playClick();
-              setQuestChoice(null);
-            }}
-            aria-pressed={otherSelected}
-            className={`flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-[color,background-color,border-color,opacity] duration-150 ease-out active:opacity-80 ${
-              otherSelected
-                ? "border-white/30 bg-white/[0.08] text-white font-medium"
-                : "border-white/[0.07] text-hud-muted hover:text-neutral-300"
-            }`}
-          >
-            <span className="h-2 w-2 rounded-full bg-neutral-500" />
-            <span>Other work</span>
-          </button>
-        </div>
+        <NewHabitQuestPicker
+          quests={activeQuests}
+          selectedQuestId={selectedQuestId}
+          otherSelected={otherSelected}
+          onSelect={setQuestChoice}
+        />
       </form>
 
       {/* Habits List */}
@@ -389,9 +363,11 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, outcomeOn, streak } =
+            const { doneToday, outcomeOn, streak, todayTask } =
               habitDays.summaryFor(habit.id);
             const isEditing = editingHabit?.id === habit.id;
+            const isCount = habitKindOf(habit) === "count";
+            const todayAmount = habitDayAmount(todayTask);
 
             return (
               <div
@@ -409,6 +385,9 @@ export function HabitsView() {
                 <div className="p-4 sm:p-5 pl-5 sm:pl-6">
                   <div className="flex items-start justify-between gap-3 sm:gap-4">
                     <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-3.5">
+                      {isCount ? (
+                        <Count.CountHabitPlusButton habit={habit} met={doneToday} accentBg={style.bg} onAdd={() => void handleLogAmount(habit, "+1")} onLongPress={() => setAmountHabitId(habit.id)} />
+                      ) : (
                       <button
                         type="button"
                         onClick={() => void handleToggleToday(habit)}
@@ -450,6 +429,7 @@ export function HabitsView() {
                           <Check className="h-3 w-3 stroke-[2.5]" />
                         )}
                       </button>
+                      )}
 
                       <div className="min-w-0 flex-1">
                         <div
@@ -510,6 +490,8 @@ export function HabitsView() {
                         <span>Daily</span>
                       </span>
 
+                      {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => setAmountHabitId(habit.id)} />}
+
                       <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300">
                         <span
                           className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bg}`}
@@ -554,6 +536,11 @@ export function HabitsView() {
                       )}
                     </div>
                   </div>
+
+                  <HeightReveal show={isCount && amountHabitId === habit.id}>
+                    <Count.CountAmountForm habit={habit} amount={todayAmount} onClose={() => setAmountHabitId(null)}
+                      onSave={(amount) => { setAmountHabitId(null); void handleLogAmount(habit, amount); }} />
+                  </HeightReveal>
                 </div>
 
                 <HeightReveal show={isEditing}>
@@ -603,49 +590,10 @@ export function HabitsView() {
                       />
                     </div>
 
+                    {editKind.fields(habit)}
+
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                      <div
-                        role="group"
-                        aria-label="Habit quest"
-                        className="flex min-w-0 flex-wrap items-center gap-2"
-                      >
-                        {activeQuests.map((q) => {
-                          const qStyle = accentStyle(q.accentColor);
-                          const active = editQuestId === q.id;
-                          return (
-                            <button
-                              key={q.id}
-                              type="button"
-                              aria-pressed={active}
-                              onClick={() => setEditQuestId(q.id)}
-                              className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
-                                active
-                                  ? "border-white/25 bg-white/10 text-white"
-                                  : "border-transparent text-hud-muted hover:text-neutral-300"
-                              }`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${qStyle.bg}`}
-                              />
-                              <span className="truncate max-w-[140px]" title={q.title}>
-                                {q.title}
-                              </span>
-                            </button>
-                          );
-                        })}
-                        <button
-                          type="button"
-                          aria-pressed={editQuestId === null}
-                          onClick={() => setEditQuestId(null)}
-                          className={`min-h-8 coarse:min-h-11 rounded-full border px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
-                            editQuestId === null
-                              ? "border-white/25 bg-white/10 text-white"
-                              : "border-transparent text-hud-muted hover:text-neutral-300"
-                          }`}
-                        >
-                          Other work
-                        </button>
-                      </div>
+                      <EditHabitQuestPicker quests={activeQuests} questId={editQuestId} onSelect={setEditQuestId} />
 
                       <div className="flex items-center gap-2">
                         <button

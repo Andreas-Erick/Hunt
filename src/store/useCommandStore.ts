@@ -191,11 +191,9 @@ interface CommandStoreState {
 
   // Daily Habit CRUD & Materialization
   /** Resolves to false when the local write failed (actionError is then set), true otherwise. */
-  createHabit: (params: {
-    title: string;
-    notes?: string;
-    questId: string | null;
-  }) => Promise<boolean>;
+  createHabit: (params: Parameters<typeof localStore.createHabit>[0]) => Promise<boolean>;
+  /** Logs a Count Habit's total for `dateKey`: "+1" adds one, a number sets it (shared Count rule). */
+  logHabitAmount: (habitId: string, dateKey: string, amount: number | "+1") => Promise<boolean>;
   updateHabit: (habitId: string, changes: HabitChanges) => Promise<boolean>;
   deleteHabit: (habitId: string) => Promise<void>;
   /**
@@ -801,6 +799,8 @@ export const useCommandStore = create<CommandStoreState>()(
 
         updateHabit: (habitId, changes) =>
           runAction(set, "updateHabit", () => localStore.updateHabit(habitId, changes)),
+
+        logHabitAmount: (habitId, dateKey, amount) => runAction(set, "logHabitAmount", () => localStore.logHabitAmount(habitId, dateKey, amount)),
 
         deleteHabit: async (habitId) => {
           await runAction(set, "deleteHabit", () => localStore.deleteHabit(habitId));

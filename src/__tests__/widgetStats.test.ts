@@ -150,6 +150,16 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
     expect(today.streaks.map((s) => s.days)).toEqual(["med", "read", "run"].map((id) => summaryFor(id).streak));
   });
 
+  it("counts a Count Habit's Streak by its target: a day ticked below it is not Met", () => {
+    const jog: Habit = { ...habit("jog", "Jog", 100), kind: "count", target: 3 };
+    const tasks = [
+      { ...doneHabitDay("jog", "2026-11-21"), amount: 4 },
+      { ...doneHabitDay("jog", "2026-11-20"), amount: 1 }, // ticked on a device that knows no Kinds
+      { ...doneHabitDay("jog", "2026-11-19"), amount: 3 },
+    ];
+    expect(statsOf(state({ habits: [jog], tasks }))[0].streaks).toEqual([{ title: "Jog", days: 1 }]);
+  });
+
   it("rolls over for tomorrow: the week moves on a day, focus restarts at 0, streaks keep today's tick", () => {
     const habits = [habit("med", "Meditate", 100), habit("read", "Read", 200)];
     const tasks = [doneHabitDay("med", TODAY), doneHabitDay("med", "2026-11-21"), doneHabitDay("read", "2026-11-21")];
