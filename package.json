@@ -1,6 +1,6 @@
 {
   "name": "hunt",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "private": true,
   "description": "Local-first focus timer, habits and weekly quests. Windows desktop + Android, synced over LAN.",
   "repository": {
