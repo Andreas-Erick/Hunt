@@ -1,6 +1,7 @@
-import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
+import { habitStreakOn, habitTaskId, outcomesBackFrom, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { isHabitScheduledOn } from "./habitFrequency";
+import { habitSuccessRate } from "./habitInsight";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,6 +46,11 @@ export interface HabitDaySummary {
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
+  /**
+   * The Success Rate (habitSuccessRate) over every day since the Habit began,
+   * or null before any day was Met or Missed. Worked out on first call only.
+   */
+  successRate: () => number | null;
 }
 
 const EMPTY_DATES: ReadonlySet<string> = new Set<string>();
@@ -134,12 +140,18 @@ export function summarizeHabitDays(
         const habit = habitById.get(habitId) ?? { id: habitId };
         const outcomeOn = (dayKey: string) =>
           habitDayOutcome({ habit, dayKey, dayTask: dayTasks?.get(dayKey), todayKey });
+        const firstDayKey = firstHabitDay(habit, dayTasks, todayKey);
+        let rate: number | null | undefined;
         summary = {
           todayTask,
           completedDates,
-          streak: habitStreakOn(todayKey, outcomeOn, firstHabitDay(habit, dayTasks, todayKey)),
+          streak: habitStreakOn(todayKey, outcomeOn, firstDayKey),
           doneToday: todayTask?.status === "completed",
           outcomeOn,
+          successRate: () =>
+            rate === undefined
+              ? (rate = habitSuccessRate(outcomesBackFrom(todayKey, firstDayKey, outcomeOn)))
+              : rate,
         };
         cache.set(habitId, summary);
       }
