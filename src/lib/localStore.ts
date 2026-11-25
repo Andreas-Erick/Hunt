@@ -1,6 +1,8 @@
 import { db, loadSortedQuests } from "./db";
 import { applyChecklistEdit, type ChecklistEdit } from "./checklist";
+import { clampLength, clampTitle } from "./textLimits";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
+import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, Quest, QuestAccent, Task } from "./domainTypes";
 import {
@@ -85,22 +87,6 @@ function changed<T>(wrote: T, options?: LocalWriteOptions): T {
   return wrote;
 }
 
-/**
- * Trimmed `title` cut to at most `max` UTF-16 units without splitting a
- * surrogate pair (the same cut the sync validator applies), so the server
- * never has to change a title saved here.
- */
-export function clampTitle(title: string, max: number): string {
-  return clampLength(title.trim(), max);
-}
-
-/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair (not trimmed). */
-export function clampLength(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
 function newId(prefix: string, now: number): string {
   return `${prefix}-${now}-${Math.random().toString(36).slice(2, 6)}`;
 }
@@ -183,15 +169,25 @@ async function createTask(params: {
   return changed(true);
 }
 
+/** The Task fields an edit may change; a `reminderTime` of null clears the reminder. */
+export type TaskChanges = Partial<{
+  title: string;
+  notes: string;
+  questId: string | null;
+  scheduledDate: string;
+  reminderTime: string | null;
+}>;
+
 /**
  * Edits a task. The title is trimmed and cut to MAX_TASK_TITLE_LENGTH; an empty
  * one keeps the old title. False when the task does not exist.
  */
-async function updateTask(
-  taskId: string,
-  updates: Partial<{ title: string; notes: string; questId: string | null; scheduledDate: string }>
-): Promise<boolean> {
-  const changes = { ...updates };
+async function updateTask(taskId: string, updates: TaskChanges): Promise<boolean> {
+  const { reminderTime, ...rest } = updates;
+  const changes: Partial<Omit<Task, "id" | "updatedAt">> = { ...rest };
+  // Only a local "HH:MM" is saved (the sync validator drops anything else); null clears it.
+  if (reminderTime === null) changes.reminderTime = undefined;
+  else if (isReminderTime(reminderTime)) changes.reminderTime = reminderTime;
   if (typeof updates.title === "string") {
     const title = clampTitle(updates.title, MAX_TASK_TITLE_LENGTH);
     if (title) changes.title = title;

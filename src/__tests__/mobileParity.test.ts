@@ -275,6 +275,26 @@ describe("phone boundary guards agree with the server validator", () => {
     }
   });
 
+  it("keeps a Task's reminderTime exactly when the server does", () => {
+    const values: unknown[] = ["09:30", "00:00", "23:59", "24:00", "9:30", "09:30:00", "", 930, null, {}, ["09:30"]];
+    for (const reminderTime of values) {
+      const payload = {
+        quests: [],
+        tasks: [{ id: "tsk-1", title: "t", status: "queued", rank: 0, scheduledDate: "2026-11-25", reminderTime }],
+        timeLogs: [],
+        deletedTaskIds: [],
+        deletedLogIds: [],
+        activeFocus: { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: 0 },
+        lastSyncedAt: 0,
+      };
+      const copy = () => JSON.parse(JSON.stringify(payload)) as unknown;
+      const server = validateSyncPayload(copy());
+      const phoneTask = (w.guardSyncState(copy()).value.tasks as Record<string, unknown>[])[0];
+      const serverTask = (server.payload as unknown as { tasks: Record<string, unknown>[] }).tasks[0];
+      expect(phoneTask.reminderTime, JSON.stringify(reminderTime)).toEqual(serverTask.reminderTime);
+    }
+  });
+
   it("keeps exactly the rows and tombstones the server keeps (300 seeded hostile payloads)", () => {
     const seed = 4242;
     const r = lcg(seed);

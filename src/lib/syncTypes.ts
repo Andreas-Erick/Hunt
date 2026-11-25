@@ -1,13 +1,6 @@
-import type {
-  ActiveFocusState,
-  Habit,
-  Quest,
-  QuestAccent,
-  Task,
-  TaskStatus,
-  TimeLog,
-} from "./domainTypes";
+import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
 import { sanitizeChecklist } from "./checklist";
+import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
 
 export type { ActiveFocusState } from "./domainTypes";
@@ -311,7 +304,7 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "checklist", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
@@ -479,6 +472,7 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (task.habitId === undefined && Array.isArray(raw.checklist)) {
     task.checklist = sanitizeChecklist(raw.checklist);
   }
+  if (isReminderTime(raw.reminderTime)) task.reminderTime = raw.reminderTime;
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;

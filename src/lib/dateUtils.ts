@@ -1,4 +1,5 @@
 import type { Quest, Task } from "./domainTypes";
+import { habitDayOutcome, habitStreakOf, type HabitOutcome } from "./habitOutcome";
 
 /**
  * Deterministic Quest sort by slotIndex (0..2), breaking ties by createdAt then id.
@@ -44,11 +45,11 @@ export function isTaskVisibleToday(
 }
 
 /**
- * A daily habit instance from a past day that was never done: a missed day.
+ * A queued habit day Task whose day's Outcome is Missed (habitDayOutcome).
  * It stays in the table as history (streaks, Review, its own Plan the week
  * column) but is never an open task on a later day. A dateless habit row is
  * not today's instance, so it counts as past. An 'active' instance (focus
- * still running across midnight) is not missed.
+ * still running across midnight) is Open, not Missed.
  */
 export function isMissedHabitTask(
   task: Pick<Task, "status" | "scheduledDate" | "habitId">,
@@ -57,7 +58,8 @@ export function isMissedHabitTask(
   return (
     Boolean(task.habitId) &&
     task.status === "queued" &&
-    (task.scheduledDate ?? "") < todayKey
+    habitDayOutcome({ habit: {}, dayKey: task.scheduledDate ?? "", dayTask: task, todayKey }) ===
+      "missed"
   );
 }
 
@@ -119,21 +121,40 @@ export function msUntilNextLocalMidnight(nowMs: number = Date.now()): number {
   return Math.max(50, nextMidnight - nowMs);
 }
 
+/** `outcomeOn` for each day from `todayKey` back in time, without end. */
+function* outcomesBackFrom(
+  todayKey: string,
+  outcomeOn: (dayKey: string) => HabitOutcome | null
+): Generator<HabitOutcome | null> {
+  for (let offset = 0; ; offset -= 1) yield outcomeOn(dateKeyFromOffset(todayKey, offset));
+}
+
+/** A Habit's Streak on `todayKey`, from its Outcome on each day (habitStreakOf). */
+export function habitStreakOn(
+  todayKey: string,
+  outcomeOn: (dayKey: string) => HabitOutcome | null
+): number {
+  return habitStreakOf(outcomesBackFrom(todayKey, outcomeOn));
+}
+
+const TICKED_DAY: Pick<Task, "status"> = { status: "completed" };
+
 /**
- * Consecutive completed days for a habit ending on `todayKey` (or yesterday if
- * today is not yet completed, so a running streak does not drop to 0 at 8 AM).
+ * The Streak of a daily Check Habit from the days it was Met: consecutive Met
+ * days ending today, or yesterday while today is Open.
  */
 export function computeHabitStreak(
   completedDates: ReadonlySet<string>,
   todayKey: string
 ): number {
-  let offset = completedDates.has(todayKey) ? 0 : -1;
-  let streak = 0;
-  while (completedDates.has(dateKeyFromOffset(todayKey, offset))) {
-    streak += 1;
-    offset -= 1;
-  }
-  return streak;
+  return habitStreakOn(todayKey, (dayKey) =>
+    habitDayOutcome({
+      habit: {},
+      dayKey,
+      dayTask: completedDates.has(dayKey) ? TICKED_DAY : undefined,
+      todayKey,
+    })
+  );
 }
 
 /** Whole, non-negative seconds; NaN, ±Infinity and non-numeric input become 0. */

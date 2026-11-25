@@ -1104,6 +1104,24 @@
       align-items: center;
       gap: 6px;
     }
+    .reminder-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .reminder-row .sheet-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: var(--touch-min);
+      margin-bottom: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .reminder-row .text-action {
+      flex: 0 0 auto;
+      margin: 0;
+      color: var(--slate);
+    }
     .danger-outline-btn {
       min-height: var(--touch-min);
       padding: 0 14px;
@@ -3006,10 +3024,14 @@ var HuntCore = (() => {
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
     computeHabitStreak: () => computeHabitStreak,
+    dueReminders: () => dueReminders,
     fromFocusSession: () => fromFocusSession,
+    habitDayOutcome: () => habitDayOutcome,
+    habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
+    isReminderTime: () => isReminderTime,
     isSafeSyncId: () => isSafeSyncId,
     isTaskVisibleToday: () => isTaskVisibleToday,
     losingSessionEndAt: () => losingSessionEndAt,
@@ -3019,10 +3041,29 @@ var HuntCore = (() => {
     pickNextFocusTask: () => pickNextFocusTask,
     sameContent: () => sameContent,
     sessionLogId: () => sessionLogId,
+    summarizeHabitDays: () => summarizeHabitDays,
     toFocusSession: () => toFocusSession,
     toLocalDateKey: () => toLocalDateKey,
     transitionFocus: () => transitionFocus
   });
+
+  // src/lib/habitOutcome.ts
+  function habitDayOutcome({ dayKey, dayTask, todayKey }) {
+    if (dayKey > todayKey) return null;
+    if ((dayTask == null ? void 0 : dayTask.status) === "completed") return "met";
+    if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
+    return "missed";
+  }
+  function habitStreakOf(outcomes) {
+    let streak = 0;
+    let isToday = true;
+    for (const outcome of outcomes) {
+      if (outcome === "met") streak += 1;
+      else if (!(isToday && outcome === "open")) break;
+      isToday = false;
+    }
+    return streak;
+  }
 
   // src/lib/dateUtils.ts
   function habitTaskId(habitId, dateKey) {
@@ -3036,7 +3077,7 @@ var HuntCore = (() => {
   }
   function isMissedHabitTask(task, todayKey) {
     var _a;
-    return Boolean(task.habitId) && task.status === "queued" && ((_a = task.scheduledDate) != null ? _a : "") < todayKey;
+    return Boolean(task.habitId) && task.status === "queued" && habitDayOutcome({ habit: {}, dayKey: (_a = task.scheduledDate) != null ? _a : "", dayTask: task, todayKey }) === "missed";
   }
   function isOpenTask(task, todayKey) {
     return (task.status === "queued" || task.status === "active") && !isMissedHabitTask(task, todayKey);
@@ -3055,14 +3096,23 @@ var HuntCore = (() => {
   function dateKeyFromOffset(baseKey, dayOffset) {
     return toLocalDateKey(dateFromKey(baseKey, dayOffset).getTime());
   }
+  function* outcomesBackFrom(todayKey, outcomeOn) {
+    for (let offset = 0; ; offset -= 1) yield outcomeOn(dateKeyFromOffset(todayKey, offset));
+  }
+  function habitStreakOn(todayKey, outcomeOn) {
+    return habitStreakOf(outcomesBackFrom(todayKey, outcomeOn));
+  }
+  var TICKED_DAY = { status: "completed" };
   function computeHabitStreak(completedDates, todayKey) {
-    let offset = completedDates.has(todayKey) ? 0 : -1;
-    let streak = 0;
-    while (completedDates.has(dateKeyFromOffset(todayKey, offset))) {
-      streak += 1;
-      offset -= 1;
-    }
-    return streak;
+    return habitStreakOn(
+      todayKey,
+      (dayKey) => habitDayOutcome({
+        habit: {},
+        dayKey,
+        dayTask: completedDates.has(dayKey) ? TICKED_DAY : void 0,
+        todayKey
+      })
+    );
   }
 
   // src/lib/habitDay.ts
@@ -3080,15 +3130,25 @@ var HuntCore = (() => {
     return null;
   }
   var EMPTY_DATES = /* @__PURE__ */ new Set();
+  function addDayTask(days, task, day) {
+    const held = days.get(day);
+    if (!held || held.status !== "completed" && task.status === "completed") days.set(day, task);
+  }
   function summarizeHabitDays(habitTasks, todayKey) {
     const todayByHabit = /* @__PURE__ */ new Map();
     const datesByHabit = /* @__PURE__ */ new Map();
+    const dayTasksByHabit = /* @__PURE__ */ new Map();
     for (const task of habitTasks) {
       const habitId = task.habitId;
       if (!habitId) continue;
       const canonical = task.id === habitTaskId(habitId, todayKey);
       if (canonical || task.scheduledDate === todayKey && !todayByHabit.has(habitId)) {
         todayByHabit.set(habitId, task);
+      }
+      let dayTasks = dayTasksByHabit.get(habitId);
+      if (!dayTasks) {
+        dayTasks = /* @__PURE__ */ new Map();
+        dayTasksByHabit.set(habitId, dayTasks);
       }
       const day = completionDateKey(task);
       if (day) {
@@ -3098,6 +3158,9 @@ var HuntCore = (() => {
           datesByHabit.set(habitId, dates);
         }
         dates.add(day);
+        addDayTask(dayTasks, task, day);
+      } else if (task.scheduledDate) {
+        addDayTask(dayTasks, task, task.scheduledDate);
       }
     }
     const cache = /* @__PURE__ */ new Map();
@@ -3108,11 +3171,14 @@ var HuntCore = (() => {
         if (!summary) {
           const todayTask = todayByHabit.get(habitId);
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
+          const dayTasks = dayTasksByHabit.get(habitId);
+          const outcomeOn = (dayKey) => habitDayOutcome({ habit: { id: habitId }, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
           summary = {
             todayTask,
             completedDates,
-            streak: computeHabitStreak(completedDates, todayKey),
-            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed"
+            streak: habitStreakOn(todayKey, outcomeOn),
+            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed",
+            outcomeOn
           };
           cache.set(habitId, summary);
         }
@@ -3128,6 +3194,13 @@ var HuntCore = (() => {
     return typeof value === "string" && value.length > 0 && value.length <= maxLength && SAFE_ID_CHARS_RE.test(value);
   }
 
+  // src/lib/textLimits.ts
+  function clampLength(text, max) {
+    if (text.length <= max) return text;
+    const last = text.charCodeAt(max - 1);
+    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
+  }
+
   // src/lib/checklist.ts
   var MAX_CHECKLIST_ITEMS = 200;
   var MAX_CHECKLIST_TEXT_LENGTH = 500;
@@ -3141,10 +3214,7 @@ var HuntCore = (() => {
     return !task.habitId;
   }
   function cutText(text) {
-    const max = MAX_CHECKLIST_TEXT_LENGTH;
-    if (text.length <= max) return text;
-    const last = text.charCodeAt(max - 1);
-    return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
+    return clampLength(text, MAX_CHECKLIST_TEXT_LENGTH);
   }
   function cleanText(text) {
     return cutText(text.trim()).trimEnd();
@@ -3185,6 +3255,48 @@ var HuntCore = (() => {
     const items = checklistOf(task);
     if (items.length === 0) return null;
     return { done: items.filter((i) => i.done === true).length, total: items.length };
+  }
+
+  // src/lib/reminders.ts
+  var REMINDER_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+  var DATE_KEY_RE2 = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function isReminderTime(value) {
+    return typeof value === "string" && REMINDER_TIME_RE.test(value);
+  }
+  function localFireAt(dateKey, time) {
+    const m = DATE_KEY_RE2.exec(dateKey);
+    if (!m) return null;
+    const [hour, minute] = time.split(":").map(Number);
+    const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, minute).getTime();
+    return Number.isFinite(at) ? at : null;
+  }
+  function isUndone(task) {
+    return task.status === "queued" || task.status === "active";
+  }
+  function taskReminder(task) {
+    const { scheduledDate, reminderTime } = task;
+    if (!isUndone(task) || !scheduledDate || !isReminderTime(reminderTime)) return null;
+    const fireAt = localFireAt(scheduledDate, reminderTime);
+    if (fireAt === null) return null;
+    return {
+      kind: "task",
+      key: `task:${task.id}:${scheduledDate}T${reminderTime}`,
+      itemId: task.id,
+      title: task.title,
+      dateKey: scheduledDate,
+      time: reminderTime,
+      fireAt
+    };
+  }
+  function dueReminders(sources, window) {
+    const due = [];
+    for (const task of sources.tasks) {
+      const reminder = taskReminder(task);
+      if (reminder && reminder.fireAt >= window.from && reminder.fireAt < window.to) {
+        due.push(reminder);
+      }
+    }
+    return due.sort((a, b) => a.fireAt - b.fireAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
   // src/lib/syncTypes.ts
@@ -3733,9 +3845,9 @@ var HuntCore = (() => {
   }
 
   // src/lib/pendingTicks.ts
-  var DATE_KEY_RE2 = /^\d{4}-\d{2}-\d{2}$/;
+  var DATE_KEY_RE3 = /^\d{4}-\d{2}-\d{2}$/;
   function isWellFormed(tick) {
-    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE2.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
+    return !!tick && typeof tick.taskId === "string" && tick.taskId !== "" && typeof tick.dateKey === "string" && DATE_KEY_RE3.test(tick.dateKey) && typeof tick.tickedAt === "number" && Number.isFinite(tick.tickedAt) && tick.tickedAt > 0;
   }
   function habitRowFor(state, tick) {
     var _a;
@@ -3796,6 +3908,8 @@ var HuntCore = (() => {
     var checklistOf = HuntCore.checklistOf;
     var checklistProgress = HuntCore.checklistProgress;
     var newChecklistItemId = HuntCore.newChecklistItemId;
+    var isReminderTime = HuntCore.isReminderTime;
+    var summarizeHabitDays = HuntCore.summarizeHabitDays;
 
     // Android 11+ APK: MainActivity appends "HuntSmoothIme/1" to WebView's UA (immune to Chromium's
     // "Android 10; K" UA reduction) and drives --kb frame-by-frame via WindowInsetsAnimation. Lock
@@ -3970,7 +4084,7 @@ var HuntCore = (() => {
     // Keeps only what the screens and the merge can use (the rows the server validator keeps): objects with
     // a safe id; quests and tasks with a string title; logs with a safe taskId, a finite duration >= 0 and
     // a startTime stamp; safe tombstone ids; a valid focus (else the empty focus). A scheduledDate that is
-    // not YYYY-MM-DD is removed. Never mutates `input` (rows are shared, fixed ones copied).
+    // not YYYY-MM-DD, and a reminderTime that is not HH:MM, are removed. Never mutates `input` (rows are shared, fixed ones copied).
     // dropped = rows, ids or fields discarded.
     function guardSyncState(input) {
       const src = isPlainRecord(input) ? input : {};
@@ -3988,10 +4102,12 @@ var HuntCore = (() => {
       const tasks = keep("tasks", isTitledRow).map(t => {
         const badDate = !hasDateKeyOrNone(t);
         const badHabit = t.habitId !== undefined && !isSafeSyncId(t.habitId);
-        if (!badDate && !badHabit) return t;
+        const badReminder = t.reminderTime !== undefined && !isReminderTime(t.reminderTime);
+        if (!badDate && !badHabit && !badReminder) return t;
         const copy = { ...t };
         if (badDate) { dropped++; delete copy.scheduledDate; }
         if (badHabit) { dropped++; delete copy.habitId; }
+        if (badReminder) { dropped++; delete copy.reminderTime; }
         return copy;
       });
       let activeFocus = src.activeFocus === undefined ? emptyFocus(0) : src.activeFocus;
@@ -4682,6 +4798,22 @@ var HuntCore = (() => {
     function updateTaskField(taskId, field, value) {
       cancelFieldDraft(taskId, field);
       if (applyTaskField(taskId, field, value)) commitLocalChange();
+    }
+
+    // A dated Task's one reminder time (ADR-0007): "" clears it (the Task stays date-only); only a local
+    // "HH:MM" is saved. Quiet commit, so the open Task Options sheet keeps its input.
+    function setTaskReminder(taskId, value) {
+      const t = state.tasks.find(x => x.id === taskId);
+      if (!t || (value !== "" && !isReminderTime(value))) return;
+      if ((t.reminderTime || "") === value) return;
+      if (value) t.reminderTime = value;
+      else delete t.reminderTime;
+      t.updatedAt = nextStamp(t);
+      const clear = document.getElementById("taskReminderClear");
+      if (clear) clear.hidden = !value;
+      const input = clear && clear.parentElement.querySelector("input");
+      if (input && !value) input.value = "";
+      commitLocalChange({ render: false });
     }
 
     // ----- Merge (phone side) -----
@@ -7094,6 +7226,13 @@ var HuntCore = (() => {
             <button class="sheet-pill ${dayKey === tomorrowKey ? 'selected' : ''}" aria-pressed="${dayKey === tomorrowKey}" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(tomorrowKey)});">Tomorrow</button>
             ${otherDay ? `<button class="sheet-pill selected" aria-pressed="true" onclick="selectPill(this);updateTaskField(${jsArg(task.id)}, 'scheduledDate', ${jsArg(dayKey)});">${escapeHtml(dateKeyLabel(dayKey))}</button>` : ""}
           </div>
+
+          ${task.scheduledDate && !task.habitId ? `
+          <div class="sheet-label">Reminder</div>
+          <div class="reminder-row">
+            <input type="time" class="sheet-input" aria-label="Reminder time" value="${escapeHtml(isReminderTime(task.reminderTime) ? task.reminderTime : "")}" onchange="setTaskReminder(${jsArg(task.id)}, this.value)" />
+            <button id="taskReminderClear" class="text-action" aria-label="Clear reminder" ${isReminderTime(task.reminderTime) ? "" : "hidden"} onclick="setTaskReminder(${jsArg(task.id)}, '')">✕ Clear</button>
+          </div>` : ""}
 
           <div class="sheet-footer-row">
             <button class="text-action" onclick="completeTaskDirect(${jsArg(task.id)})" style="color:var(--emerald);">✓ Mark Completed</button>
@@ -9993,28 +10132,8 @@ var HuntCore = (() => {
         const recentDays = [];
         for (let i = 6; i >= 0; i--) recentDays.push(dayKeyOffset(-i, now));
 
-        const completedDatesByHabit = new Map();
-        const todayTaskByHabit = new Map();
-        for (const t of state.tasks) {
-          if (!t.habitId) continue;
-          if (t.id === habitTaskId(t.habitId, todayKey) || t.scheduledDate === todayKey) {
-            if (!todayTaskByHabit.has(t.habitId) || t.id === habitTaskId(t.habitId, todayKey)) {
-              todayTaskByHabit.set(t.habitId, t);
-            }
-          }
-          if (t.status === "completed") {
-            const dk = completionDateKey(t);
-            if (dk) {
-              if (!completedDatesByHabit.has(t.habitId)) completedDatesByHabit.set(t.habitId, new Set());
-              completedDatesByHabit.get(t.habitId).add(dk);
-            }
-          }
-        }
-
-        const doneTodayCount = habitsList.filter(h => {
-          const tt = todayTaskByHabit.get(h.id);
-          return tt && tt.status === "completed";
-        }).length;
+        const habitDays = summarizeHabitDays(state.tasks, todayKey);
+        const doneTodayCount = habitsList.filter(h => habitDays.summaryFor(h.id).doneToday).length;
 
         container.innerHTML = `
           <div class="hero-bar">
@@ -10043,13 +10162,10 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + habitsList.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const tt = todayTaskByHabit.get(h.id);
-            const doneToday = !!(tt && tt.status === "completed");
-            const compSet = completedDatesByHabit.get(h.id) || new Set();
-            const streak = computeHabitStreak(compSet, todayKey);
+            const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
             const title = escapeHtml(h.title);
             const dotsHtml = recentDays.map(dk => {
-              const hit = compSet.has(dk);
+              const hit = outcomeOn(dk) === "met";
               const isTodayDot = dk === todayKey;
               return `<span style="width:7px;height:7px;border-radius:50%;${hit ? `background:${hex};` : isTodayDot ? "border:1px solid rgb(var(--c-ink) / 0.35);background:transparent;" : "background:rgb(var(--c-ink) / 0.1);"}"></span>`;
             }).join("");

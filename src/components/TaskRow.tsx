@@ -18,6 +18,7 @@ import { ChecklistProgressBadge, TaskChecklistEditor } from "./TaskChecklist";
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import type { QueueRowReorderHandlers } from "./useQueueReorder";
 import { HeightReveal } from "./HeightReveal";
+import { ReminderBadge, TaskReminderField } from "./TaskReminderField";
 
 interface QueueTaskRowProps {
   variant: "queue";
@@ -78,6 +79,11 @@ function DailyHabitBadge() {
       <span>Daily</span>
     </span>
   );
+}
+
+/** A dated Task that is not a habit day can carry one reminder time (habit reminders live on the Habit). */
+function hasReminderSlot(task: Task): boolean {
+  return Boolean(task.scheduledDate) && !task.habitId;
 }
 
 /** Icon-only row delete (two-step) shared by Other work and Completed rows. */
@@ -188,6 +194,7 @@ function MaintenanceTaskRow({
 
           {task.habitId && <DailyHabitBadge />}
           <ChecklistProgressBadge task={task} />
+          {hasReminderSlot(task) && task.reminderTime && <ReminderBadge time={task.reminderTime} />}
 
           <button
             type="button"
@@ -308,6 +315,7 @@ function QueueTaskRow({
 
             {task.habitId && <DailyHabitBadge />}
             <ChecklistProgressBadge task={task} />
+            {hasReminderSlot(task) && task.reminderTime && <ReminderBadge time={task.reminderTime} />}
 
             {/* Timer / Play Button */}
             {isCurrentlyActive && isRunning ? (
@@ -383,6 +391,9 @@ function QueueTaskRow({
           />
 
           <TaskChecklistEditor task={task} />
+          {hasReminderSlot(task) && (
+            <TaskReminderField taskId={task.id} taskTitle={task.title} reminderTime={task.reminderTime} />
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex min-w-0 flex-wrap items-center gap-2">

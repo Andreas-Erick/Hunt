@@ -17,7 +17,8 @@ export {
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey } from "../lib/habitDay";
+export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
+export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
   applyChecklistEdit,
   canHoldChecklist,
@@ -48,3 +49,4 @@ export {
 } from "../lib/taskQueue";
 export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
 export { applyPendingTicks } from "../lib/pendingTicks";
+export { dueReminders, isReminderTime } from "../lib/reminders";

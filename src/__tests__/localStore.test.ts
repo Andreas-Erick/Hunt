@@ -47,6 +47,16 @@ describe("localStore write invariants", () => {
     expect(changes).toBe(1);
   });
 
+  it("sets and clears a dated Task's reminder time, and never saves a malformed one", async () => {
+    await db.tasks.add(task("t", { scheduledDate: "2026-11-25" }));
+    expect(await localStore.updateTask("t", { reminderTime: "18:45" })).toBe(true);
+    expect((await db.tasks.get("t"))?.reminderTime).toBe("18:45");
+    await localStore.updateTask("t", { reminderTime: "7pm" });
+    expect((await db.tasks.get("t"))?.reminderTime).toBe("18:45");
+    await localStore.updateTask("t", { reminderTime: null });
+    expect(await db.tasks.get("t")).not.toHaveProperty("reminderTime");
+  });
+
   it("emits nothing when nothing was written", async () => {
     expect(await localStore.updateTask("missing", { title: "x" })).toBe(false);
     expect(await localStore.createTask({ title: "   ", questId: null })).toBe(false);

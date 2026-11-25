@@ -1,5 +1,6 @@
 import type { ChecklistItem, Task } from "./domainTypes";
 import { isSafeSyncId } from "./syncIds";
+import { clampLength } from "./textLimits";
 
 /**
  * Checklist rules shared by the desktop and the phone (both apply edits with
@@ -40,10 +41,7 @@ export function canHoldChecklist(task: ChecklistTask): boolean {
 
 /** `text` cut to the item limit without splitting a surrogate pair (the validator's cut). */
 function cutText(text: string): string {
-  const max = MAX_CHECKLIST_TEXT_LENGTH;
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+  return clampLength(text, MAX_CHECKLIST_TEXT_LENGTH);
 }
 
 /** Trimmed and cut, so the validator never changes it; "" when blank. */

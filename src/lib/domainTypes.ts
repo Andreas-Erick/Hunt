@@ -58,6 +58,7 @@ export interface Task {
   scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
   habitId?: string; // Source Habit.id when materialized from a daily habit
   checklist?: ChecklistItem[]; // ordered; never on a habit day Task
+  reminderTime?: string; // Local "HH:MM" on a dated Task; none = date-only (ADR-0007)
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;
