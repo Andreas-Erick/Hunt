@@ -3,15 +3,17 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import type { Habit } from "@/lib/domainTypes";
+import type { Habit, Quest } from "@/lib/domainTypes";
 import type { HabitDaySummary } from "@/lib/habitDay";
 import { HabitCalendar } from "./HabitCalendar";
+import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
 import { HabitStatistics } from "./HabitStatistics";
 
-/** The detail screen's tabs, in order. Edit joins this list. */
+/** The detail screen's tabs, in order. */
 const TABS = [
   { id: "calendar", label: "Calendar" },
   { id: "statistics", label: "Statistics" },
+  { id: "edit", label: "Edit" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -19,15 +21,17 @@ const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tab
 
 /**
  * A Habit's detail screen: a dialog with one tab per view of the Habit
- * (Calendar, Statistics). Escape, the close button and a press on the backdrop
- * close it; focus stays inside while it is open and returns to the opener.
+ * (Calendar, Statistics, Edit). Escape, the close button and a press on the
+ * backdrop close it, asking first while the Edit tab holds unsaved edits;
+ * focus stays inside while it is open and returns to the opener.
  */
 export function HabitDetail({
   habit,
   todayKey,
   summary,
   metClass,
-  onClose,
+  quests,
+  onClose: close,
 }: {
   habit: Habit;
   todayKey: string;
@@ -35,10 +39,21 @@ export function HabitDetail({
   summary: Pick<HabitDaySummary, "outcomeOn" | "amountOn" | "score" | "weekOn">;
   /** The Habit's accent background class for a Met day. */
   metClass: string;
+  /** The active Quests the Edit tab can assign the Habit to. */
+  quests: readonly Quest[];
   onClose: () => void;
 }) {
   const ids = useId();
   const [tab, setTab] = useState<TabId>("calendar");
+  const [editDirty, setEditDirty] = useState(false);
+  const onClose = () => {
+    if (confirmDiscardHabitEdit(tab === "edit" && editDirty)) close();
+  };
+  const selectTab = (next: TabId) => {
+    if (next === tab || !confirmDiscardHabitEdit(tab === "edit" && editDirty)) return;
+    setEditDirty(false);
+    setTab(next);
+  };
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const pressOnBackdrop = useRef(false);
@@ -113,7 +128,7 @@ export function HabitDetail({
               role="tab"
               aria-selected={tab === t.id}
               aria-controls={`${ids}-panel-${t.id}`}
-              onClick={() => setTab(t.id)}
+              onClick={() => selectTab(t.id)}
               className={`-mb-px min-h-9 border-b-2 px-3 text-sm transition-colors duration-150 ease-out coarse:min-h-11 ${
                 tab === t.id ? "border-accent text-white" : "border-transparent text-hud-muted hover:text-white"
               }`}
@@ -144,6 +159,11 @@ export function HabitDetail({
               amountOn={summary.amountOn}
               metClass={metClass}
             />
+          </div>
+        )}
+        {tab === "edit" && (
+          <div id={`${ids}-panel-edit`} role="tabpanel" aria-labelledby={`${ids}-tab-edit`} className="pt-4">
+            <HabitEditForm habit={habit} todayKey={todayKey} quests={quests} onDirtyChange={setEditDirty} onSaved={close} onCancel={close} />
           </div>
         )}
       </div>

@@ -9665,13 +9665,25 @@ var HuntCore = (() => {
       playClickSound();
       const h = asArray(state.habits).find(x => x.id === habitId);
       if (!h) return;
+      startHabitEdit(h);
+      showSheet("habit:" + h.id, `
+          ${sheetHeaderHtml("Edit Daily Habit")}
+          ${habitEditorHtml(h)}
+      `);
+    }
+
+    // Loads `h` into the editor's drafts (Quest, Frequency and the Kind it may use).
+    function startHabitEdit(h) {
       selectedHabitQuestId = h.questId || null;
       habitFrequencyDraft = habitFrequencyOn(h, toLocalDateKey());
       habitFrequencyKind = habitKindOf(h);
+    }
 
-      showSheet("habit:" + h.id, `
-          ${sheetHeaderHtml("Edit Daily Habit")}
-
+    // The one Habit editor, in its own sheet (the card's ⋯) and in the detail sheet's Edit tab: title,
+    // notes, the Kind read-only with a Count Habit's target and unit, the Frequency, the end date, the
+    // reminders, the Quest, Skip today, Delete and Save (saveHabitEdits). Call startHabitEdit(h) first.
+    function habitEditorHtml(h) {
+      return `
           <input id="editHabitTitleInput" class="sheet-input" value="${escapeHtml(h.title)}" aria-label="Habit title" enterkeyhint="done" onkeydown="if(isSubmitKey(event)) saveHabitEdits(${jsArg(h.id)})" />
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
 
@@ -9709,8 +9721,7 @@ var HuntCore = (() => {
           <div class="sheet-footer-row" style="margin-top:8px;">
             <button class="danger-outline-btn" onclick="deleteHabitItem(${jsArg(h.id)})">Delete Habit</button>
             <button class="pressable" onclick="saveHabitEdits(${jsArg(h.id)})" style="height:var(--touch-min);padding:0 22px;border-radius:12px;border:none;background:var(--cyan);color:rgb(var(--c-on-accent));font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;">Save</button>
-          </div>
-      `);
+          </div>`;
     }
 
     // The sheet's optional end date (GLOSSARY: Ended Habit). After it the Habit leaves Today and moves
@@ -10041,9 +10052,11 @@ var HuntCore = (() => {
       return true;
     }
 
-    // Habit detail sheet: one tab per view of the Habit (Calendar, Statistics; Edit joins
-    // HABIT_DETAIL_TABS). The month grid is the shared HuntCore.habitMonth, the same as the desktop's.
-    const HABIT_DETAIL_TABS = [{ id: "calendar", label: "Calendar" }, { id: "statistics", label: "Statistics" }];
+    // Habit detail sheet: one tab per view of the Habit (Calendar, Statistics, Edit). The month grid is
+    // the shared HuntCore.habitMonth, the same as the desktop's; Edit is the Habit editor (habitEditorHtml).
+    const HABIT_DETAIL_TABS = [
+      { id: "calendar", label: "Calendar" }, { id: "statistics", label: "Statistics" }, { id: "edit", label: "Edit" }
+    ];
     const HABIT_OUTCOME_LABEL = { met: "Met", missed: "Missed", skipped: "Skipped", open: "Open" };
     let habitDetail = null; // { habitId, tab, monthKey, dayKey, statsMonthKey, statsYear }
 
@@ -10061,6 +10074,8 @@ var HuntCore = (() => {
       if (!habitDetail || habitDetail.tab === tabId) return;
       playClickSound();
       habitDetail.tab = tabId;
+      const h = asArray(state.habits).find(x => x.id === habitDetail.habitId);
+      if (tabId === "edit" && h) startHabitEdit(h);
       renderHabitDetailSheet();
     }
 
@@ -10203,10 +10218,12 @@ var HuntCore = (() => {
           <div id="habitPanel-statistics" role="tabpanel" aria-labelledby="habitTab-statistics" style="--habit-hex:${hex};">
             ${habitStatisticsHtml(h, summary, todayKey)}
           </div>` : "";
+      const edit = habitDetail.tab === "edit" ? `
+          <div id="habitPanel-edit" role="tabpanel" aria-labelledby="habitTab-edit">${habitEditorHtml(h)}</div>` : "";
       showSheet("habitDetail:" + h.id, `
           ${sheetHeaderHtml(escapeHtml(h.title))}
           <div class="habit-tabs" role="tablist" aria-label="Habit views">${tabs}</div>
-          ${statistics}
+          ${statistics}${edit}
           ${habitDetail.tab !== "calendar" ? "" : `<div id="habitPanel-calendar" role="tabpanel" aria-labelledby="habitTab-calendar" style="--habit-hex:${hex};">
             <div class="habit-cal-head">
               <button class="habit-cal-nav pressable" aria-label="Previous month" ${month.prevMonthKey ? "" : "disabled"} onclick="shiftHabitDetailMonth(${jsArg(month.prevMonthKey || "")})">‹</button>

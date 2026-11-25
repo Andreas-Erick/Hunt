@@ -62,17 +62,14 @@ export function useNewHabitKind() {
 
 /**
  * The habit edit form's Kind section: the Kind shown read-only (it never
- * changes), and a Count Habit's target and unit, which can.
+ * changes), and a Count Habit's target and unit, which can; they start from
+ * `initial`'s.
  */
-export function useHabitKindEdit() {
-  const [target, setTarget] = useState("");
-  const [unit, setUnit] = useState("");
+export function useHabitKindEdit(initial: Habit) {
+  const [target, setTarget] = useState(() => formatCountAmount(countTargetOf(initial)));
+  const [unit, setUnit] = useState(initial.unit ?? "");
   const isCount = (h: Habit) => habitKindOf(h) === "count";
   return {
-    load: (h: Habit) => {
-      setTarget(formatCountAmount(countTargetOf(h)));
-      setUnit(h.unit ?? "");
-    },
     isDirty: (h: Habit) =>
       isCount(h) && (target !== formatCountAmount(countTargetOf(h)) || unit !== (h.unit ?? "")),
     changes: (h: Habit): Partial<Habit> => {
