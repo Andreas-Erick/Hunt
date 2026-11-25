@@ -40,6 +40,8 @@ const QR_FAILED_TEXT = "Couldn't draw the QR code. Use Copy to get the pairing l
 const EXPORT_FAILED_TEXT = "Could not export the snapshot. Reload Hunt and try again.";
 const IMPORT_BAD_FILE_TEXT = "Invalid snapshot file. Choose a .json snapshot exported from Hunt.";
 const IMPORT_SAVE_FAILED_TEXT = "Could not save the snapshot locally. Reload Hunt and try again.";
+/** file.text() rejected: the file went away or the browser could not read it. */
+const IMPORT_READ_FAILED_TEXT = "Could not read the file. Choose the snapshot again.";
 const IMPORT_OK_TEXT = "Snapshot merged · syncing";
 
 interface FooterStatus {
@@ -71,14 +73,6 @@ export function buildPairingUrl(baseUrl: string, token: string): string {
   if (!token) return baseUrl;
   const origin = baseUrl.replace(/\/+$/, "");
   return `${origin}/hunt-mobile.html?token=${encodeURIComponent(token)}`;
-}
-
-/** A file that is not a Hunt snapshot (as opposed to a failed local save). */
-function isBadSnapshotFile(err: unknown): boolean {
-  return (
-    err instanceof SyntaxError ||
-    (err instanceof Error && err.name === "SnapshotFormatError")
-  );
 }
 
 interface ParsedQrSvg {
@@ -240,6 +234,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       // automatic sync is already running.
       ok = await syncNow();
     } catch {
+      // syncNow never rejects (it resolves false on failure); this only guards
+      // the spinner against a future change, and false already shows the error.
       ok = false;
     }
     if (!aliveRef.current) return;
@@ -340,13 +336,14 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       // Push the merged rows to the server in the background (never rejects).
       void syncNow();
     } catch (err) {
-      const badFile = isBadSnapshotFile(err);
-      if (!badFile) console.error("[hunt] snapshot_import_failed", err);
+      // importSnapshot reports bad files and failed saves in its result, so
+      // only file.text() can land here.
+      console.error("[hunt] snapshot_read_failed", err);
       if (aliveRef.current) {
         setStatus({
           source: "import",
           tone: "error",
-          text: badFile ? IMPORT_BAD_FILE_TEXT : IMPORT_SAVE_FAILED_TEXT,
+          text: IMPORT_READ_FAILED_TEXT,
         });
       }
     } finally {
