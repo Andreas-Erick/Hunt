@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useShallow } from "zustand/react/shallow";
 import { Eraser, ListChecks, Plus, RotateCcw, Trash2 } from "lucide-react";
@@ -25,12 +25,27 @@ export function ListsView() {
   const createList = useCommandStore((s) => s.createList);
   const lists = useLiveQuery(reads.lists, []);
   const [newTitle, setNewTitle] = useState("");
+  // Set synchronously by the first create; drops activations that arrive
+  // before React re-renders with the cleared input.
+  const creatingRef = useRef(false);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    const title = newTitle;
+    // The input is cleared before the write, so a double click or a repeated
+    // Enter cannot create the List twice.
+    if (!title.trim() || creatingRef.current) return;
+    creatingRef.current = true;
+    setNewTitle("");
     hudAudio.playClick();
-    if (await createList(newTitle)) setNewTitle("");
+    let created = false;
+    try {
+      created = await createList(title);
+    } finally {
+      creatingRef.current = false;
+      // Give the name back unless something new was typed meanwhile.
+      if (!created) setNewTitle((current) => (current === "" ? title : current));
+    }
   };
 
   return (
