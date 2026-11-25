@@ -1,8 +1,18 @@
-import type { ActiveFocusState, Habit, List, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
+import type {
+  ActiveFocusState,
+  Habit,
+  List,
+  Quest,
+  QuestAccent,
+  Task,
+  TaskStatus,
+  TimeLog,
+} from "./domainTypes";
+import { toLocalDateKey } from "./dateKeys";
 import { sanitizeCountDayFields, sanitizeHabitKindFields, sanitizeSlipFields } from "./habitKind";
 import { sanitizeChecklist } from "./checklist";
 import { isReminderTime, sanitizeHabitReminderTimes } from "./reminderTime";
-import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
+import { entityIdOrNull, isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
 import { sanitizeHabitEnd } from "./habitEnd";
 import { copyScalarExtras } from "./syncRowExtras";
 import { MAX_SYNC_LISTS, sanitizeList } from "./lists";
@@ -359,18 +369,6 @@ type LogRow = Omit<TimeLog, "taskTitleSnapshot" | "endTime" | "questCodeSnapshot
   endTime?: number;
 };
 
-function entityIdOrNull(value: unknown): string | null {
-  return isSafeSyncId(value) ? value : null;
-}
-
-/** Local YYYY-MM-DD of a timestamp (same format as db.ts toLocalDateKey). */
-function localDateKeyOf(timestamp: number): string {
-  const d = new Date(Math.min(timestamp, MAX_DATE_KEY_MS));
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
 /**
  * A new, sanitized quest row, or null when the row cannot be legitimate (not
  * an object, unsafe id, title not a string). Other fields are coerced.
@@ -483,7 +481,7 @@ export function sanitizeLog(raw: unknown): TimeLog | null {
       : "slate",
     startTime,
     durationSeconds: Math.min(durationSeconds, MAX_COUNTER_SECONDS),
-    dateKey: isDateKey(raw.dateKey) ? raw.dateKey : localDateKeyOf(endTime ?? startTime),
+    dateKey: isDateKey(raw.dateKey) ? raw.dateKey : toLocalDateKey(Math.min(endTime ?? startTime, MAX_DATE_KEY_MS)),
   };
   if (endTime !== undefined) log.endTime = endTime;
   if (typeof raw.taskTitleSnapshot === "string") {
