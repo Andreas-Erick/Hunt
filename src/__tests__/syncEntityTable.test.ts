@@ -26,6 +26,7 @@ describe("synced collection table", () => {
     base.quests = [{ ...row, slotIndex: 0 } as unknown as SyncPayload["quests"][number]];
     base.tasks = [{ ...row, status: "queued", rank: 0, questId: null } as unknown as SyncPayload["tasks"][number]];
     base.habits = [{ ...row, rank: 0, questId: null } as unknown as NonNullable<SyncPayload["habits"]>[number]];
+    base.lists = [{ ...row, items: [], rank: 0 }];
     base.timeLogs = [{ id: "x-1", taskId: "t", startTime: 1, durationSeconds: 1 } as unknown as SyncPayload["timeLogs"][number]];
     const incoming = createEmptySyncPayload();
     for (const key of SYNCED_ENTITY_KEYS) (incoming[TOMBSTONE_KEY[key]] as string[]) = ["x-1"];

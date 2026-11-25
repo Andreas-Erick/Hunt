@@ -13,6 +13,7 @@ export const TOMBSTONE_KINDS = [
   "deletedTaskIds",
   "deletedLogIds",
   "deletedHabitIds",
+  "deletedListIds",
 ] as const satisfies readonly (keyof SyncPayload)[];
 
 export type TombstoneKind = (typeof TOMBSTONE_KINDS)[number];
@@ -25,6 +26,7 @@ export function buildTombstones(listFor: (kind: TombstoneKind) => string[]): Tom
     deletedTaskIds: listFor("deletedTaskIds"),
     deletedLogIds: listFor("deletedLogIds"),
     deletedHabitIds: listFor("deletedHabitIds"),
+    deletedListIds: listFor("deletedListIds"),
   };
 }
 
@@ -89,6 +91,10 @@ export function recordDeletedLogTombstone(logId: string): void {
 
 export function recordDeletedHabitTombstone(habitId: string): void {
   recordTombstone("deletedHabitIds", habitId);
+}
+
+export function recordDeletedListTombstone(listId: string): void {
+  recordTombstone("deletedListIds", listId);
 }
 
 /** True when this device has recorded a deletion tombstone for the task id. */

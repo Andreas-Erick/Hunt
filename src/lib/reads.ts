@@ -1,5 +1,5 @@
 import { db, loadSortedQuests } from "./db";
-import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "./domainTypes";
 import { compareRank } from "./syncTypes";
 
 /**
@@ -42,6 +42,9 @@ export const reads = {
 
   /** Every habit in rank order. */
   habits: async (): Promise<Habit[]> => (await db.habits.toArray()).sort(compareRank),
+
+  /** Every standalone List in rank order. */
+  lists: async (): Promise<List[]> => (await db.lists.toArray()).sort(compareRank),
 
   /** Logs whose dateKey is one of `dateKeys`. */
   logsOnDays: (dateKeys: readonly string[]): Promise<TimeLog[]> =>

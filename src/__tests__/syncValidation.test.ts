@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { MAX_LIST_TITLE_LENGTH, MAX_SYNC_LISTS } from "@/lib/lists";
 import {
   MAX_CHECKLIST_ITEMS,
   MAX_CHECKLIST_TEXT_LENGTH,
@@ -118,6 +119,7 @@ describe("validateSyncPayload: structure", () => {
     ["quests not an array", rawPayload({ quests: "bad" })],
     ["tasks not an array", rawPayload({ tasks: {} })],
     ["timeLogs not an array", rawPayload({ timeLogs: null })],
+    ["lists not an array", rawPayload({ lists: {} })],
   ])("rejects %s", (_label, input) => {
     const check = validateSyncPayload(input);
     expect(check.valid).toBe(false);
@@ -525,6 +527,51 @@ describe("a Task's Checklist", () => {
 
   it("keeps an emptied Checklist, so a device's own write is never changed", () => {
     expect(sanitizeOne("task", taskRow({ checklist: [] }))?.get("checklist")).toEqual([]);
+  });
+});
+
+describe("standalone Lists", () => {
+  const item = (id: string, text: string, done = false) => ({ id, text, done });
+  const listRow = (overrides: Row = {}): Row => ({
+    id: "list-1763400000000-abcd",
+    title: "Groceries",
+    items: [item("chk-1", "Milk", true), item("chk-2", "Bread")],
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 2000,
+    ...overrides,
+  });
+
+  it("keeps a well-formed List and its tombstones unchanged", () => {
+    const { payload, dropped } = validated(rawPayload({ lists: [listRow()], deletedListIds: ["list-9"] }));
+    expect(dropped).toBe(0);
+    expect(payload.lists).toEqual([listRow()]);
+    expect(payload.deletedListIds).toEqual(["list-9"]);
+  });
+
+  it("reads a payload from an older device without Lists as no Lists", () => {
+    const { payload } = validated({ quests: [], tasks: [], timeLogs: [] });
+    expect(payload.lists).toEqual([]);
+    expect(payload.deletedListIds).toEqual([]);
+  });
+
+  it("drops a List that cannot be legitimate, unsafe tombstones, and cuts the title", () => {
+    const { payload, dropped } = validated(rawPayload({
+      lists: [listRow(), listRow({ id: "<b>" }), listRow({ id: "list-2", title: 5 }), "x",
+        listRow({ id: "list-3", title: "t".repeat(MAX_LIST_TITLE_LENGTH + 4), items: [null, item("chk-1", "ok")] })],
+      deletedListIds: ["list-ok", "<script>", 4],
+    }));
+    expect(dropped).toBe(3);
+    expect(payload.lists?.map((l) => l.id)).toEqual(["list-1763400000000-abcd", "list-3"]);
+    expect(payload.lists?.[1].title).toHaveLength(MAX_LIST_TITLE_LENGTH);
+    expect(payload.lists?.[1].items).toEqual([item("chk-1", "ok")]);
+    expect(payload.deletedListIds).toEqual(["list-ok"]);
+  });
+
+  it(`accepts exactly ${MAX_SYNC_LISTS} Lists and rejects one more`, () => {
+    const rows = Array.from({ length: MAX_SYNC_LISTS + 1 }, (_, i) => listRow({ id: `list-${i}` }));
+    expect(validateSyncPayload(rawPayload({ lists: rows.slice(0, MAX_SYNC_LISTS) })).payload?.lists).toHaveLength(MAX_SYNC_LISTS);
+    expect(validateSyncPayload(rawPayload({ lists: rows })).valid).toBe(false);
   });
 });
 

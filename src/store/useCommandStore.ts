@@ -5,6 +5,8 @@ import { persist } from "zustand/middleware";
 import { reads } from "@/lib/reads";
 import { isMissedHabitTask, toLocalDateKey } from "@/lib/dateUtils";
 import type { ChecklistEdit } from "@/lib/checklist";
+import type { ListEdit } from "@/lib/lists";
+import { localLists } from "@/lib/localLists";
 import {
   fromFocusSession,
   toFocusSession,
@@ -52,7 +54,7 @@ export {
   sessionLogId,
 } from "@/lib/taskQueue";
 
-export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "telemetry" | "guide" | "log";
+export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "lists" | "telemetry" | "guide" | "log";
 
 export type SnapshotImportResult =
   | { ok: true; merged: SyncPayload }
@@ -209,6 +211,13 @@ interface CommandStoreState {
   // Time Log Operations
   /** Deletes a logged session here and, through its tombstone, on every synced device. */
   deleteTimeLog: (logId: string) => Promise<void>;
+
+  // Standalone Lists (rules in lists.ts): each resolves to true only when the List changed and was saved.
+  createList: (title: string) => Promise<boolean>;
+  renameList: (listId: string, title: string) => Promise<boolean>;
+  /** One item edit, Clear ticked or Untick all. */
+  editList: (listId: string, edit: ListEdit) => Promise<boolean>;
+  deleteList: (listId: string) => Promise<void>;
 }
 
 /** Trailing debounce for mutation-triggered syncs. */
@@ -335,6 +344,15 @@ async function runAction(
     reportActionFailure(set, name, err);
     return false;
   }
+}
+
+/** runAction for a write that may change nothing: true only when it ran and wrote. */
+async function runWrite(set: StoreSet, name: string, write: () => Promise<boolean>): Promise<boolean> {
+  let wrote = false;
+  const ok = await runAction(set, name, async () => {
+    wrote = await write();
+  });
+  return ok && wrote;
 }
 
 /**
@@ -793,6 +811,13 @@ export const useCommandStore = create<CommandStoreState>()(
 
         deleteTimeLog: async (logId) => {
           await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));
+        },
+
+        createList: (title) => runWrite(set, "createList", () => localLists.createList(title)),
+        renameList: (listId, title) => runWrite(set, "renameList", () => localLists.renameList(listId, title)),
+        editList: (listId, edit) => runWrite(set, "editList", () => localLists.editList(listId, edit)),
+        deleteList: async (listId) => {
+          await runAction(set, "deleteList", () => localLists.deleteList(listId));
         },
       };
     },

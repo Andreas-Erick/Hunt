@@ -48,6 +48,13 @@ describe("the phone runs the shared implementations", () => {
       "checklistOf",
       "checklistProgress",
       "newChecklistItemId",
+      "applyListEdit",
+      "buildList",
+      "cleanListTitle",
+      "listItemsOf",
+      "listProgress",
+      "newListId",
+      "sanitizeList",
     ];
     for (const name of bound) {
       expect(typeof page.HuntCore[name], name).toBe("function");

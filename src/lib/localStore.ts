@@ -70,7 +70,7 @@ export function onLocalChange(listener: LocalChangeListener): () => void {
   };
 }
 
-function emitChange(options?: LocalWriteOptions): void {
+export function emitChange(options?: LocalWriteOptions): void {
   if (options?.notify === false) return;
   for (const listener of Array.from(listeners)) {
     try {

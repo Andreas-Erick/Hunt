@@ -39,6 +39,7 @@ const NAV_ITEMS: Array<{ id: HudView; label: string }> = [
   { id: "focus", label: "Focus" },
   { id: "quests", label: "Quests" },
   { id: "habits", label: "Habits" },
+  { id: "lists", label: "Lists" },
   { id: "telemetry", label: "Review" },
   { id: "guide", label: "Guide" },
 ];
