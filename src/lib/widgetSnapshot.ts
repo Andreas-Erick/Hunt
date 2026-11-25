@@ -1,5 +1,6 @@
 import { dateKeyFromOffset, isOpenTask, isTaskVisibleToday } from "./dateUtils";
-import type { QuestAccent, Task } from "./domainTypes";
+import type { Habit, HabitKind, QuestAccent, Task } from "./domainTypes";
+import { countProgressLabel, habitDayAmount, habitKindOf } from "./habitKind";
 import type { Look } from "./lookPreference";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
@@ -13,10 +14,11 @@ import type { WidgetStatsEntry } from "./widgetStats";
  * native widget only draws it, so no Hunt rule is reimplemented in Java.
  *
  * Bump the version only for a change an older widget would misread. Adding a
- * field (more days, a `future` view per day, `stats`) keeps version 1: the
- * widget ignores fields it does not know.
+ * field (more days, a `future` view per day, `stats`) keeps the version: the
+ * widget ignores fields it does not know. Version 2: a Count Habit row's tap
+ * means +1 (`habitKind`), which a version-1 widget would queue as done.
  */
-export const WIDGET_SNAPSHOT_VERSION = 1;
+export const WIDGET_SNAPSHOT_VERSION = 2;
 
 /**
  * Days in a snapshot: today to today + 7. The ‹ › arrows reach today + 6; the
@@ -39,6 +41,13 @@ export interface WidgetTaskRow {
   focus: boolean;
   /** A daily Habit instance. */
   habit: boolean;
+  /**
+   * A Habit row's Habit Kind (absent on other Tasks). A tick on a "count" row
+   * is queued as a `+1` Pending Tick, any other as done.
+   */
+  habitKind?: HabitKind;
+  /** A Count Habit row's progress, ready to draw: "2 / 3 miles". */
+  progress?: string;
 }
 
 export interface WidgetDay {
@@ -101,15 +110,24 @@ export function buildWidgetSnapshot(
 ): WidgetSnapshot {
   const accentOf = new Map<string, QuestAccent | "slate">();
   for (const q of state.quests ?? []) accentOf.set(q.id, widgetAccent(q.accentColor));
+  const habitOf = new Map<string, Habit>();
+  for (const h of state.habits ?? []) habitOf.set(h.id, h);
   const focusId = state.activeFocus?.activeTaskId ?? null;
-  const toRow = (t: Task): WidgetTaskRow => ({
-    id: t.id,
-    title: t.title,
-    accent: (t.questId && accentOf.get(t.questId)) || "slate",
-    tickable: t.id !== focusId,
-    focus: t.id === focusId,
-    habit: Boolean(t.habitId),
-  });
+  const toRow = (t: Task): WidgetTaskRow => {
+    const row: WidgetTaskRow = {
+      id: t.id,
+      title: t.title,
+      accent: (t.questId && accentOf.get(t.questId)) || "slate",
+      tickable: t.id !== focusId,
+      focus: t.id === focusId,
+      habit: Boolean(t.habitId),
+    };
+    if (!t.habitId) return row;
+    const habit = habitOf.get(t.habitId);
+    row.habitKind = habitKindOf(habit);
+    if (habit && row.habitKind === "count") row.progress = countProgressLabel(habit, habitDayAmount(t));
+    return row;
+  };
   const noData =
     !(state.quests ?? []).length && !(state.tasks ?? []).length && !(state.habits ?? []).length;
   return {

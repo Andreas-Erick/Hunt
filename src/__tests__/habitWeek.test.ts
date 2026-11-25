@@ -73,6 +73,22 @@ describe("Habit Week Outcome (N times per week)", () => {
     expect(s.week).toMatchObject({ start: "2026-05-11", target: 3, met: 1 });
   });
 
+  it("counts a Count Habit's day toward N only once its total reaches the target", () => {
+    const run = habit({ kind: "count", target: 3, unit: "miles" });
+    const s = summary(
+      [
+        dayTask("2026-05-04", { amount: 3 }),
+        dayTask("2026-05-05", { amount: 2.5 }),
+        dayTask("2026-05-06", { amount: 5 }),
+        dayTask("2026-05-07", { amount: 3 }),
+      ],
+      run
+    );
+    expect(s.weekOutcomeOn("2026-05-04")).toBe("met");
+    const short = summary([dayTask("2026-05-04", { amount: 3 }), dayTask("2026-05-05", { amount: 2 })], run);
+    expect(short.weekOutcomeOn("2026-05-04")).toBe("missed");
+  });
+
   it("has no week Outcome for a week the Habit was not asked N times per week, or a future week", () => {
     const s = summary([]);
     expect(s.weekOutcomeOn("2026-04-20")).toBeNull();

@@ -62,7 +62,7 @@ export interface HabitDaySummary {
   week: HabitWeek | null;
   /** The Outcome of the Habit Week holding `dayKey`, or null when it was not N per week. */
   weekOutcomeOn: (dayKey: string) => HabitOutcome | null;
-  /** Whether today's instance is completed. */
+  /** Whether today is Met (a Check Habit ticked, a Count Habit at its target). */
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
@@ -104,8 +104,9 @@ function firstHabitDay(
  * that habit scheduled for `todayKey`. Pure: `habitTasks` is not modified.
  * Habits without any task still get a summary from `summaryFor`.
  *
- * `habits` gives each Habit's Frequency and the day it began; a Habit missing
- * from it is judged as an old row (every day) from its first day Task on.
+ * `habits` gives each Habit's Kind (and a Count Habit's target), its Frequency
+ * and the day it began; a Habit missing from it is judged as an old row (a
+ * daily Check Habit) from its first day Task on.
  */
 export function summarizeHabitDays(
   habitTasks: readonly Task[],
@@ -156,11 +157,12 @@ export function summarizeHabitDays(
         const dayTaskOn = (dayKey: string) => dayTasks?.get(dayKey);
         const outcomeOn = (dayKey: string) => habitDayOutcome({ habit, dayKey, dayTask: dayTaskOn(dayKey), todayKey });
         const firstDay = firstHabitDay(habit, dayTasks, todayKey);
-        const weekOn = (dayKey: string) => habitWeekOf(habit, dayKey, dayTaskOn, todayKey, firstDay);
+        const weekDays = { dayTaskOn, dayOutcomeOn: outcomeOn, firstDayKey: firstDay };
+        const weekOn = (dayKey: string) => habitWeekOf(habit, dayKey, weekDays, todayKey);
         const weekOutcomeOn = (dayKey: string) => weekOn(dayKey)?.outcome ?? null;
         const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
         const week = weekly ? weekOn(todayKey) : null;
-        const doneToday = todayTask?.status === "completed";
+        const doneToday = outcomeOn(todayKey) === "met";
         const unitStart = frequencyUnitStart(habit, todayKey);
         const streakFrom = unitStart > firstDay ? unitStart : firstDay;
         summary = {

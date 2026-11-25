@@ -62,10 +62,10 @@ final class DayWidgetUndo {
      * window changes nothing. Returns false only when the window could not be written: the row
      * stays open to tick again, and the caller tells the user.
      */
-    static boolean open(Context ctx, String taskId, String dateKey, long tickedAt) {
+    static boolean open(Context ctx, String taskId, String dateKey, long tickedAt, String kind) {
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
-            String key = TickKeys.taskDay(taskId, dateKey);
+            String key = TickKeys.taskDay(taskId, dateKey, kind);
             if (prefs.contains(key) && !UNDONE.contains(key)) return true;
             if (!prefs.edit().putLong(key, tickedAt).commit()) {
                 Log.w(TAG, "Opening an Undo window failed; the row stays open to tick again");
@@ -86,10 +86,13 @@ final class DayWidgetUndo {
      * tick will reach Hunt, so the user is told rather than shown a silent success.
      */
     static boolean undo(Context ctx, String taskId, String dateKey) {
-        String key = TickKeys.taskDay(taskId, dateKey);
         boolean saved;
         synchronized (LOCK) {
             SharedPreferences prefs = prefs(ctx);
+            // A Task's row has one kind of tick (its Habit Kind never changes): Undo closes whichever window it has.
+            String plusKey = TickKeys.taskDay(taskId, dateKey, TickKeys.PLUS_ONE);
+            String key = prefs.contains(plusKey) || UNDONE.contains(plusKey) || RECENTLY_UNDONE.containsKey(plusKey)
+                    ? plusKey : TickKeys.taskDay(taskId, dateKey);
             long now = System.currentTimeMillis();
             RECENTLY_UNDONE.values().removeIf(at -> now - at > UndoWindow.WINDOW_MS + UndoWindow.LATE_UNDO_MS);
             if (!prefs.contains(key) && !UNDONE.contains(key)) {
@@ -126,7 +129,7 @@ final class DayWidgetUndo {
             // Appended before the window is removed: a crash in between appends it again, which
             // the queue ignores (one entry per Task and day).
             result = UndoWindow.commit(withoutUndone(prefs.getAll()), System.currentTimeMillis(),
-                    (taskId, dateKey, tickedAt) -> PendingTicks.append(dir, taskId, dateKey, tickedAt).closesWindow());
+                    (taskId, dateKey, tickedAt, kind) -> PendingTicks.append(dir, taskId, dateKey, tickedAt, kind).closesWindow());
             if (result.heldBack > 0) {
                 Log.w(TAG, result.heldBack + " ended Undo window(s) could not be queued yet; kept for the next try");
             }

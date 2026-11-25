@@ -9,6 +9,7 @@ import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTy
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
 import { habitSkipRows } from "./habitSkip";
 import { habitWeekDays, habitWeekStart } from "./habitWeek";
+import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -27,7 +28,6 @@ import {
 import {
   buildBurstLog,
   buildHabitTaskRow,
-  completeTaskRow,
   habitTodayTaskAfterEdit,
   missingHabitRows,
   nextStamp,
@@ -178,21 +178,23 @@ async function editChecklist(taskId: string, edit: ChecklistEdit): Promise<boole
 }
 
 /**
- * Completes a task with the shared rule (completeTaskRow, the phone's too),
- * reading the row in the same rw transaction. False when it does not exist.
+ * Completes a task with the shared rule (completeTaskRow, the phone's too; a
+ * Count Habit's day counts +1 instead: completedRow), reading the row in the
+ * same rw transaction. False when it does not exist.
  */
 async function completeTask(taskId: string, completedAt: number = Date.now()): Promise<boolean> {
-  const done = await db.transaction("rw", db.tasks, async () => {
+  const done = await db.transaction("rw", db.tasks, db.habits, async () => {
     const row = await db.tasks.get(taskId);
     if (!row) return false;
-    await db.tasks.update(taskId, { ...completeTaskRow(row, completedAt) });
+    await db.tasks.update(taskId, { ...(await completedRow(row, completedAt)) });
     return true;
   });
   return changed(done);
 }
 
+/** Reopens a task; a Count Habit's day by clearing its total (reopenTaskRow). */
 async function reopenTask(taskId: string): Promise<boolean> {
-  return changed(await writeTask(taskId, { status: "queued", completedAt: undefined }));
+  return changed(await reopenTaskRow(taskId));
 }
 
 /** Deletes a task here and, through its tombstone, on every synced device. */
@@ -412,17 +414,18 @@ async function deleteQuest(questId: string): Promise<void> {
 
 // ── Daily habits ─────────────────────────────────────────────────────────
 
-/** A new habit: every day unless `frequency` says otherwise. */
-export type NewHabit = { title: string; notes?: string; questId: string | null; frequency?: HabitFrequency };
-/** Habit fields the edit form can change; a new `frequency` applies from today (withHabitFrequency). */
-export type HabitChanges = Partial<NewHabit>;
+/** A new habit: every day unless `frequency` says otherwise; a Check Habit unless its Kind says Count. */
+export type NewHabit = { title: string; notes?: string; questId: string | null; frequency?: HabitFrequency } & NewHabitKind;
+/** Habit fields the edit form can change (never the Kind); a new `frequency` applies from today (withHabitFrequency). */
+export type HabitChanges = Partial<Omit<NewHabit, "kind">>;
 
-/** Adds a habit at the end, with today's instance when its Frequency asks for today (unless
- * tombstoned). False for an empty title or an invalid Frequency (no weekday chosen). */
+/** Adds a habit at the end, with today's instance when its Frequency asks for today (unless tombstoned).
+ * False for an empty title, an invalid Frequency (no weekday chosen) or a Count Habit with no target. */
 async function createHabit(params: NewHabit): Promise<boolean> {
   const title = clampTitle(params.title, MAX_HABIT_TITLE_LENGTH);
   const frequency = params.frequency ? parseHabitFrequency(params.frequency) : EVERY_DAY;
-  if (!title || !frequency) return false;
+  const kindFields = newHabitKindFields(params);
+  if (!title || !frequency || !kindFields) return false;
   const now = Date.now();
   const todayKey = toLocalDateKey(now);
   await db.transaction("rw", db.habits, db.tasks, async () => {
@@ -435,6 +438,7 @@ async function createHabit(params: NewHabit): Promise<boolean> {
       rank: existing.length > 0 ? rankValue(existing[existing.length - 1]) + RANK_STEP : RANK_STEP,
       createdAt: now,
       updatedAt: now,
+      ...kindFields,
     };
     const frequencyHistory = withHabitFrequency(habit, frequency, todayKey);
     if (frequencyHistory.length > 0) habit.frequencyHistory = frequencyHistory;
@@ -462,6 +466,7 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
     }
     if (typeof changes.notes === "string") patch.notes = clampTitle(changes.notes, MAX_LONG_TEXT_LENGTH);
     if (changes.questId !== undefined) patch.questId = changes.questId;
+    Object.assign(patch, countFieldChanges(row, changes));
     if (changes.frequency !== undefined) {
       const frequency = parseHabitFrequency(changes.frequency);
       if (!frequency) return false;
@@ -585,6 +590,8 @@ export const localStore = {
   deleteHabit,
   materializeHabits,
   ensureHabitTaskForDay,
+  /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
+  logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
   setHabitDaySkipped,
   deleteTimeLog,
 };

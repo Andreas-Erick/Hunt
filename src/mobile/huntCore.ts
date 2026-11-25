@@ -20,6 +20,17 @@ export {
 export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
+  countProgressLabel,
+  countTargetOf,
+  formatCountAmount,
+  habitDayAmount,
+  habitKindOf,
+  isCountTarget,
+  MAX_COUNT_UNIT_LENGTH,
+  parseCountAmount,
+} from "../lib/habitKind";
+export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
+export {
   applyChecklistEdit,
   canHoldChecklist,
   checklistOf,

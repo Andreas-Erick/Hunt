@@ -1,11 +1,13 @@
-import type { Task } from "./domainTypes";
+import type { Habit, Task } from "./domainTypes";
+import { addHabitDayCount } from "./habitCount";
+import { habitKindOf } from "./habitKind";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 import { completeTaskRow, missingHabitRows } from "./taskQueue";
 
 /**
- * A Pending Tick (ADR-0006): a Task ticked done on the Day Widget that Hunt has
- * not applied yet. The Android shell queues these; the phone page applies them
+ * A Pending Tick (ADR-0006): a Task ticked on the Day Widget that Hunt has not
+ * applied yet. The Android shell queues these; the phone page applies them
  * through HuntCore when it starts.
  */
 export interface PendingTick {
@@ -14,6 +16,12 @@ export interface PendingTick {
   dateKey: string;
   /** Epoch ms of the tap; becomes the Task's completion time. */
   tickedAt: number;
+  /**
+   * What the tap meant: absent for "done" (a Check Habit or plain Task), "+1"
+   * for one more on a Count Habit's day. The shell writes it from the row's
+   * Habit Kind in the Widget Snapshot.
+   */
+  kind?: "+1";
 }
 
 /**
@@ -22,9 +30,19 @@ export interface PendingTick {
  *   gone, or the tick is malformed;
  * - `already-done` / `archived`: the Task was completed or archived elsewhere;
  * - `in-focus`: the Task is in Focus now, and Focus sessions only end inside
- *   the app (finishing it needs a TimeLog and a Focus transition).
+ *   the app (finishing it needs a TimeLog and a Focus transition);
+ * - `already-counted`: this `+1` was applied before (the queue was read again
+ *   before the shell removed it);
+ * - `wrong-kind`: a `+1` on a row that is not a Count Habit's day, or a done
+ *   tick on one that is.
  */
-export type PendingTickSkipReason = "missing" | "already-done" | "archived" | "in-focus";
+export type PendingTickSkipReason =
+  | "missing"
+  | "already-done"
+  | "archived"
+  | "in-focus"
+  | "already-counted"
+  | "wrong-kind";
 
 export interface SkippedTick {
   tick: PendingTick;
@@ -48,7 +66,8 @@ function isWellFormed(tick: PendingTick): boolean {
     DATE_KEY_RE.test(tick.dateKey) &&
     typeof tick.tickedAt === "number" &&
     Number.isFinite(tick.tickedAt) &&
-    tick.tickedAt > 0
+    tick.tickedAt > 0 &&
+    (tick.kind === undefined || tick.kind === "+1")
   );
 }
 
@@ -61,7 +80,7 @@ function habitRowFor(state: SyncPayload, tick: PendingTick): Task | null {
   return missingHabitRows(state, tick.dateKey).find((t) => t.id === tick.taskId) ?? null;
 }
 
-function skipReason(state: SyncPayload, task: Task): PendingTickSkipReason | null {
+function doneSkipReason(state: SyncPayload, task: Task): PendingTickSkipReason | null {
   if (task.status === "completed") return "already-done";
   if (task.status === "archived") return "archived";
   if (state.activeFocus?.activeTaskId === task.id) return "in-focus";
@@ -69,12 +88,34 @@ function skipReason(state: SyncPayload, task: Task): PendingTickSkipReason | nul
 }
 
 /**
- * Applies Pending Ticks in order: each named Task is completed through the
- * shared complete-a-Task rule with `tickedAt` as its completion time, so the
- * row-level merge (ADR-0001) treats it like any other edit. A tick for today's
- * Habit row that does not exist yet first creates the row. Stale ticks are
- * skipped with a reason. Idempotent: applying the same ticks again skips them
- * all as `already-done` and returns the state unchanged. Pure.
+ * The Task `tick` turns `task` into, or why it is skipped. A done tick
+ * completes the Task through the shared complete-a-Task rule; a `+1` adds one
+ * to a Count Habit day through the shared Count rule (also on a day already
+ * Met, and in Focus, since counting ends no session) and records its tap time,
+ * so the same `+1` read again is skipped.
+ */
+function applyTick(
+  state: SyncPayload,
+  task: Task,
+  tick: PendingTick
+): Task | PendingTickSkipReason {
+  const habit: Habit | undefined = task.habitId
+    ? (state.habits ?? []).find((h) => h.id === task.habitId)
+    : undefined;
+  const isCount = !!habit && habitKindOf(habit) === "count";
+  if ((tick.kind === "+1") !== isCount) return "wrong-kind";
+  if (!habit || !isCount) return doneSkipReason(state, task) ?? completeTaskRow(task, tick.tickedAt);
+  if (task.status === "archived") return "archived";
+  if ((task.countTickedAt ?? 0) >= tick.tickedAt) return "already-counted";
+  return { ...addHabitDayCount(task, habit, tick.tickedAt), countTickedAt: tick.tickedAt };
+}
+
+/**
+ * Applies Pending Ticks in order (applyTick), so the row-level merge
+ * (ADR-0001) treats each like any other edit. A tick for today's Habit row
+ * that does not exist yet first creates the row. Stale ticks are skipped with
+ * a reason. Idempotent: applying the same ticks again skips them all (as
+ * `already-done` or `already-counted`) and returns the state unchanged. Pure.
  */
 export function applyPendingTicks(
   state: SyncPayload,
@@ -88,15 +129,15 @@ export function applyPendingTicks(
       continue;
     }
     const existing = tasks.find((t) => t.id === tick.taskId);
-    if (existing) {
-      const reason = skipReason(state, existing);
-      if (reason) skipped.push({ tick, reason });
-      else tasks = tasks.map((t) => (t === existing ? completeTaskRow(t, tick.tickedAt) : t));
+    const task = existing ?? habitRowFor(state, tick);
+    if (!task) {
+      skipped.push({ tick, reason: "missing" });
       continue;
     }
-    const created = habitRowFor(state, tick);
-    if (!created) skipped.push({ tick, reason: "missing" });
-    else tasks = [...tasks, completeTaskRow(created, tick.tickedAt)].sort(compareRank);
+    const result = applyTick(state, task, tick);
+    if (typeof result === "string") skipped.push({ tick, reason: result });
+    else if (existing) tasks = tasks.map((t) => (t === existing ? result : t));
+    else tasks = [...tasks, result].sort(compareRank);
   }
   return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
 }

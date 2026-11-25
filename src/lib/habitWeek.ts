@@ -1,6 +1,6 @@
 import { dateKeyFromOffset } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
-import { habitFrequencyOn, isPerWeekFrequency, weekdayOfKey } from "./habitFrequency";
+import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency, weekdayOfKey } from "./habitFrequency";
 import { habitStreakOf, type HabitOutcome } from "./habitOutcome";
 
 /**
@@ -38,33 +38,42 @@ export interface HabitWeek {
   outcome: HabitOutcome | null;
 }
 
+/** One Habit's days, as the Habit Week rule reads them. */
+export interface HabitWeekDays {
+  /** Each day's Task (a late tick on its scheduled day), or undefined. */
+  dayTaskOn: (dayKey: string) => WeekDayTask;
+  /** Each day's own Outcome (habitDayOutcome): "met" counts toward N, by the Habit's Kind. */
+  dayOutcomeOn: (dayKey: string) => HabitOutcome | null;
+  /** The day the Habit began. */
+  firstDayKey: string;
+}
+
 /**
  * The Habit Week holding `dayKey`, or null when no day of it was asked N times
- * per week. `dayTaskOn` gives each day's Task (a late tick on its scheduled
- * day); `firstDayKey` is the day the Habit began.
+ * per week.
  *
- * Outcome: a Partial Week is Skipped; N Met days are Met; a week set aside is
- * Skipped; the current week (or one whose focus still runs) is Open; any other
- * past week is Missed.
+ * Outcome: a Partial Week (one the Habit did not fully cover: it began, ended
+ * or changed Frequency partway through, so some day is not asked N per week)
+ * is Skipped; N Met days are Met; a week set aside is Skipped; the current week
+ * (or one whose focus still runs) is Open; any other past week is Missed.
  */
 export function habitWeekOf(
   habit: FrequencySource,
   dayKey: string,
-  dayTaskOn: (dayKey: string) => WeekDayTask,
-  todayKey: string,
-  firstDayKey: string
+  { dayTaskOn, dayOutcomeOn, firstDayKey }: HabitWeekDays,
+  todayKey: string
 ): HabitWeek | null {
   const start = habitWeekStart(dayKey);
   const days = habitWeekDays(start);
-  const frequencies = days.map((day) => habitFrequencyOn(habit, day));
-  const perWeek = frequencies.filter(isPerWeekFrequency);
+  const asked = days.filter((day) => isHabitScheduledOn(habit, day));
+  const perWeek = asked.map((day) => habitFrequencyOn(habit, day)).filter(isPerWeekFrequency);
   if (perWeek.length === 0) return null;
   const inForce = habitFrequencyOn(habit, todayKey < days[6] ? todayKey : days[6]);
   const target = isPerWeekFrequency(inForce) ? inForce.times : perWeek[0].times;
   const partial =
     start < firstDayKey || perWeek.length < 7 || perWeek.some((f) => f.times !== perWeek[0].times);
   const tasks = days.map(dayTaskOn);
-  const met = tasks.filter((t) => t?.status === "completed").length;
+  const met = days.filter((day) => dayOutcomeOn(day) === "met").length;
   const skipped = tasks.some((t) => Boolean(t?.skipped));
   let outcome: HabitOutcome | null;
   if (start > todayKey) outcome = null;
