@@ -19,6 +19,14 @@
     <!-- Connectivity checks (getActiveNetwork, VPN detection, default-network callback) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!--
+        Reminders (ADR-0007): posting notifications (asked for at runtime from Android 13), exact
+        alarms (a settings switch from Android 12, asked for the first time a reminder is set) and
+        re-arming the alarm after a reboot.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
         enableOnBackInvokedCallback="false": keep the legacy Activity.onBackPressed() dispatch
@@ -119,6 +127,23 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/stats_widget_info" />
+        </receiver>
+
+        <!--
+            Reminder alarm (ADR-0007), and the broadcasts after which it is armed again. Not
+            exported: the system still delivers these, and the alarm is an explicit intent. Never
+            rename the class: an armed alarm names it.
+        -->
+        <receiver
+            android:name=".ReminderAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
         </receiver>
 
     </application>

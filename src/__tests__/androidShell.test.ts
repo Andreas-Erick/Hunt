@@ -257,6 +257,9 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
       saveWidgetSnapshot: "void",
       readPendingTicks: "String",
       ackPendingTicks: "void",
+      saveReminderPlan: "void",
+      getReminderPermissions: "String",
+      requestReminderPermissions: "void",
     });
     // Nothing outside the bridge class is exposed to JS.
     expect(javaCode.match(/@JavascriptInterface/g)).toHaveLength(bridgeMethods().size);
@@ -295,11 +298,14 @@ describe("MainActivity.java: bridge contract with hunt-mobile.html", () => {
 });
 
 describe("AndroidManifest.xml and backup rules", () => {
-  it("requests exactly INTERNET, ACCESS_NETWORK_STATE and VIBRATE", () => {
+  it("requests exactly INTERNET, ACCESS_NETWORK_STATE, VIBRATE and the three reminder permissions (ADR-0007)", () => {
     const permissions = firstCaptures(manifest, /<uses-permission\s+android:name="([^"]+)"/g).sort();
     expect(permissions).toEqual([
       "android.permission.ACCESS_NETWORK_STATE",
       "android.permission.INTERNET",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.SCHEDULE_EXACT_ALARM",
       "android.permission.VIBRATE",
     ]);
   });
