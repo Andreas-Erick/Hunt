@@ -1,10 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -22,26 +18,10 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
     "target": "ES2017"
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    ".next/geometry/types/**/*.ts",
-    ".next/geometry/dev/types/**/*.ts",
-    ".next/geometry-20/types/**/*.ts",
-    ".next/geometry-20/dev/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    ".claude",
-    "_archive"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts", ".next/geometry/types/**/*.ts", ".next/geometry/dev/types/**/*.ts"],
+  "exclude": ["node_modules", ".claude", "_archive"]
 }
