@@ -3286,6 +3286,7 @@ var HuntCore = (() => {
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
     habitKindOf: () => habitKindOf,
+    habitKindRules: () => habitKindRules,
     habitMonth: () => habitMonth,
     habitMonthAmounts: () => habitMonthAmounts,
     habitScore: () => habitScore,
@@ -3302,6 +3303,7 @@ var HuntCore = (() => {
     habitYearTotals: () => habitYearTotals,
     isCountTarget: () => isCountTarget,
     isEndedHabit: () => isEndedHabit,
+    isFrequencyAllowedFor: () => isFrequencyAllowedFor,
     isHabitScheduledOn: () => isHabitScheduledOn,
     isMissedHabitTask: () => isMissedHabitTask,
     isOpenTask: () => isOpenTask,
@@ -3319,6 +3321,7 @@ var HuntCore = (() => {
     nextStamp: () => nextStamp,
     parseCountAmount: () => parseCountAmount,
     parseHabitFrequency: () => parseHabitFrequency,
+    parseHabitFrequencyFor: () => parseHabitFrequencyFor,
     pickNextFocusTask: () => pickNextFocusTask,
     reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
@@ -3340,9 +3343,9 @@ var HuntCore = (() => {
 
   // src/lib/habitKind.ts
   var HABIT_KIND_TABLE = {
-    check: true,
-    count: true,
-    avoid: true
+    check: { label: "Check Habit", logs: "tick", canFocus: true, allowsPerWeek: true },
+    count: { label: "Count Habit", logs: "count", canFocus: true, allowsPerWeek: true },
+    avoid: { label: "Avoid Habit", logs: "slip", canFocus: false, allowsPerWeek: false }
   };
   var MAX_COUNT_AMOUNT = 1e6;
   var MAX_COUNT_UNIT_LENGTH = 40;
@@ -3352,6 +3355,9 @@ var HuntCore = (() => {
   function habitKindOf(habit) {
     const kind = habit == null ? void 0 : habit.kind;
     return isHabitKind(kind) ? kind : "check";
+  }
+  function habitKindRules(habit) {
+    return HABIT_KIND_TABLE[habitKindOf(habit)];
   }
   function isCountAmount(value) {
     return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -3469,6 +3475,9 @@ var HuntCore = (() => {
     return frequency.type === "weekdays" ? { type: "weekdays", weekdays: normalizedWeekdays(frequency.weekdays) } : EVERY_DAY;
   }
   var MAX_TIMES_PER_WEEK = 7;
+  function isFrequencyAllowedFor(habit, frequency) {
+    return frequency.type !== "perWeek" || habitKindRules(habit).allowsPerWeek;
+  }
   function isPerWeekFrequency(frequency) {
     return frequency.type === "perWeek";
   }
@@ -3503,6 +3512,10 @@ var HuntCore = (() => {
       return { type: "perWeek", times: Number(times) };
     }
     return null;
+  }
+  function parseHabitFrequencyFor(habit, raw) {
+    const frequency = parseHabitFrequency(raw);
+    return frequency && isFrequencyAllowedFor(habit, frequency) ? frequency : null;
   }
 
   // src/lib/habitOutcome.ts
@@ -9448,6 +9461,8 @@ var HuntCore = (() => {
     let selectedHabitQuestId = null;
     // The Frequency being edited in an open Habit sheet (chosen weekdays may still be empty).
     let habitFrequencyDraft = { type: "everyDay" };
+    // The Kind of the Habit in that sheet: an Avoid Habit is judged day by day, so its picker has no "Times a week".
+    let habitFrequencyKind = "check";
 
     function habitFrequencyPickerHtml() {
       const chosen = habitFrequencyDraft.type === "weekdays" ? habitFrequencyDraft.weekdays : null;
@@ -9469,11 +9484,14 @@ var HuntCore = (() => {
         </div>
         <div style="margin:-8px 0 16px;font-size:12px;color:var(--dim);">Per week, Monday to Sunday</div>` : "";
       const daily = !chosen && times === null;
+      const perWeekPill = HuntCore.habitKindRules({ kind: habitFrequencyKind }).allowsPerWeek
+        ? `<button class="sheet-pill ${times !== null ? "selected" : ""}" aria-label="Times a week" aria-pressed="${times !== null}" onclick="setHabitFrequencyType('perWeek')">Times a week</button>`
+        : "";
       return `
         <div class="sheet-pill-group" role="group" aria-label="Habit frequency">
           <button class="sheet-pill ${daily ? "selected" : ""}" aria-label="Every day" aria-pressed="${daily}" onclick="setHabitFrequencyType('everyDay')">Every day</button>
           <button class="sheet-pill ${chosen ? "selected" : ""}" aria-label="Chosen days" aria-pressed="${!!chosen}" onclick="setHabitFrequencyType('weekdays')">Chosen days</button>
-          <button class="sheet-pill ${times !== null ? "selected" : ""}" aria-label="Times a week" aria-pressed="${times !== null}" onclick="setHabitFrequencyType('perWeek')">Times a week</button>
+          ${perWeekPill}
         </div>
         ${weekdays}${timesRow}`;
     }
@@ -9516,9 +9534,9 @@ var HuntCore = (() => {
       renderHabitFrequencyPicker(named ? named.name : null);
     }
 
-    // The draft as a valid Frequency, or null (no weekday chosen yet): the picker is flagged then.
+    // The draft as a valid Frequency the sheet's Kind may use, or null (no weekday chosen): the picker is flagged.
     function habitFrequencyFromDraft() {
-      const frequency = HuntCore.parseHabitFrequency(habitFrequencyDraft);
+      const frequency = HuntCore.parseHabitFrequencyFor({ kind: habitFrequencyKind }, habitFrequencyDraft);
       if (!frequency) flagInvalidField(document.querySelector('#habitFrequencyPicker [aria-label="Chosen days"]'));
       return frequency;
     }
@@ -9526,6 +9544,7 @@ var HuntCore = (() => {
     function openNewHabitSheet(preselectQuestId) {
       playClickSound();
       selectedHabitKind = "check";
+      habitFrequencyKind = "check";
       const activeQuests = activeQuestsList();
       selectedHabitQuestId = preselectQuestId !== undefined
         ? preselectQuestId
@@ -9631,6 +9650,7 @@ var HuntCore = (() => {
       if (!h) return;
       selectedHabitQuestId = h.questId || null;
       habitFrequencyDraft = habitFrequencyOn(h, toLocalDateKey());
+      habitFrequencyKind = habitKindOf(h);
 
       showSheet("habit:" + h.id, `
           ${sheetHeaderHtml("Edit Daily Habit")}
@@ -10423,6 +10443,10 @@ var HuntCore = (() => {
       }
       const fields = document.getElementById("newHabitCountFields");
       if (fields) fields.hidden = kind !== "count";
+      habitFrequencyKind = kind;
+      // An Avoid Habit is judged day by day: a "Times a week" choice falls back to every day.
+      if (!HuntCore.isFrequencyAllowedFor({ kind }, habitFrequencyDraft)) habitFrequencyDraft = { type: "everyDay" };
+      renderHabitFrequencyPicker(null);
     }
 
     // Render Compact Queue Row Card (#02+)

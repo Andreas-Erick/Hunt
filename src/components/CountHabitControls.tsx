@@ -38,6 +38,7 @@ export function useNewHabitKind() {
   const [unit, setUnit] = useState("");
   const countTarget = typedTarget(target);
   return {
+    kind,
     valid: kind !== "count" || countTarget !== null,
     fields: () => (kind === "count" ? { kind, target: countTarget ?? undefined, unit } : { kind }),
     reset: () => {

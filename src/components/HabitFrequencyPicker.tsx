@@ -22,17 +22,21 @@ const TIMES = Array.from({ length: MAX_TIMES_PER_WEEK }, (_, i) => i + 1);
 /**
  * Frequency editor for a Habit: every day, chosen weekdays (Monday first), or
  * N times per Habit Week (1-7). Touch-sized chips; the weekday chips show only
- * for chosen weekdays, the 1-7 chips only for times a week.
+ * for chosen weekdays, the 1-7 chips only for times a week. "Times a week" is
+ * left out when the Habit's Kind may not use it (isFrequencyAllowedFor).
  */
 export function HabitFrequencyPicker({
   value,
   onChange,
   label,
+  allowPerWeek = true,
 }: {
   value: HabitFrequency;
   onChange: (next: HabitFrequency) => void;
   /** Accessible name of the group. */
   label: string;
+  /** Whether "Times a week" is offered (an Avoid Habit is judged day by day). */
+  allowPerWeek?: boolean;
 }) {
   const chosen = value.type === "weekdays" ? value.weekdays : null;
   const times = value.type === "perWeek" ? value.times : null;
@@ -68,16 +72,18 @@ export function HabitFrequencyPicker({
       >
         Chosen days
       </button>
-      <button
-        type="button"
-        aria-pressed={times !== null}
-        onClick={() => {
-          if (times === null) pick({ type: "perWeek", times: DEFAULT_TIMES_PER_WEEK });
-        }}
-        className={`${CHIP} px-3 ${times !== null ? CHIP_ON : CHIP_OFF}`}
-      >
-        Times a week
-      </button>
+      {allowPerWeek && (
+        <button
+          type="button"
+          aria-pressed={times !== null}
+          onClick={() => {
+            if (times === null) pick({ type: "perWeek", times: DEFAULT_TIMES_PER_WEEK });
+          }}
+          className={`${CHIP} px-3 ${times !== null ? CHIP_ON : CHIP_OFF}`}
+        >
+          Times a week
+        </button>
+      )}
       {times !== null && (
         <div className="flex flex-wrap items-center gap-1.5">
           {TIMES.map((n) => (

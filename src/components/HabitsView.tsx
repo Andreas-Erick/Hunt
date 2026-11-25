@@ -6,7 +6,7 @@ import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
 import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { habitDayAmount, habitDaySlips, habitKindOf } from "@/lib/habitKind";
+import { habitDayAmount, habitDaySlips, habitKindOf, habitKindRules } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import * as Avoid from "./AvoidHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
@@ -14,7 +14,7 @@ import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import { isEndedHabit } from "@/lib/habitEnd";
-import { habitFrequencyLabel, habitFrequencyOn, sameHabitFrequency } from "@/lib/habitFrequency";
+import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor, sameHabitFrequency } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
@@ -88,7 +88,9 @@ export function HabitsView() {
   const editKind = Count.useHabitKindEdit();
   // The Count Habit whose exact-entry form is open (one at a time).
   const [amountHabitId, setAmountHabitId] = useState<string | null>(null);
-  const [newFrequency, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
+  const [newFrequencyChoice, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
+  // An Avoid Habit never asks N times a week: the form falls back to every day for it.
+  const newFrequency = isFrequencyAllowedFor(newKind, newFrequencyChoice) ? newFrequencyChoice : EVERY_DAY;
   const [questChoice, setQuestChoice] = useState<string | null | undefined>(undefined);
   const addingRef = useRef(false);
 
@@ -339,6 +341,7 @@ export function HabitsView() {
             label="Frequency for new habit"
             value={newFrequency}
             onChange={setNewFrequency}
+            allowPerWeek={habitKindRules(newKind).allowsPerWeek}
           />
         </div>
 
@@ -573,6 +576,7 @@ export function HabitsView() {
                         label="Habit frequency"
                         value={editFrequency}
                         onChange={setEditFrequency}
+                        allowPerWeek={habitKindRules(habit).allowsPerWeek}
                       />
                     </div>
                     <HabitEndDateField value={editEndDate} onChange={setEditEndDate} />

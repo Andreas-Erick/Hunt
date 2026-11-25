@@ -101,4 +101,23 @@ describe("Avoid Habits on the phone", () => {
     p.openHabitEditorSheet(DRY.id);
     expect(p.document.body.textContent ?? "").toContain("Avoid Habit");
   });
+
+  it("never offers Times a week for an Avoid Habit, so it stays judged day by day", () => {
+    const p = boot([]);
+    const picker = () => p.document.getElementById("habitFrequencyPicker")!;
+    const timesAWeek = () => picker().querySelector('[aria-label="Times a week"]') as HTMLElement | null;
+    p.openNewHabitSheet();
+    click(p, timesAWeek());
+    click(p, p.document.querySelector('[role="radio"][data-habit-kind="avoid"]'));
+    expect(timesAWeek()).toBeNull();
+    expect(picker().querySelector('[aria-label="Every day"]')?.getAttribute("aria-pressed")).toBe("true");
+    (p.document.getElementById("newHabitTitleInput") as HTMLInputElement).value = "No alcohol";
+    p.saveNewHabit();
+    const [habit] = readState(p).habits as Record<string, unknown>[];
+    expect(habit.frequencyHistory).toBeUndefined();
+
+    p.openHabitEditorSheet(habit.id as string);
+    expect(timesAWeek()).toBeNull();
+    expect(pageErrors(p)).toEqual([]);
+  });
 });

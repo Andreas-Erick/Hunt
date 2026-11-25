@@ -453,7 +453,7 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
-  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
+  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory, raw);
   if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
   const reminderTimes = sanitizeHabitReminderTimes(raw.reminderTimes);
   if (reminderTimes) habit.reminderTimes = reminderTimes;
