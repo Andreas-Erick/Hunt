@@ -88,6 +88,20 @@ describe("Avoid Habits on the phone", () => {
     expect(main(p).textContent).not.toContain("Kept so far"); // a slipped day is no longer open work
   });
 
+  it("as Today's Next up card, an Avoid day has its labelled Slip button instead of a tick", () => {
+    const quest = { id: "qst-calm", slotIndex: 0, code: "Q-1", title: "Stay calm", description: "", accentColor: "cyan", targetWeeklyHours: 1, archived: false, createdAt: 1 };
+    w = loadMobile({
+      seedState: { quests: [quest], tasks: [], habits: [{ ...DRY, questId: quest.id }], timeLogs: [], deletedQuestIds: [], deletedTaskIds: [], deletedLogIds: [], activeFocus: { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: 0 }, lastSyncedAt: 0 },
+    }) as Page;
+    const p = w;
+    p.switchView("command");
+    expect(main(p).querySelector(".spotlight-card")?.textContent).toContain("No alcohol");
+    expect(button(p, "Complete No alcohol")).toBeNull();
+    click(p, button(p, "Log a Slip on No alcohol"));
+    expect(todayRow(p)).toMatchObject({ slips: 1, status: "queued" });
+    expect(pageErrors(p)).toEqual([]);
+  });
+
   it("completing an Avoid day from anywhere logs a Slip; reopening it clears its Slips", () => {
     const p = boot();
     p.completeTaskDirect(todayId(p));

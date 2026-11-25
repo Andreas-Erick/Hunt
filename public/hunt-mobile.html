@@ -7772,13 +7772,13 @@ var HuntCore = (() => {
     function completeTaskDirect(taskId) {
       // An Avoid Habit's day is not ticked: every "complete" path logs a Slip, as a Day Widget tap does.
       const avoidTask = state.tasks.find(x => x.id === taskId);
-      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+      if (avoidTask && habitOfTaskByKind(avoidTask, "avoid")) {
         editHabitSlip(avoidTask.habitId, avoidTask.scheduledDate || toLocalDateKey(), "log");
         return;
       }
       // A Count Habit's day is counted, not ticked: every "complete" path adds one (shared +1 rule).
       const countTask = state.tasks.find(x => x.id === taskId);
-      if (countTask && countHabitOfTask(countTask)) {
+      if (countTask && habitOfTaskByKind(countTask, "count")) {
         logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), "+1");
         return;
       }
@@ -7818,7 +7818,7 @@ var HuntCore = (() => {
 
     function reopenTaskDirect(taskId) {
       const avoidTask = state.tasks.find(x => x.id === taskId);
-      if (avoidTask && avoidHabitOfTask(avoidTask)) {
+      if (avoidTask && habitOfTaskByKind(avoidTask, "avoid")) {
         // An Avoid Habit's day is reopened by clearing its Slips.
         playClickSound();
         avoidTask.status = "queued";
@@ -7829,7 +7829,7 @@ var HuntCore = (() => {
         return;
       }
       const countTask = state.tasks.find(x => x.id === taskId);
-      if (countTask && countHabitOfTask(countTask)) {
+      if (countTask && habitOfTaskByKind(countTask, "count")) {
         // A Count Habit's day is reopened by clearing its total.
         logHabitCount(countTask.habitId, countTask.scheduledDate || toLocalDateKey(), 0);
         return;
@@ -10305,11 +10305,11 @@ var HuntCore = (() => {
     // AVOID HABITS: "Kept so far" until a Slip is logged (shared Slip rule)
     // =========================================================================
 
-    // The Avoid Habit a day Task belongs to, or null for any other Task.
-    function avoidHabitOfTask(task) {
+    // The Habit of Kind `kind` ("count", "avoid") a day Task belongs to, or null for any other Task.
+    function habitOfTaskByKind(task, kind) {
       if (!task || !task.habitId) return null;
       const h = asArray(state.habits).find(x => x.id === task.habitId);
-      return h && habitKindOf(h) === "avoid" ? h : null;
+      return h && habitKindOf(h) === kind ? h : null;
     }
 
     // Logs a Slip on an Avoid Habit's `dateKey` ("log"), or undoes the newest one ("undo"). The
@@ -10346,13 +10346,6 @@ var HuntCore = (() => {
       const title = escapeHtml(h.title);
       const edit = slips > 0 ? "undo" : "log";
       return `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="editHabitSlip(${jsArg(h.id)}, toLocalDateKey(), ${jsArg(edit)})" aria-label="${slips > 0 ? "Undo Slip" : "Log a Slip"} on ${title}">${slips > 0 ? "Undo Slip" : "Log a Slip"}</button>`;
-    }
-
-    // The Count Habit a day Task belongs to, or null for any other Task.
-    function countHabitOfTask(task) {
-      if (!task || !task.habitId) return null;
-      const h = asArray(state.habits).find(x => x.id === task.habitId);
-      return h && habitKindOf(h) === "count" ? h : null;
     }
 
     // Writes a Count Habit's total for `dateKey`: "+1" adds one, a number sets it exactly. The day's
@@ -10475,9 +10468,9 @@ var HuntCore = (() => {
       const delta = isRunningHere && af.sessionStartedAt ? Math.max(0, Math.floor((Date.now() - af.sessionStartedAt) / 1000)) : 0;
       const totalSec = (task.accumulatedSeconds || 0) + delta;
       const title = escapeHtml(task.title);
-      const countHabit = countHabitOfTask(task);
+      const countHabit = habitOfTaskByKind(task, "count");
       // An Avoid Habit's day reads "Kept so far" and logs a Slip from its own labelled button, never a tick.
-      const avoidHabit = avoidHabitOfTask(task);
+      const avoidHabit = habitOfTaskByKind(task, "avoid");
 
       return `
         <div class="queue-item-card" data-flip-task-id="${escapeHtml(task.id)}">
@@ -11269,6 +11262,8 @@ var HuntCore = (() => {
           const hHex = ACCENT_HEX[hq ? hq.accentColor : "cyan"];
           const isRunningHero = af && af.activeTaskId === heroTask.id && af.isRunning;
           const hSec = (heroTask.accumulatedSeconds || 0) + (isRunningHero ? liveDelta : 0);
+          // An Avoid Habit's day logs a Slip from its own labelled button, never from the tick.
+          const heroAvoid = habitOfTaskByKind(heroTask, "avoid");
 
           heroHtml = `
             <div class="spotlight-card" data-flip-task-id="${escapeHtml(heroTask.id)}" style="border-color:${accentAlpha(hHex, 0.267)};">
@@ -11293,9 +11288,9 @@ var HuntCore = (() => {
                   <span>${isRunningHero ? "Open Focus" : "Start Focus"}</span>
                   ${hSec > 0 || isRunningHero ? `<span style="font-family:var(--font-mono);font-size:12px;opacity:0.8;" data-task-timer="${escapeHtml(heroTask.id)}" data-prefix="· ">· ${formatChrono(hSec)}</span>` : ""}
                 </button>
-                <button class="btn-complete-circle pressable" onclick="completeTaskDirect(${jsArg(heroTask.id)})" aria-label="Complete ${escapeHtml(heroTask.title)}">
+                ${heroAvoid ? avoidSlipButtonHtml(heroAvoid, habitDaySlips(heroTask)) : `<button class="btn-complete-circle pressable" onclick="completeTaskDirect(${jsArg(heroTask.id)})" aria-label="Complete ${escapeHtml(heroTask.title)}">
                   ${SVG_CHECK}
-                </button>
+                </button>`}
               </div>
             </div>
           `;

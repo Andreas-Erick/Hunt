@@ -5,11 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { db } from "@/lib/db";
 import { habitTaskId, toLocalDateKey } from "@/lib/dateUtils";
-import type { Habit } from "@/lib/domainTypes";
+import type { Habit, Quest } from "@/lib/domainTypes";
 import { localStore } from "@/lib/localStore";
 import { useCommandStore } from "@/store/useCommandStore";
 import { HabitsView } from "@/components/HabitsView";
 import { TaskRow } from "@/components/TaskRow";
+import { PlanWeekView } from "@/components/PlanWeekView";
+import { QuestMatrixPanel } from "@/components/QuestMatrixPanel";
 
 async function resetAll() {
   await Promise.all([db.quests.clear(), db.tasks.clear(), db.timeLogs.clear(), db.habits.clear()]);
@@ -83,5 +85,32 @@ describe("Avoid Habits — desktop", () => {
     expect(screen.queryByRole("button", { name: /Start focus/ })).toBeNull();
     fireEvent.click(slip);
     expect(onComplete).toHaveBeenCalledWith(task.id);
+  });
+
+  it.each([
+    ["Plan the Week", () => <PlanWeekView />],
+    ["the Quest panel", () => <QuestMatrixPanel />],
+  ])("an Avoid day in %s reads Kept so far with a labelled Log a Slip button, not a tick", async (_name, view) => {
+    const quest: Quest = {
+      id: "qst-calm",
+      slotIndex: 0,
+      code: "Q-1",
+      title: "Stay calm",
+      description: "",
+      accentColor: "cyan",
+      targetWeeklyHours: 1,
+      archived: false,
+      createdAt: 1,
+    };
+    await db.quests.put(quest);
+    await db.habits.put({ ...DRY, questId: "qst-calm" });
+    await localStore.materializeHabits(toLocalDateKey());
+    render(view());
+    const slip = await screen.findByRole("button", { name: "Log a Slip on No alcohol" });
+    const row = slip.closest("[data-task-id]") as HTMLElement;
+    expect(within(row).getByText("Kept so far")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Mark complete" })).toBeNull();
+    fireEvent.click(slip);
+    await waitFor(async () => expect((await todayRow())?.slips).toBe(1));
   });
 });
