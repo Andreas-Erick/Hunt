@@ -51,19 +51,23 @@ export function habitStartKey(habit: Pick<Habit, "createdAt">, todayKey: string)
  * SHARED month calendar of one Habit's Outcomes. `monthKey` is clamped to the
  * months from the Habit's first day (`startKey`) to today's. A day before
  * `startKey`, or one `outcomeOn` gives no Outcome, shows no Outcome and cannot
- * be corrected; any other day up to today can.
+ * be corrected; any other day up to today can. `askedOn` (the Habit's
+ * isHabitScheduledOn) also lets a day with no Outcome be corrected: a day of an
+ * N per week Habit is never Missed on its own, yet can still be ticked.
  */
 export function habitMonth({
   monthKey,
   todayKey,
   startKey,
   outcomeOn,
+  askedOn,
 }: {
   monthKey: string;
   todayKey: string;
   /** The Habit's first day (YYYY-MM-DD). */
   startKey: string;
   outcomeOn: (dayKey: string) => HabitOutcome | null;
+  askedOn?: (dayKey: string) => boolean;
 }): HabitMonth {
   const firstMonth = startKey.slice(0, 7);
   const lastMonth = todayKey.slice(0, 7) < firstMonth ? firstMonth : todayKey.slice(0, 7);
@@ -75,7 +79,8 @@ export function habitMonth({
   for (let day = 1; day <= daysInMonth; day++) {
     const dayKey = `${shown}-${pad(day)}`;
     const outcome = dayKey < startKey ? null : outcomeOn(dayKey);
-    slots.push({ dayKey, day, outcome, correctable: outcome !== null && dayKey <= todayKey });
+    const asked = outcome !== null || (dayKey >= startKey && Boolean(askedOn?.(dayKey)));
+    slots.push({ dayKey, day, outcome, correctable: asked && dayKey <= todayKey });
   }
   while (slots.length % 7 !== 0) slots.push(null);
   const weeks: (HabitCalendarDay | null)[][] = [];

@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { HabitFrequency, Weekday } from "@/lib/domainTypes";
-import { HABIT_WEEKDAYS } from "@/lib/habitFrequency";
+import { HABIT_WEEKDAYS, habitFrequencyLabel, MAX_TIMES_PER_WEEK } from "@/lib/habitFrequency";
 import { hudAudio } from "@/lib/hudAudio";
 
 /** Whether a draft can be saved: chosen weekdays need at least one day. */
@@ -15,9 +15,14 @@ const CHIP =
 const CHIP_ON = "border-white/25 bg-white/10 text-white font-medium";
 const CHIP_OFF = "border-white/[0.07] text-hud-muted hover:text-neutral-300";
 
+/** The N a fresh "Times a week" choice starts at. */
+const DEFAULT_TIMES_PER_WEEK = 3;
+const TIMES = Array.from({ length: MAX_TIMES_PER_WEEK }, (_, i) => i + 1);
+
 /**
- * Frequency editor for a Habit: every day, or chosen weekdays (Monday first).
- * Touch-sized chips; the weekday chips show only for chosen weekdays.
+ * Frequency editor for a Habit: every day, chosen weekdays (Monday first), or
+ * N times per Habit Week (1-7). Touch-sized chips; the weekday chips show only
+ * for chosen weekdays, the 1-7 chips only for times a week.
  */
 export function HabitFrequencyPicker({
   value,
@@ -30,6 +35,7 @@ export function HabitFrequencyPicker({
   label: string;
 }) {
   const chosen = value.type === "weekdays" ? value.weekdays : null;
+  const times = value.type === "perWeek" ? value.times : null;
   const pick = (next: HabitFrequency) => {
     hudAudio.playClick();
     onChange(next);
@@ -62,6 +68,33 @@ export function HabitFrequencyPicker({
       >
         Chosen days
       </button>
+      <button
+        type="button"
+        aria-pressed={times !== null}
+        onClick={() => {
+          if (times === null) pick({ type: "perWeek", times: DEFAULT_TIMES_PER_WEEK });
+        }}
+        className={`${CHIP} px-3 ${times !== null ? CHIP_ON : CHIP_OFF}`}
+      >
+        Times a week
+      </button>
+      {times !== null && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {TIMES.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={habitFrequencyLabel({ type: "perWeek", times: n })}
+              aria-pressed={n === times}
+              onClick={() => pick({ type: "perWeek", times: n })}
+              className={`min-w-9 coarse:min-w-11 ${CHIP} px-2 tabular-nums ${n === times ? CHIP_ON : CHIP_OFF}`}
+            >
+              {n}
+            </button>
+          ))}
+          <span className="text-xs text-hud-muted">per week, Monday to Sunday</span>
+        </div>
+      )}
       {chosen && (
         <div className="flex flex-wrap items-center gap-1.5">
           {HABIT_WEEKDAYS.map(({ day, label: short, name }) => {

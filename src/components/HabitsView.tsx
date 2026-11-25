@@ -12,7 +12,7 @@ import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
 import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
-import { habitFrequencyLabel, habitFrequencyOn, isHabitScheduledOn, sameHabitFrequency } from "@/lib/habitFrequency";
+import { habitFrequencyLabel, habitFrequencyOn, sameHabitFrequency } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
@@ -368,11 +368,11 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, outcomeOn, todayTask } =
-              habitDays.summaryFor(habit.id);
-            const skippedToday = outcomeOn(todayKey) === "skipped";
+            const summary = habitDays.summaryFor(habit.id);
+            const { doneToday, todayTask, askedToday } = summary;
+            const skippedToday = summary.skipState === "skipped";
             const isEditing = editingHabit?.id === habit.id;
-            const askedToday = isHabitScheduledOn(habit, todayKey);
+            const weekly = summary.week !== null;
             // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
             const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
             const todayAmount = habitDayAmount(todayTask);
@@ -399,6 +399,7 @@ export function HabitsView() {
                         <HabitTodayCheck
                           title={habit.title}
                           askedToday={askedToday}
+                          weekly={weekly}
                           doneToday={doneToday}
                           accentBg={style.bg}
                           onToggle={() => void handleToggleToday(habit)}
@@ -486,7 +487,8 @@ export function HabitsView() {
                       <HabitSkipToday
                         habit={habit}
                         todayKey={todayKey}
-                        outcome={outcomeOn(todayKey)}
+                        outcome={summary.skipState}
+                        weekly={weekly}
                         focusRunning={todayTask?.status === "active"}
                       />
                       <HabitCardStats
@@ -592,7 +594,7 @@ export function HabitsView() {
                   </form>
                 </HeightReveal>
                 {detailHabitId === habit.id && (
-                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={summary.outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
                 )}
               </div>
             );

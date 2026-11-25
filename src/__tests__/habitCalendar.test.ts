@@ -44,6 +44,21 @@ describe("habitMonth (shared month grid of Outcomes)", () => {
     expect(day("2026-11-19")).toMatchObject({ outcome: null, correctable: false });
   });
 
+  it("lets an asked day with no Outcome be corrected (an N per week day is never Missed alone)", () => {
+    const month = habitMonth({
+      monthKey: "2026-11",
+      todayKey: TODAY,
+      startKey: "2026-11-03",
+      outcomeOn: () => null,
+      askedOn: (dayKey) => dayKey !== "2026-11-07",
+    });
+    const day = (key: string) => month.weeks.flat().find((d) => d?.dayKey === key);
+    expect(day("2026-11-02")).toMatchObject({ outcome: null, correctable: false });
+    expect(day("2026-11-04")).toMatchObject({ outcome: null, correctable: true });
+    expect(day("2026-11-07")).toMatchObject({ outcome: null, correctable: false });
+    expect(day("2026-11-19")).toMatchObject({ outcome: null, correctable: false });
+  });
+
   it("moves between months from the Habit's first month to today's, and clamps a month outside them", () => {
     const at = (monthKey: string) =>
       habitMonth({ monthKey, todayKey: TODAY, startKey: "2025-12-20", outcomeOn: outcomes({}) });

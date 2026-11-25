@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Habit } from "@/lib/domainTypes";
 import { habitMonth, habitStartKey, type HabitCalendarDay, type HabitDayMark } from "@/lib/habitCalendar";
 import type { HabitOutcome } from "@/lib/habitOutcome";
+import { isHabitScheduledOn } from "@/lib/habitFrequency";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
 
@@ -70,7 +71,13 @@ export function HabitCalendar({
   const correctHabitDay = useCommandStore((s) => s.correctHabitDay);
   const [monthKey, setMonthKey] = useState(todayKey.slice(0, 7));
   const [chosenKey, setChosenKey] = useState<string | null>(null);
-  const month = habitMonth({ monthKey, todayKey, startKey: habitStartKey(habit, todayKey), outcomeOn });
+  const month = habitMonth({
+    monthKey,
+    todayKey,
+    startKey: habitStartKey(habit, todayKey),
+    outcomeOn,
+    askedOn: (dayKey) => isHabitScheduledOn(habit, dayKey),
+  });
   const monthName = monthDate(month.monthKey).toLocaleDateString("en-US", { month: "long" });
   const dayName = (d: HabitCalendarDay) => `${d.day} ${monthName}`;
   const chosen = month.weeks.flat().find((d) => d?.dayKey === chosenKey && d.correctable) ?? null;
