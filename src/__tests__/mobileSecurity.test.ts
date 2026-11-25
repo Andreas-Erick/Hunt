@@ -96,10 +96,21 @@ function hostileState() {
       dateKey: todayKey(),
     });
   });
+  // Two Lists carry the payloads in their title and items (more would only slow the click sweep).
+  const lists = PAYLOADS.slice(0, 2).map((p, i) => ({
+    id: `list-${i}`,
+    title: p,
+    items: [{ id: `chk-${i}`, text: p, done: i === 0 }, { id: p, text: "bad id", done: false }],
+    rank: i,
+    updatedAt: 1,
+  }));
+  lists.push({ id: PAYLOADS[0], title: "bad id", items: [], rank: 9, updatedAt: 1 });
   return {
     quests,
     tasks,
     timeLogs,
+    lists,
+    deletedListIds: [...PAYLOADS],
     deletedQuestIds: [...PAYLOADS],
     deletedTaskIds: [...PAYLOADS, "tsk-gone"],
     deletedLogIds: [...PAYLOADS],
@@ -119,6 +130,9 @@ function assertDropped(win: MobileWindow) {
     expect(list.some((id) => bad.has(id))).toBe(false);
   }
   expect(s.deletedTaskIds).toContain("tsk-gone");
+  const lists = (s as unknown as { lists: Array<{ id: string; items: Array<{ id: string }> }> }).lists;
+  expect(lists.map((l) => l.id)).toEqual(["list-0", "list-1"]);
+  expect(lists.every((l) => l.items.every((i) => !bad.has(i.id)))).toBe(true);
   expect(s.quests).toHaveLength(PAYLOADS.length);
   expect(s.tasks).toHaveLength(PAYLOADS.length);
   expect(s.timeLogs).toHaveLength(PAYLOADS.length);
@@ -168,7 +182,7 @@ function sweep(win: MobileWindow, snapshot: string, label: string, open: () => v
   }
 }
 
-const VIEWS = ["command", "plan", "focus", "quests", "telemetry"] as const;
+const VIEWS = ["command", "plan", "focus", "quests", "lists", "telemetry"] as const;
 
 function sweepEverything(win: MobileWindow) {
   const snapshot = JSON.stringify(readState(win));

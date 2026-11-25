@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "@/lib/db";
 import type { Quest } from "@/lib/domainTypes";
+import { MAX_LIST_TITLE_LENGTH } from "@/lib/lists";
 import { buildLocalSyncPayload } from "@/lib/syncEngine";
 import {
   createEmptySyncPayload,
@@ -23,7 +24,7 @@ const LONG = "n".repeat(MAX_LONG_TEXT_LENGTH + 5000);
 
 beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
-  await Promise.all([db.quests.clear(), db.tasks.clear(), db.timeLogs.clear(), db.habits.clear()]);
+  await Promise.all([db.quests.clear(), db.tasks.clear(), db.timeLogs.clear(), db.habits.clear(), db.lists.clear()]);
   window.localStorage.clear();
   useCommandStore.setState(useCommandStore.getInitialState(), true);
 });
@@ -41,6 +42,7 @@ async function expectValidatorChangesNothing(): Promise<void> {
   expect(check.payload?.tasks.map((t) => t.notes)).toEqual(payload.tasks.map((t) => t.notes));
   expect(check.payload?.quests.map((q) => q.description)).toEqual(payload.quests.map((q) => q.description));
   expect(check.payload?.habits?.map((h) => h.notes)).toEqual(payload.habits?.map((h) => h.notes));
+  expect(check.payload?.lists).toEqual(payload.lists);
 }
 
 describe("long text is cut where it is written, to the sync limit", () => {
@@ -78,6 +80,17 @@ describe("long text is cut where it is written, to the sync limit", () => {
 
     await store().updateHabit(created.id, { notes: LONG });
     expect((await db.habits.get(created.id))?.notes).toHaveLength(MAX_LONG_TEXT_LENGTH);
+    await expectValidatorChangesNothing();
+  });
+
+  it("createList and renameList store at most MAX_LIST_TITLE_LENGTH of title, items as the validator keeps them", async () => {
+    const longTitle = "L".repeat(MAX_LIST_TITLE_LENGTH + 40);
+    await store().createList(longTitle);
+    const [created] = await db.lists.toArray();
+    expect(created.title).toHaveLength(MAX_LIST_TITLE_LENGTH);
+    await store().editList(created.id, { kind: "add", id: "chk-1", text: "x".repeat(MAX_LONG_TEXT_LENGTH) });
+    await store().renameList(created.id, `  ${longTitle}  `);
+    expect((await db.lists.get(created.id))?.title).toHaveLength(MAX_LIST_TITLE_LENGTH);
     await expectValidatorChangesNothing();
   });
 

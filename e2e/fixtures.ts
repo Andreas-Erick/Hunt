@@ -1,4 +1,4 @@
-import type { Habit, Quest, Task, TimeLog } from "../src/lib/domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "../src/lib/domainTypes";
 
 /**
  * Long-text fixtures for the geometry suite. One data set feeds both apps: the
@@ -39,6 +39,7 @@ export interface GeometryFixtures {
   quests: Quest[];
   tasks: Task[];
   habits: Habit[];
+  lists: List[];
   timeLogs: TimeLog[];
 }
 
@@ -122,6 +123,21 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
     },
   ];
 
+  // A standalone List with an unbreakable name and long items, one of them ticked.
+  const lists: List[] = [
+    {
+      id: "list-long",
+      title: LONG_QUEST_TITLE + LONG_QUEST_TITLE,
+      items: [
+        { id: "chk-l1", text: URL_TASK_TITLE, done: true },
+        { id: "chk-l2", text: LONG_TASK_TITLE, done: false },
+      ],
+      rank: 1000,
+      createdAt: now - 3 * DAY_MS,
+      updatedAt: now - 3 * DAY_MS,
+    },
+  ];
+
   // A spread of sessions over the past weeks so Review, the heatmap and the session log render.
   const timeLogs: TimeLog[] = [0, 1, 2, 4, 7, 12, 20, 40].map((daysAgo, i) => {
     const startTime = now - daysAgo * DAY_MS - 3 * 60 * 60 * 1000;
@@ -141,7 +157,7 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
     };
   });
 
-  return { quests, tasks, habits, timeLogs };
+  return { quests, tasks, habits, lists, timeLogs };
 }
 
 /** The phone app's saved-state shape (see getEmptyState in public/hunt-mobile.html). */
@@ -152,6 +168,7 @@ export function buildMobileState(fixtures: GeometryFixtures) {
     deletedTaskIds: [],
     deletedLogIds: [],
     deletedHabitIds: [],
+    deletedListIds: [],
     activeFocus: { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: 0 },
     lastSyncedAt: 0,
   };

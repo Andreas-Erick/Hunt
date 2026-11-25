@@ -54,6 +54,12 @@ associativity and idempotence over 400 seeds.
   Checklist while apart keep only the newer row's items.
   This is accepted: Checklists are short and edited on one
   device at a time.
+- Standalone Lists are a synced collection of their own
+  (`lists`, tombstones in `deletedListIds`). A List's items
+  live on the List row and merge with it, as a Checklist
+  does with its Task: two devices that edit the same List
+  while apart keep only the newer row's items. Payloads
+  from older devices carry no `lists` and read as none.
 - A Habit's Frequency history (`frequencyHistory`) is also a
   list stored on its row: if two devices change the
   Frequency while apart, the later Habit row wins with its
@@ -62,4 +68,6 @@ associativity and idempotence over 400 seeds.
   bounded.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
-  validator, and a Dexie table.
+  validator (in its own module: `lists.ts` for Lists), a
+  Dexie table in a new schema version, and a slot in the
+  phone's saved state (`getEmptyState`, `guardSyncState`).
