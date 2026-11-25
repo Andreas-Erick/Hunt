@@ -5163,7 +5163,7 @@ var HuntCore = (() => {
         if (vpMeta) vpMeta.setAttribute("content", "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content");
         window.__huntNativeImeBoot = true;
       }
-    } catch (e) {}
+    } catch (e) { /* an old WebView without the IME hooks just keeps the default keyboard handling */ }
 
     const APP_VERSION = "1.14.1";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
@@ -5667,7 +5667,7 @@ var HuntCore = (() => {
       savedMetaAt = now;
       try {
         localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta));
-      } catch (e) {}
+      } catch (e) { /* sync bookkeeping only (last route, timestamps); the next sync rebuilds it */ }
     }
 
     // Local edits not yet acknowledged by the laptop (localRev bumps per mutation; syncedRev = rev that was sent).
@@ -5703,7 +5703,7 @@ var HuntCore = (() => {
       if (!url) {
         try {
           url = normalizeLaptopUrl(localStorage.getItem(LAPTOP_URL_KEY));
-        } catch (e) {}
+        } catch (e) { /* private mode or blocked storage: fall back to the URL kept in memory */ }
       }
       if (!url && location.protocol.startsWith("http")) url = location.origin;
       cachedLaptopUrl = url;
@@ -5715,7 +5715,7 @@ var HuntCore = (() => {
       const clean = normalizeLaptopUrl(url);
       try {
         localStorage.setItem(LAPTOP_URL_KEY, clean);
-      } catch (e) {}
+      } catch (e) { /* private mode or blocked storage: the URL stays in memory for this session */ }
       bridgeCall("saveLaptopUrl", clean);
       cachedLaptopUrl = clean || null; // native normalizes the same way; no read-back needed
       syncMeta.lastUrl = null;
@@ -5797,7 +5797,7 @@ var HuntCore = (() => {
       playClickSound();
       try {
         window.location.assign(pendingNativePairHref);
-      } catch (e) {}
+      } catch (e) { /* the shell's pair link is best-effort; the pairing sheet stays open to retry */ }
     }
 
     async function copyBrowserPairingLink() {
@@ -5823,7 +5823,7 @@ var HuntCore = (() => {
       const nextUrl = info && typeof info.url === "string" ? normalizeLaptopUrl(info.url) : "";
       if (nextUrl) {
         cachedLaptopUrl = nextUrl;
-        try { localStorage.setItem(LAPTOP_URL_KEY, nextUrl); } catch (e) {}
+        try { localStorage.setItem(LAPTOP_URL_KEY, nextUrl); } catch (e) { /* private mode or blocked storage: the URL stays in memory for this session */ }
       }
       syncMeta.lastUrl = null;
       syncRun.routeEpoch++;
@@ -5849,7 +5849,7 @@ var HuntCore = (() => {
       const query = params.toString();
       try {
         history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
-      } catch (e) {}
+      } catch (e) { /* cosmetic: tidies the address bar only */ }
       renderApkPairBanner();
     }
 
@@ -5863,17 +5863,43 @@ var HuntCore = (() => {
     }
 
     // ----- Persistence (separate from rendering) -----
+    const PERSIST_FAILED_TEXT = "Storage is full, so changes aren't saved on this device. Sync with the laptop to keep them.";
+    let persistFailureReported = false;
+    function reportPersistFailure() {
+      if (persistFailureReported) return;
+      persistFailureReported = true;
+      // A save can run at boot, before the toast and breadcrumb state below exist; the warning then
+      // waits for the next failed save, which retries anyway.
+      try {
+        recordMobileBreadcrumb("ERROR", "storage", "persist_failed");
+        showToast(PERSIST_FAILED_TEXT, { ms: 8000 });
+      } catch (e) {
+        persistFailureReported = false;
+      }
+    }
+
     // Stringifies once and skips all I/O when nothing changed. Each store is written in its own try.
     function persistState(json) {
       const text = typeof json === "string" ? json : JSON.stringify(state);
       syncKeepScreenOn();
       if (persistBlocked) return false;
       if (text === lastPersistedJson) return false;
-      lastPersistedJson = text;
       bridgeCall("saveState", text);
+      let savedLocally = true;
       try {
         localStorage.setItem(STORAGE_KEY, text);
-      } catch (e) {}
+      } catch (e) {
+        savedLocally = false;
+      }
+      // In the APK the shell's file is the store (it logs its own failures), so a full localStorage
+      // loses nothing. In a browser localStorage is the only store: leave lastPersistedJson stale so
+      // the next save retries, and tell the user once instead of dropping every edit on reload.
+      if (!savedLocally && !hasNativeStore()) {
+        reportPersistFailure();
+        return false;
+      }
+      persistFailureReported = false;
+      lastPersistedJson = text;
       publishWidgetSnapshot();
       publishReminderPlan();
       return true;
@@ -6379,7 +6405,7 @@ var HuntCore = (() => {
           body
         });
         if (!res.ok) {
-          try { await res.text(); } catch (e) {}
+          try { await res.text(); } catch (e) { /* draining the error body only; the status code is what is reported */ }
           const ms = Date.now() - started;
           recordMobileBreadcrumb("WARN", "sync", "http_error", { status: res.status }, correlationId, ms);
           return { reason: httpFailureReason(res.status), code: res.status, body: "", answered: true, ms };
@@ -6491,7 +6517,7 @@ var HuntCore = (() => {
         const data = JSON.parse(body);
         if (isPlainRecord(data) && isPlainRecord(data.payload)) return data;
         if (isPlainRecord(data) && Array.isArray(data.tasks)) return { payload: data }; // legacy bare payload
-      } catch (e) {}
+      } catch (e) { /* an unparseable body is reported as a bad response by the caller (null) */ }
       return null;
     }
 
@@ -6638,7 +6664,7 @@ var HuntCore = (() => {
           if (syncRun.inFlight) {
             const sentRouteEpoch = syncRun.sentRouteEpoch;
             let autoResult = null;
-            try { autoResult = await syncRun.inFlight; } catch (e) {}
+            try { autoResult = await syncRun.inFlight; } catch (e) { /* the auto-sync's failure is its own to report; Sync Now starts a fresh run below */ }
             if (autoResultAnswersSyncNow(autoResult, sentRouteEpoch)) {
               // that result is now Sync Now's answer: a failure must show as one (no reconnect grace)
               if (syncRun.lastResult === autoResult) syncRun.lastManual = true;
@@ -7103,7 +7129,7 @@ var HuntCore = (() => {
       try {
         const covered = el.getBoundingClientRect().bottom - ((window.innerHeight || 0) - kbPx - 16);
         if (covered > 0) window.scrollBy({ top: covered, behavior: prefersReducedMotionMobile() ? "auto" : "smooth" });
-      } catch (e) {}
+      } catch (e) { /* best-effort scroll to keep the field above the keyboard */ }
     }
 
     // Called frame-by-frame by MainActivity's WindowInsetsAnimation.Callback on Android 11+.
@@ -7190,7 +7216,7 @@ var HuntCore = (() => {
             if (sr.height > 0 && er.bottom > sr.bottom - 64) {
               el.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }
-          } catch (e) {}
+          } catch (e) { /* best-effort scroll to keep the field in view */ }
         }, 100);
       }
     }
@@ -7268,7 +7294,7 @@ var HuntCore = (() => {
             if (activeView === "plan") renderAppSafely();
           });
         }
-      } catch (e) {}
+      } catch (e) { /* old WebViews without matchMedia listeners keep the layout chosen at boot */ }
     }
 
     function installLifecycleHooks() {
@@ -8050,7 +8076,7 @@ var HuntCore = (() => {
       document.body.style.right = "";
       document.body.style.width = "";
       if (restoreY > 0) {
-        try { window.scrollTo(0, restoreY); } catch (e) {}
+        try { window.scrollTo(0, restoreY); } catch (e) { /* best-effort scroll restore */ }
       }
     }
 
@@ -8325,7 +8351,7 @@ var HuntCore = (() => {
         if (d && typeof d.title === "string" && typeof d.notes === "string" && (d.title.trim() || d.notes.trim())) {
           return { title: d.title, notes: d.notes };
         }
-      } catch (e) {}
+      } catch (e) { /* an unreadable draft is dropped: it is a convenience copy, never the saved Task */ }
       return null;
     }
 
@@ -8337,7 +8363,7 @@ var HuntCore = (() => {
         if (json) localStorage.setItem(COMPOSER_DRAFT_KEY, json);
         else localStorage.removeItem(COMPOSER_DRAFT_KEY);
         storedComposerDraftJson = json;
-      } catch (e) {}
+      } catch (e) { /* the draft stays in memory; only a relaunch would miss it, and the Task itself is unaffected */ }
     }
 
     function captureComposerDraft() {
@@ -9307,7 +9333,7 @@ var HuntCore = (() => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { /* no clipboard access: the user pastes into the field by hand */ }
       if (input) {
         input.focus();
         if (typeof input.select === "function") input.select();
@@ -12914,7 +12940,7 @@ var HuntCore = (() => {
     function newCorrelationId() {
       try {
         if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-      } catch (e) {}
+      } catch (e) { /* no crypto.randomUUID: fall back to the time-and-random id below */ }
       return "mcid-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
     }
     function recordMobileBreadcrumb(level, domain, event, context, correlationId, durationMs) {
