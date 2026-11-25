@@ -29,6 +29,16 @@ export {
   newChecklistItemId,
 } from "../lib/checklist";
 export {
+  applyListEdit,
+  buildList,
+  cleanListTitle,
+  listItemsOf,
+  listProgress,
+  MAX_LIST_TITLE_LENGTH,
+  newListId,
+  sanitizeList,
+} from "../lib/lists";
+export {
   HABIT_WEEKDAYS,
   habitFrequencyLabel,
   habitFrequencyOn,

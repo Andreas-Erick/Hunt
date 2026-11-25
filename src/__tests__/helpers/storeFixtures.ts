@@ -83,11 +83,12 @@ export function makeTimeLog(params: {
 export async function resetDbAndStore() {
   resetBootOnceForTests();
   await db.open();
-  await db.transaction("rw", db.quests, db.tasks, db.habits, db.timeLogs, async () => {
+  await db.transaction("rw", [db.quests, db.tasks, db.habits, db.timeLogs, db.lists], async () => {
     await db.quests.clear();
     await db.tasks.clear();
     await db.habits.clear();
     await db.timeLogs.clear();
+    await db.lists.clear();
   });
   useCommandStore.setState({
     activeView: "command",

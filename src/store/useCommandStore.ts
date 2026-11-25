@@ -44,6 +44,7 @@ import {
 import { compareRank, type SyncPayload } from "@/lib/syncTypes";
 import { pickNextFocusTask } from "@/lib/taskQueue";
 import { habitDayActions, type HabitDayActions } from "./habitDayActions";
+import { listActions, type ListActions } from "./listActions";
 import { mergePersistedFocus } from "./persistedFocus";
 
 export {
@@ -53,7 +54,7 @@ export {
   sessionLogId,
 } from "@/lib/taskQueue";
 
-export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "telemetry" | "guide" | "log";
+export type HudView = "command" | "plan" | "focus" | "quests" | "habits" | "lists" | "telemetry" | "guide" | "log";
 
 export type SnapshotImportResult =
   | { ok: true; merged: SyncPayload }
@@ -70,7 +71,7 @@ export interface CompletedDirectiveFeedback {
 
 export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
-interface CommandStoreState extends HabitDayActions {
+interface CommandStoreState extends HabitDayActions, ListActions {
   activeView: HudView;
   activeTaskId: string | null;
   isRunning: boolean;
@@ -775,6 +776,7 @@ export const useCommandStore = create<CommandStoreState>()(
         },
 
         ...habitDayActions((name, action) => runAction(set, name, action)),
+        ...listActions((name, action) => runAction(set, name, action)),
 
         deleteTimeLog: async (logId) => {
           await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));

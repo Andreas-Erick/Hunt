@@ -1,8 +1,10 @@
-import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
+import type { ActiveFocusState, Habit, List, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "./domainTypes";
 import { sanitizeChecklist } from "./checklist";
 import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
 import { sanitizeHabitEnd } from "./habitEnd";
+import { copyScalarExtras } from "./syncRowExtras";
+import { MAX_SYNC_LISTS, sanitizeList } from "./lists";
 import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
 import {
   clamp, clampText, finiteOr, isDateKey, isRecord, isStamp, isTableKey, type UnknownRecord,
@@ -17,10 +19,13 @@ export interface SyncPayload {
   tasks: Task[];
   timeLogs: TimeLog[];
   habits?: Habit[];
+  /** Standalone Lists (absent from older devices: read as none). */
+  lists?: List[];
   deletedQuestIds?: string[];
   deletedTaskIds: string[];
   deletedLogIds: string[];
   deletedHabitIds?: string[];
+  deletedListIds?: string[];
   activeFocus: ActiveFocusState;
   lastSyncedAt: number;
 }
@@ -147,7 +152,7 @@ export function pickRowWinner<T extends object>(
 type StampedRow = { updatedAt?: number; completedAt?: number | null; createdAt?: number };
 
 /**
- * SHARED RULE R1 stamp of a quest or habit row: `updatedAt ?? createdAt ?? 0`.
+ * SHARED RULE R1 stamp of a quest, habit or List row: `updatedAt ?? createdAt ?? 0`.
  * A quest's completedAt is NOT part of it (the phone uses the same rule).
  */
 export function questOrHabitRowStamp(row: StampedRow): number {
@@ -229,10 +234,12 @@ export function syncPayloadHasContent(payload: Partial<SyncPayload> | null | und
       len(payload.tasks) +
       len(payload.timeLogs) +
       len(payload.habits) +
+      len(payload.lists) +
       len(payload.deletedQuestIds) +
       len(payload.deletedTaskIds) +
       len(payload.deletedLogIds) +
-      len(payload.deletedHabitIds) >
+      len(payload.deletedHabitIds) +
+      len(payload.deletedListIds) >
     0
   );
 }
@@ -243,10 +250,12 @@ export function createEmptySyncPayload(): SyncPayload {
     tasks: [],
     timeLogs: [],
     habits: [],
+    lists: [],
     deletedQuestIds: [],
     deletedTaskIds: [],
     deletedLogIds: [],
     deletedHabitIds: [],
+    deletedListIds: [],
     activeFocus: {
       activeTaskId: null,
       isRunning: false,
@@ -276,13 +285,11 @@ const MAX_SYNC_HABITS = 200;
 const MAX_SYNC_TASKS = 100_000;
 const MAX_SYNC_LOGS = 100_000;
 export const MAX_LONG_TEXT_LENGTH = 20_000; // notes, description; localStore cuts to it too
-const MAX_EXTRA_TEXT_LENGTH = 10_000; // string values of fields not listed below
 const MAX_COUNTER_SECONDS = 1e9;
 const MAX_WEEKLY_HOURS = 168;
 const DEFAULT_WEEKLY_HOURS = 10;
 /** 9999-12-31T00:00Z: the local date stays 4-digit-year in every time zone up to here. */
 const MAX_DATE_KEY_MS = 253_402_214_400_000;
-const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
 const QUEST_ACCENTS: Record<QuestAccent, true> = {
   cyan: true,
@@ -359,31 +366,6 @@ function localDateKeyOf(timestamp: number): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${month}-${day}`;
-}
-
-/**
- * Copies the fields `known` does not list (e.g. a log's questCodeSnapshot, a
- * quest's code/archived) when the value is a scalar: a string (cut to 10,000),
- * a finite number, a boolean or null. Objects and arrays are dropped, which
- * also bounds nesting for canonicalString; __proto__/constructor/prototype are
- * never copied.
- */
-function copyScalarExtras(target: object, raw: UnknownRecord, known: ReadonlySet<string>): void {
-  const extras: UnknownRecord = {};
-  for (const key of Object.keys(raw)) {
-    if (known.has(key) || FORBIDDEN_KEYS.has(key)) continue;
-    const value = raw[key];
-    if (typeof value === "string") {
-      extras[key] = clampText(value, MAX_EXTRA_TEXT_LENGTH);
-    } else if (
-      value === null ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value))
-    ) {
-      extras[key] = value;
-    }
-  }
-  Object.assign(target, extras);
 }
 
 /**
@@ -549,7 +531,7 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   if (!isRecord(input)) {
     return { valid: false, error: "Payload must be a JSON object" };
   }
-  const { quests, tasks, timeLogs, habits } = input;
+  const { quests, tasks, timeLogs, habits, lists } = input;
   if (!Array.isArray(quests) || quests.length > MAX_SYNC_QUESTS) {
     return { valid: false, error: "Invalid or oversized quests array" };
   }
@@ -561,6 +543,9 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
   }
   if (habits !== undefined && (!Array.isArray(habits) || habits.length > MAX_SYNC_HABITS)) {
     return { valid: false, error: "Invalid or oversized habits array" };
+  }
+  if (lists !== undefined && (!Array.isArray(lists) || lists.length > MAX_SYNC_LISTS)) {
+    return { valid: false, error: "Invalid or oversized lists array" };
   }
 
   let dropped = 0;
@@ -579,10 +564,12 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
     tasks: keep(tasks, sanitizeTask),
     timeLogs: keep(timeLogs, sanitizeLog),
     habits: Array.isArray(habits) ? keep(habits, sanitizeHabit) : [],
+    lists: Array.isArray(lists) ? keep(lists, sanitizeList) : [],
     deletedQuestIds: sanitizeTombstones(input.deletedQuestIds, MAX_ENTITY_ID_LENGTH),
     deletedTaskIds: sanitizeTombstones(input.deletedTaskIds, MAX_ENTITY_ID_LENGTH),
     deletedLogIds: sanitizeTombstones(input.deletedLogIds, MAX_LOG_ID_LENGTH),
     deletedHabitIds: sanitizeTombstones(input.deletedHabitIds, MAX_ENTITY_ID_LENGTH),
+    deletedListIds: sanitizeTombstones(input.deletedListIds, MAX_ENTITY_ID_LENGTH),
     activeFocus: sanitizeFocus(input.activeFocus),
     lastSyncedAt: Date.now(),
   };
@@ -590,7 +577,7 @@ export function validateSyncPayload(input: unknown): SyncPayloadValidation {
 }
 
 /** The synced row collections. Each has its own tombstone list. */
-export type SyncedEntityKey = "quests" | "tasks" | "timeLogs" | "habits";
+export type SyncedEntityKey = "quests" | "tasks" | "timeLogs" | "habits" | "lists";
 type SyncedRow<K extends SyncedEntityKey> = NonNullable<SyncPayload[K]>[number];
 
 /** Payload key of each collection's tombstone list. */
@@ -599,6 +586,7 @@ export const TOMBSTONE_KEY = {
   tasks: "deletedTaskIds",
   timeLogs: "deletedLogIds",
   habits: "deletedHabitIds",
+  lists: "deletedListIds",
 } as const satisfies Record<SyncedEntityKey, keyof SyncPayload>;
 
 export const SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY) as SyncedEntityKey[];
@@ -674,6 +662,11 @@ export function mergeSyncPayloads(
       resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
       order: compareRank,
     },
+    // R1, the whole List row (its items merge with it).
+    lists: {
+      resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+      order: compareRank,
+    },
     // R1 on the questId-sanitised rows; the focus counter only grows (max).
     tasks: {
       normalize: unlinkDeletedQuest,
@@ -692,6 +685,7 @@ export function mergeSyncPayloads(
 
   const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
   const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+  const listMap = mergeRowsById(base.lists, incoming.lists, deleted.lists, specs.lists);
   const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
   const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
 
@@ -764,10 +758,12 @@ export function mergeSyncPayloads(
     tasks: mergedTasks,
     timeLogs: mergedLogs,
     habits: mergedHabits,
+    lists: Array.from(listMap.values()).sort(specs.lists.order),
     deletedQuestIds: Array.from(deleted.quests),
     deletedTaskIds: Array.from(deleted.tasks),
     deletedLogIds: Array.from(deleted.timeLogs),
     deletedHabitIds: Array.from(deleted.habits),
+    deletedListIds: Array.from(deleted.lists),
     activeFocus: mergedFocus,
     lastSyncedAt: now,
   };
