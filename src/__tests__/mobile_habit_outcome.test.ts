@@ -76,10 +76,9 @@ describe("phone Habits screen uses the shared Outcome rule", () => {
       dayRow(0),
     ]);
     expect(card(p).textContent).toContain("2d");
-    const dots = Array.from(card(p).querySelectorAll("span[style*='width:7px']"));
-    // An unmet dot is drawn in the ink tint (filled or ringed); a Met dot in the habit's accent.
-    const met = dots.filter((d) => !(d.getAttribute("style") ?? "").includes("--c-ink"));
-    expect(dots).toHaveLength(7);
+    const days = Array.from(card(p).querySelectorAll('ul[aria-label="Last 7 days"] > li'));
+    const met = days.filter((d) => d.getAttribute("data-outcome") === "met");
+    expect(days).toHaveLength(7);
     expect(met).toHaveLength(2);
     expect(pageErrors(p)).toEqual([]);
   });

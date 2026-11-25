@@ -113,11 +113,17 @@ export function habitWeekStreakOn(
   weekOutcomeOn: (dayKey: string) => HabitOutcome | null,
   firstDayKey: string
 ): number {
+  return habitStreakOf(weekOutcomesBackFrom(todayKey, firstDayKey, weekOutcomeOn));
+}
+
+/** Each Habit Week's Outcome from the week of `todayKey` back to the week of `firstDayKey`. */
+export function* weekOutcomesBackFrom(
+  todayKey: string,
+  firstDayKey: string,
+  weekOutcomeOn: (dayKey: string) => HabitOutcome | null
+): Generator<HabitOutcome | null> {
   const floor = habitWeekStart(firstDayKey);
-  function* weeksBack(): Generator<HabitOutcome | null> {
-    for (let week = habitWeekStart(todayKey); week >= floor; week = dateKeyFromOffset(week, -7)) {
-      yield weekOutcomeOn(week);
-    }
+  for (let week = habitWeekStart(todayKey); week >= floor; week = dateKeyFromOffset(week, -7)) {
+    yield weekOutcomeOn(week);
   }
-  return habitStreakOf(weeksBack());
 }

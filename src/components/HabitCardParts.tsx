@@ -3,7 +3,6 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
-import type { HabitDaySummary } from "@/lib/habitDay";
 
 /**
  * A Habit card's tick for today. Disabled on a day the Habit's Frequency does
@@ -71,28 +70,5 @@ export function HabitTodayCheck({
         <Check className="h-3 w-3 stroke-[2.5]" />
       )}
     </button>
-  );
-}
-
-/**
- * A Habit card's Streak ("4d streak", or "3w streak" in Habit Weeks) and, for
- * an N per week Habit, the current Habit Week's progress ("2 / 3 this week").
- */
-export function HabitStreak({ summary }: { summary: Pick<HabitDaySummary, "streak" | "streakUnit" | "week"> }) {
-  const { streak, streakUnit, week } = summary;
-  return (
-    <>
-      {week && (
-        <span className="font-mono text-xs tabular-nums text-hud-muted">
-          {week.met} / {week.target} this week
-        </span>
-      )}
-      {streak > 0 && (
-        <span className="font-mono text-xs tabular-nums text-neutral-300">
-          {streak}
-          {streakUnit === "week" ? "w" : "d"} streak
-        </span>
-      )}
-    </>
   );
 }

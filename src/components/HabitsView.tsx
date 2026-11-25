@@ -16,7 +16,7 @@ import { accentStyle } from "@/lib/questAccents";
 import { habitDayAmount, habitKindOf } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
-import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
+import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import {
@@ -31,13 +31,13 @@ import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
-import { HabitStreak, HabitTodayCheck } from "./HabitCardParts";
-import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
+import { HabitTodayCheck } from "./HabitCardParts";
+import { HabitSkipToday } from "./HabitDayStrip";
+import { HabitCardStats } from "./HabitCardStats";
 
 export { computeHabitStreak };
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
-const HISTORY_DAYS = 7;
 const EVERY_DAY: HabitFrequency = { type: "everyDay" };
 
 function confirmDiscard(dirty: boolean): boolean {
@@ -134,15 +134,6 @@ export function HabitsView() {
       ? questChoice
       : activeQuests[0]?.id ?? null;
   const otherSelected = quests !== undefined && selectedQuestId === null;
-
-  // Last 7 local days (oldest -> today) for real daily consistency dots.
-  const recentDays = useMemo(
-    () =>
-      Array.from({ length: HISTORY_DAYS }, (_, idx) =>
-        dateKeyFromOffset(todayKey, idx - (HISTORY_DAYS - 1))
-      ),
-    [todayKey]
-  );
 
   // Today's instance, completed days and streak per habit (shared Habit Day rules).
   const habitDays = useMemo(
@@ -387,7 +378,7 @@ export function HabitsView() {
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
             const summary = habitDays.summaryFor(habit.id);
-            const { doneToday, outcomeOn, todayTask, askedToday } = summary;
+            const { doneToday, todayTask, askedToday } = summary;
             const skippedToday = summary.skipState === "skipped";
             const isEditing = editingHabit?.id === habit.id;
             const weekly = summary.week !== null;
@@ -477,7 +468,7 @@ export function HabitsView() {
                     </div>
                   </div>
 
-                  {/* Metadata Row: Daily pill, Quest pill, 7-day dots & streak */}
+                  {/* Metadata Row: Frequency pill, Quest pill, week strip, Streak & Success Rate */}
                   <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 pl-8">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-hud-muted">
@@ -497,7 +488,7 @@ export function HabitsView() {
                       </span>
                     </div>
 
-                    {/* Real 7-day completion history */}
+                    {/* Skip today, week strip, Streak and Success Rate */}
                     <div className="flex flex-wrap items-center gap-3">
                       <HabitSkipToday
                         habit={habit}
@@ -506,14 +497,11 @@ export function HabitsView() {
                         weekly={weekly}
                         focusRunning={todayTask?.status === "active"}
                       />
-                      <HabitRecentDays
-                        days={recentDays}
+                      <HabitCardStats
+                        summary={habitDays.summaryFor(habit.id)}
                         todayKey={todayKey}
-                        outcomeOn={outcomeOn}
                         metClass={style.bg}
                       />
-
-                      <HabitStreak summary={summary} />
                     </div>
                   </div>
 

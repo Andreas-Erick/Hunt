@@ -170,6 +170,13 @@ describe("weekly Streak", () => {
     expect(summary(tasks, h).streak).toBe(2);
   });
 
+  it("reads the Success Rate in Habit Weeks: Met weeks out of Met and Missed ones", () => {
+    const h = habit({ frequencyHistory: [{ effectiveFrom: "2026-04-20", frequency: THREE_A_WEEK }] });
+    // 04-20 Met, 04-27 Missed, 05-04 Met, current week Open (ignored).
+    const tasks = [...metWeek("2026-04-20"), ticked("2026-04-27"), ...metWeek("2026-05-04"), ticked("2026-05-11")];
+    expect(summary(tasks, h).successRate()).toBeCloseTo(2 / 3);
+  });
+
   it("does not count days from before a switch between daily and N per week", () => {
     const h = habit({ frequencyHistory: [{ effectiveFrom: "2026-05-04", frequency: THREE_A_WEEK }] });
     const daily = Array.from({ length: 10 }, (_, i) => ticked(`2026-04-${String(20 + i).padStart(2, "0")}`));

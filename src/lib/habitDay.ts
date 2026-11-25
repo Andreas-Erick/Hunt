@@ -1,8 +1,9 @@
-import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
+import { habitStreakOn, habitTaskId, outcomesBackFrom, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habitFrequency";
+import { habitSuccessRate } from "./habitInsight";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
-import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, type HabitWeek } from "./habitWeek";
+import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, weekOutcomesBackFrom, type HabitWeek } from "./habitWeek";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -66,6 +67,12 @@ export interface HabitDaySummary {
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
   outcomeOn: (dayKey: string) => HabitOutcome | null;
+  /**
+   * The Success Rate (habitSuccessRate) over every day since the Habit began
+   * (every Habit Week for an N per week Habit), or null before any was Met or
+   * Missed. Worked out on first call only.
+   */
+  successRate: () => number | null;
 }
 
 const EMPTY_DATES: ReadonlySet<string> = new Set<string>();
@@ -161,6 +168,7 @@ export function summarizeHabitDays(
         const weekOn = (dayKey: string) => habitWeekOf(habit, dayKey, weekDays, todayKey);
         const weekOutcomeOn = (dayKey: string) => weekOn(dayKey)?.outcome ?? null;
         const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
+        let rate: number | null | undefined;
         const week = weekly ? weekOn(todayKey) : null;
         const doneToday = outcomeOn(todayKey) === "met";
         const unitStart = frequencyUnitStart(habit, todayKey);
@@ -186,6 +194,14 @@ export function summarizeHabitDays(
           week,
           weekOutcomeOn,
           outcomeOn,
+          successRate: () =>
+            rate === undefined
+              ? (rate = habitSuccessRate(
+                  weekly
+                    ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn)
+                    : outcomesBackFrom(todayKey, firstDay, outcomeOn)
+                ))
+              : rate,
         };
         cache.set(habitId, summary);
       }
