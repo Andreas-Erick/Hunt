@@ -46,11 +46,36 @@ const ICON_BUTTON =
  */
 export function TaskChecklistEditor({ task, className = "" }: { task: ChecklistTask; className?: string }) {
   const editChecklist = useCommandStore((s) => s.editChecklist);
-  const [draft, setDraft] = useState("");
   if (!canHoldChecklist(task)) return null;
+  return (
+    <div role="group" aria-label="Checklist" className={`space-y-1.5 ${className}`}>
+      <div className="text-[11px] font-medium uppercase tracking-wider text-hud-muted">Checklist</div>
+      <ChecklistItemsEditor
+        items={checklistOf(task)}
+        onEdit={(change) => void editChecklist(task.id, change)}
+        newItemLabel="New checklist item"
+        addLabel="Add checklist item"
+      />
+    </div>
+  );
+}
 
-  const items = checklistOf(task);
-  const edit = (change: ChecklistEdit) => void editChecklist(task.id, change);
+interface ChecklistItemsEditorProps {
+  items: readonly ChecklistItem[];
+  /** Applies one edit with the shared rule (a Task's Checklist, or a List's items). */
+  onEdit: (edit: ChecklistEdit) => void;
+  /** Accessible names of the add field and its button. */
+  newItemLabel: string;
+  addLabel: string;
+}
+
+/**
+ * The item rows and the add field, shared by a Task's Checklist and a
+ * standalone List: tick (ticked items stay in place, struck through), rename in
+ * place, up / down, delete, add.
+ */
+export function ChecklistItemsEditor({ items, onEdit: edit, newItemLabel, addLabel }: ChecklistItemsEditorProps) {
+  const [draft, setDraft] = useState("");
   const add = () => {
     if (!draft.trim()) return;
     edit({ kind: "add", id: newChecklistItemId(), text: draft });
@@ -58,9 +83,7 @@ export function TaskChecklistEditor({ task, className = "" }: { task: ChecklistT
   };
 
   return (
-    <div role="group" aria-label="Checklist" className={`space-y-1.5 ${className}`}>
-      <div className="text-[11px] font-medium uppercase tracking-wider text-hud-muted">Checklist</div>
-
+    <>
       {items.length > 0 && (
         <ul className="space-y-0.5">
           {items.map((item, index) => (
@@ -89,20 +112,20 @@ export function TaskChecklistEditor({ task, className = "" }: { task: ChecklistT
             }
           }}
           placeholder="Add an item..."
-          aria-label="New checklist item"
+          aria-label={newItemLabel}
           className="min-h-8 coarse:min-h-11 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent/50 focus:outline-none"
         />
         <button
           type="button"
           onClick={add}
           disabled={!draft.trim()}
-          aria-label="Add checklist item"
+          aria-label={addLabel}
           className={`${ICON_BUTTON} border border-white/10`}
         >
           <Plus className="h-4 w-4" />
         </button>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -950,7 +950,7 @@
       z-index: 35;
       height: calc(68px + var(--safe-bottom));
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       background: rgb(var(--p-bar));
       border-top: 1px solid rgb(var(--c-ink) / 0.07);
       padding: 6px calc(6px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(6px + var(--safe-left));
@@ -1269,6 +1269,63 @@
     .checklist-add-row .checklist-icon-btn {
       border: 1px solid var(--border-strong);
       color: var(--white);
+    }
+    /* Lists screen: standalone Lists (rules: HuntCore.applyListEdit; items reuse the Checklist rows) */
+    .list-card {
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 10px 12px 12px;
+      margin-bottom: 10px;
+      min-width: 0;
+    }
+    .list-card-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      margin-bottom: 4px;
+    }
+    .list-title-input {
+      font-weight: 600;
+    }
+    .list-progress {
+      flex-shrink: 0;
+      white-space: nowrap;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--dim);
+    }
+    .list-card .checklist-add-row {
+      margin-bottom: 8px;
+    }
+    .list-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .list-action-btn {
+      min-height: var(--touch-min);
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border-strong);
+      background: transparent;
+      color: var(--white);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.15s ease-out, opacity 0.15s ease-out;
+    }
+    .list-action-btn:active {
+      background: var(--surface-2);
+    }
+    .list-action-btn:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+    .list-create-row {
+      margin-bottom: 14px;
     }
     .checklist-badge {
       display: inline-flex;
@@ -2826,7 +2883,8 @@
         gap: clamp(14px, 1.6vw, 20px);
         align-items: start;
       }
-      .habits-grid > .queue-item-card {
+      .habits-grid > .queue-item-card,
+      .habits-grid > .list-card {
         margin-bottom: 0;
       }
 
@@ -3010,6 +3068,12 @@
       </div>
       <span>Habits</span>
     </button>
+    <button class="nav-tab" id="nav-lists" onclick="switchView('lists')">
+      <div class="nav-tab-pill">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 4-4"/><path d="m3 15 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+      </div>
+      <span>Lists</span>
+    </button>
   </nav>
 
   <!-- Slide-Up Sheet Container -->
@@ -3045,20 +3109,24 @@ var HuntCore = (() => {
   __export(huntCore_exports, {
     HABIT_WEEKDAYS: () => HABIT_WEEKDAYS,
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
+    MAX_LIST_TITLE_LENGTH: () => MAX_LIST_TITLE_LENGTH,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
     REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
     applyChecklistEdit: () => applyChecklistEdit,
+    applyListEdit: () => applyListEdit,
     applyPendingTicks: () => applyPendingTicks,
     buildBurstLog: () => buildBurstLog,
     buildHabitTaskRow: () => buildHabitTaskRow,
+    buildList: () => buildList,
     buildWidgetSnapshot: () => buildWidgetSnapshot,
     canHoldChecklist: () => canHoldChecklist,
     canonicalString: () => canonicalString,
     checklistOf: () => checklistOf,
     checklistProgress: () => checklistProgress,
+    cleanListTitle: () => cleanListTitle,
     compareRank: () => compareRank,
     completeTaskRow: () => completeTaskRow,
     completionDateKey: () => completionDateKey,
@@ -3078,16 +3146,20 @@ var HuntCore = (() => {
     isReminderTime: () => isReminderTime,
     isSafeSyncId: () => isSafeSyncId,
     isTaskVisibleToday: () => isTaskVisibleToday,
+    listItemsOf: () => listItemsOf,
+    listProgress: () => listProgress,
     losingSessionEndAt: () => losingSessionEndAt,
     mergeSyncPayloads: () => mergeSyncPayloads,
     missingHabitRows: () => missingHabitRows,
     newChecklistItemId: () => newChecklistItemId,
+    newListId: () => newListId,
     nextStamp: () => nextStamp,
     parseHabitFrequency: () => parseHabitFrequency,
     pickNextFocusTask: () => pickNextFocusTask,
     reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
     sameHabitFrequency: () => sameHabitFrequency,
+    sanitizeList: () => sanitizeList,
     sessionLogId: () => sessionLogId,
     skipHabitDayRow: () => skipHabitDayRow,
     summarizeHabitDays: () => summarizeHabitDays,
@@ -3345,6 +3417,9 @@ var HuntCore = (() => {
     const last = text.charCodeAt(max - 1);
     return text.slice(0, last >= 55296 && last <= 56319 ? max - 1 : max);
   }
+  function clampTitle(title, max) {
+    return clampLength(title.trim(), max);
+  }
 
   // src/lib/checklist.ts
   var MAX_CHECKLIST_ITEMS = 200;
@@ -3363,6 +3438,19 @@ var HuntCore = (() => {
   }
   function cleanText(text) {
     return cutText(text.trim()).trimEnd();
+  }
+  function sanitizeChecklist(raw) {
+    const items = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const value of raw) {
+      if (items.length >= MAX_CHECKLIST_ITEMS) break;
+      if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+      const { id, text, done } = value;
+      if (!isSafeSyncId(id) || seen.has(id) || typeof text !== "string") continue;
+      seen.add(id);
+      items.push({ id, text: cutText(text), done: done === true });
+    }
+    return items;
   }
   function applyChecklistEdit(task, edit) {
     if (!canHoldChecklist(task)) return null;
@@ -3400,6 +3488,73 @@ var HuntCore = (() => {
     const items = checklistOf(task);
     if (items.length === 0) return null;
     return { done: items.filter((i) => i.done === true).length, total: items.length };
+  }
+
+  // src/lib/syncRowExtras.ts
+  var MAX_EXTRA_TEXT_LENGTH = 1e4;
+  var FORBIDDEN_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+  function copyScalarExtras(target, raw, known) {
+    const extras = {};
+    for (const key of Object.keys(raw)) {
+      if (known.has(key) || FORBIDDEN_KEYS.has(key)) continue;
+      const value = raw[key];
+      if (typeof value === "string") {
+        extras[key] = clampLength(value, MAX_EXTRA_TEXT_LENGTH);
+      } else if (value === null || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value)) {
+        extras[key] = value;
+      }
+    }
+    Object.assign(target, extras);
+  }
+
+  // src/lib/lists.ts
+  var MAX_LIST_TITLE_LENGTH = 300;
+  function newListId(now = Date.now(), random = Math.random) {
+    return `list-${now}-${random().toString(36).slice(2, 6).padEnd(4, "0")}`;
+  }
+  function cleanListTitle(title) {
+    return clampTitle(title, MAX_LIST_TITLE_LENGTH).trimEnd();
+  }
+  function buildList(params) {
+    const title = cleanListTitle(params.title);
+    if (!title) return null;
+    return { id: params.id, title, items: [], rank: params.rank, createdAt: params.now, updatedAt: params.now };
+  }
+  function listItemsOf(list) {
+    return Array.isArray(list.items) ? list.items : [];
+  }
+  function applyListEdit(list, edit) {
+    const items = listItemsOf(list);
+    switch (edit.kind) {
+      case "clearTicked":
+        return items.some((i) => i.done) ? items.filter((i) => !i.done) : null;
+      case "untickAll":
+        return items.some((i) => i.done) ? items.map((i) => i.done ? { ...i, done: false } : i) : null;
+      default:
+        return applyChecklistEdit({ checklist: items }, edit);
+    }
+  }
+  function listProgress(list) {
+    var _a;
+    return (_a = checklistProgress({ checklist: listItemsOf(list) })) != null ? _a : { done: 0, total: 0 };
+  }
+  var LIST_FIELDS = /* @__PURE__ */ new Set(["id", "title", "items", "rank", "createdAt", "updatedAt"]);
+  var isStamp = (value) => typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+  function sanitizeList(raw) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+    const src = raw;
+    const { id, title, items, rank, createdAt, updatedAt } = src;
+    if (!isSafeSyncId(id) || typeof title !== "string") return null;
+    const row = {
+      id,
+      title: clampLength(title, MAX_LIST_TITLE_LENGTH),
+      items: Array.isArray(items) ? sanitizeChecklist(items) : []
+    };
+    if (typeof rank === "number" && Number.isFinite(rank)) row.rank = rank;
+    if (isStamp(createdAt)) row.createdAt = createdAt;
+    if (isStamp(updatedAt)) row.updatedAt = updatedAt;
+    copyScalarExtras(row, src, LIST_FIELDS);
+    return row;
   }
 
   // src/lib/reminders.ts
@@ -3544,7 +3699,8 @@ var HuntCore = (() => {
     quests: "deletedQuestIds",
     tasks: "deletedTaskIds",
     timeLogs: "deletedLogIds",
-    habits: "deletedHabitIds"
+    habits: "deletedHabitIds",
+    lists: "deletedListIds"
   };
   var SYNCED_ENTITY_KEYS = Object.keys(TOMBSTONE_KEY);
   function mergeRowsById(baseRows, incomingRows, deleted, spec) {
@@ -3585,6 +3741,11 @@ var HuntCore = (() => {
         resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
         order: compareRank
       },
+      // R1, the whole List row (its items merge with it).
+      lists: {
+        resolve: (a, b) => pickRowWinner(a, questOrHabitRowStamp(a), b, questOrHabitRowStamp(b)),
+        order: compareRank
+      },
       // R1 on the questId-sanitised rows; the focus counter only grows (max).
       tasks: {
         normalize: unlinkDeletedQuest,
@@ -3602,6 +3763,7 @@ var HuntCore = (() => {
     };
     const questMap = mergeRowsById(base.quests, incoming.quests, deleted.quests, specs.quests);
     const habitMap = mergeRowsById(base.habits, incoming.habits, deleted.habits, specs.habits);
+    const listMap = mergeRowsById(base.lists, incoming.lists, deleted.lists, specs.lists);
     const taskMap = mergeRowsById(base.tasks, incoming.tasks, deleted.tasks, specs.tasks);
     const logMap = mergeRowsById(base.timeLogs, incoming.timeLogs, deleted.timeLogs, specs.timeLogs);
     const mergedQuests = Array.from(questMap.values()).sort(specs.quests.order);
@@ -3654,10 +3816,12 @@ var HuntCore = (() => {
       tasks: mergedTasks,
       timeLogs: mergedLogs,
       habits: mergedHabits,
+      lists: Array.from(listMap.values()).sort(specs.lists.order),
       deletedQuestIds: Array.from(deleted.quests),
       deletedTaskIds: Array.from(deleted.tasks),
       deletedLogIds: Array.from(deleted.timeLogs),
       deletedHabitIds: Array.from(deleted.habits),
+      deletedListIds: Array.from(deleted.lists),
       activeFocus: mergedFocus,
       lastSyncedAt: now
     };
@@ -4093,6 +4257,13 @@ var HuntCore = (() => {
     var checklistOf = HuntCore.checklistOf;
     var checklistProgress = HuntCore.checklistProgress;
     var newChecklistItemId = HuntCore.newChecklistItemId;
+    var applyListEdit = HuntCore.applyListEdit;
+    var buildList = HuntCore.buildList;
+    var cleanListTitle = HuntCore.cleanListTitle;
+    var listItemsOf = HuntCore.listItemsOf;
+    var listProgress = HuntCore.listProgress;
+    var newListId = HuntCore.newListId;
+    var sanitizeList = HuntCore.sanitizeList;
     var isReminderTime = HuntCore.isReminderTime;
     var summarizeHabitDays = HuntCore.summarizeHabitDays;
     var isHabitScheduledOn = HuntCore.isHabitScheduledOn;
@@ -4215,10 +4386,12 @@ var HuntCore = (() => {
         tasks: [],
         timeLogs: [],
         habits: [],
+        lists: [],
         deletedQuestIds: [],
         deletedTaskIds: [],
         deletedLogIds: [],
         deletedHabitIds: [],
+        deletedListIds: [],
         activeFocus: emptyFocus(0),
         lastSyncedAt: 0
       };
@@ -4299,6 +4472,13 @@ var HuntCore = (() => {
         if (badReminder) { dropped++; delete copy.reminderTime; }
         return copy;
       });
+      // Lists: the server validator's own rule (HuntCore.sanitizeList); a row it would change is replaced.
+      const lists = keep("lists", isTitledRow).map(l => {
+        const clean = sanitizeList(l);
+        if (HuntCore.canonicalString(clean) === HuntCore.canonicalString(l)) return l;
+        dropped++;
+        return clean;
+      });
       let activeFocus = src.activeFocus === undefined ? emptyFocus(0) : src.activeFocus;
       if (!isFocusShape(activeFocus)) {
         dropped++;
@@ -4310,10 +4490,12 @@ var HuntCore = (() => {
         tasks,
         timeLogs: keep("timeLogs", isLogRow),
         habits: keep("habits", isTitledRow),
+        lists,
         deletedQuestIds: keep("deletedQuestIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
         deletedTaskIds: keep("deletedTaskIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
         deletedLogIds: keep("deletedLogIds", id => isSafeSyncId(id, MAX_LOG_ID_LENGTH)).slice(-MAX_TOMBSTONES_PER_KIND),
         deletedHabitIds: keep("deletedHabitIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
+        deletedListIds: keep("deletedListIds", id => isSafeSyncId(id)).slice(-MAX_TOMBSTONES_PER_KIND),
         activeFocus
       };
       return { value, dropped };
@@ -5850,7 +6032,7 @@ var HuntCore = (() => {
     function setActiveView(view) {
       if (view === "review") view = "telemetry";
       activeView = view;
-      ["command", "plan", "focus", "quests", "habits"].forEach(id => {
+      ["command", "plan", "focus", "quests", "habits", "lists"].forEach(id => {
         const btn = document.getElementById("nav-" + id);
         if (!btn) return;
         const cls = id === view ? "nav-tab active" : "nav-tab";
@@ -7378,18 +7560,164 @@ var HuntCore = (() => {
 
     // The item rows of the Checklist editor in Task Options (tick, rename in place, up/down, delete).
     function checklistItemsHtml(task) {
-      const items = checklistOf(task);
+      return checklistRowsHtml(checklistOf(task), "task", task.id);
+    }
+
+    // Checklist item rows, shared by a Task's Checklist (owner "task") and a standalone List (owner
+    // "list"): every control calls editChecklistRow. Ticked items stay in place, struck through.
+    function checklistRowsHtml(items, owner, ownerId) {
       return items.map((it, i) => {
         const text = escapeHtml(it.text);
         return `
           <div class="checklist-row${it.done ? " done" : ""}">
-            <button class="checklist-tick" role="checkbox" aria-checked="${it.done ? "true" : "false"}" aria-label="${text}" onclick="editTaskChecklist(${jsArg(task.id)}, 'toggle', ${jsArg(it.id)})"><span class="checklist-tick-box">${SVG_CHECK}</span></button>
-            <input class="checklist-text" value="${text}" maxlength="${HuntCore.MAX_CHECKLIST_TEXT_LENGTH}" aria-label="Rename ${text}" onkeydown="if(isSubmitKey(event)) this.blur()" onchange="editTaskChecklist(${jsArg(task.id)}, 'rename', ${jsArg(it.id)}, this.value)" />
-            <button class="checklist-icon-btn" aria-label="Move ${text} up" ${i === 0 ? "disabled" : ""} onclick="editTaskChecklist(${jsArg(task.id)}, 'move', ${jsArg(it.id)}, ${jsArg(i - 1)})">↑</button>
-            <button class="checklist-icon-btn" aria-label="Move ${text} down" ${i === items.length - 1 ? "disabled" : ""} onclick="editTaskChecklist(${jsArg(task.id)}, 'move', ${jsArg(it.id)}, ${jsArg(i + 1)})">↓</button>
-            <button class="checklist-icon-btn" aria-label="Delete ${text}" onclick="editTaskChecklist(${jsArg(task.id)}, 'remove', ${jsArg(it.id)})">✕</button>
+            <button class="checklist-tick" role="checkbox" aria-checked="${it.done ? "true" : "false"}" aria-label="${text}" onclick="editChecklistRow(${jsArg(owner)}, ${jsArg(ownerId)}, 'toggle', ${jsArg(it.id)})"><span class="checklist-tick-box">${SVG_CHECK}</span></button>
+            <input class="checklist-text" value="${text}" maxlength="${HuntCore.MAX_CHECKLIST_TEXT_LENGTH}" aria-label="Rename ${text}" onkeydown="if(isSubmitKey(event)) this.blur()" onchange="editChecklistRow(${jsArg(owner)}, ${jsArg(ownerId)}, 'rename', ${jsArg(it.id)}, this.value)" />
+            <button class="checklist-icon-btn" aria-label="Move ${text} up" ${i === 0 ? "disabled" : ""} onclick="editChecklistRow(${jsArg(owner)}, ${jsArg(ownerId)}, 'move', ${jsArg(it.id)}, ${jsArg(i - 1)})">↑</button>
+            <button class="checklist-icon-btn" aria-label="Move ${text} down" ${i === items.length - 1 ? "disabled" : ""} onclick="editChecklistRow(${jsArg(owner)}, ${jsArg(ownerId)}, 'move', ${jsArg(it.id)}, ${jsArg(i + 1)})">↓</button>
+            <button class="checklist-icon-btn" aria-label="Delete ${text}" onclick="editChecklistRow(${jsArg(owner)}, ${jsArg(ownerId)}, 'remove', ${jsArg(it.id)})">✕</button>
           </div>`;
       }).join("");
+    }
+
+    function editChecklistRow(owner, ownerId, kind, itemId, arg) {
+      if (owner === "list") editListItems(ownerId, kind, itemId, arg);
+      else editTaskChecklist(ownerId, kind, itemId, arg);
+    }
+
+    // ----- Lists: standalone Lists (no date, no Quest, no focus time); the rules are HuntCore's -----
+    function listsSorted() {
+      return asArray(state.lists).slice().sort(compareRank);
+    }
+
+    function findList(listId) {
+      return asArray(state.lists).find(l => l.id === listId) || null;
+    }
+
+    function renderListsViewHtml() {
+      const lists = listsSorted();
+      const cards = lists.map(l => {
+        const title = escapeHtml(l.title);
+        const p = listProgress(l);
+        return `
+          <section class="list-card" aria-label="${title}">
+            <div class="list-card-head">
+              <input class="checklist-text list-title-input" value="${title}" maxlength="${HuntCore.MAX_LIST_TITLE_LENGTH}" aria-label="Rename ${title}" onkeydown="if(isSubmitKey(event)) this.blur()" onchange="renameListById(${jsArg(l.id)}, this.value)" />
+              <span class="list-progress" aria-label="${p.done} of ${p.total} ticked"><span aria-hidden="true">${p.done}/${p.total}</span></span>
+              <button class="checklist-icon-btn" aria-label="Delete List ${title}" onclick="deleteListById(${jsArg(l.id)})">${SVG_TRASH}</button>
+            </div>
+            <div class="checklist-items">${checklistRowsHtml(listItemsOf(l), "list", l.id)}</div>
+            <div class="checklist-add-row">
+              <input id="listNew-${escapeHtml(l.id)}" class="sheet-input" maxlength="${HuntCore.MAX_CHECKLIST_TEXT_LENGTH}" placeholder="Add an item..." aria-label="New item" onkeydown="if(isSubmitKey(event)) addItemToList(${jsArg(l.id)})" />
+              <button class="checklist-icon-btn" aria-label="Add item" onclick="addItemToList(${jsArg(l.id)})">+</button>
+            </div>
+            <div class="list-actions">
+              <button class="list-action-btn" aria-label="Clear ticked" ${p.done === 0 ? "disabled" : ""} onclick="editListItems(${jsArg(l.id)}, 'clearTicked')">Clear ticked</button>
+              <button class="list-action-btn" aria-label="Untick all" ${p.done === 0 ? "disabled" : ""} onclick="editListItems(${jsArg(l.id)}, 'untickAll')">Untick all</button>
+            </div>
+          </section>`;
+      }).join("");
+      return `
+        <div class="hero-bar">
+          <div>
+            <div class="hero-eyebrow">No dates · No Quests</div>
+            <h1 class="hero-title">Lists</h1>
+          </div>
+        </div>
+        <div class="checklist-add-row list-create-row">
+          <input id="listCreateNew" class="sheet-input" maxlength="${HuntCore.MAX_LIST_TITLE_LENGTH}" placeholder="Name a new List..." aria-label="New List name" onkeydown="if(isSubmitKey(event)) createListFromInput()" />
+          <button class="checklist-icon-btn" aria-label="Create List" onclick="createListFromInput()">+</button>
+        </div>
+        ${lists.length === 0
+          ? emptyCardHtml("No Lists yet", "Name one above, then add its items: a shopping list, a packing list.", [])
+          : `<div class="habits-grid">${cards}</div>`}
+      `;
+    }
+
+    // Keeps the keyboard up on a field the re-render just replaced (adding several items in a row).
+    function refocusField(id) {
+      const el = document.getElementById(id);
+      if (el) focusQuietly(el);
+    }
+
+    function createListFromInput() {
+      const input = document.getElementById("listCreateNew");
+      if (!input || !input.value.trim()) return;
+      const lists = listsSorted();
+      const last = lists[lists.length - 1];
+      const now = Date.now();
+      const list = buildList({ id: newListId(now), title: input.value, rank: (last ? Number(last.rank) || 0 : 0) + 1000, now });
+      if (!list) return;
+      playClickSound();
+      if (!state.lists) state.lists = [];
+      state.lists.push(list);
+      input.value = "";
+      commitLocalChange();
+      refocusField("listNew-" + list.id);
+    }
+
+    // A blank or unchanged name redraws the old one.
+    function renameListById(listId, value) {
+      const l = findList(listId);
+      if (!l) return;
+      const title = cleanListTitle(String(value));
+      if (!title || title === l.title) { renderApp(); return; }
+      l.title = title;
+      l.updatedAt = nextStamp(l);
+      commitLocalChange();
+    }
+
+    // One item edit, Clear ticked or Untick all through the shared rule; a refused one just redraws.
+    function editListItems(listId, kind, itemId, arg) {
+      const l = findList(listId);
+      if (!l) return;
+      const edit = kind === "rename" ? { kind, id: itemId, text: String(arg) }
+        : kind === "move" ? { kind, id: itemId, toIndex: Number(arg) }
+        : { kind, id: itemId };
+      const next = applyListEdit(l, edit);
+      if (!next) { renderApp(); return; }
+      if (kind === "toggle" || kind === "clearTicked" || kind === "untickAll") playClickSound();
+      l.items = next;
+      l.updatedAt = nextStamp(l);
+      commitLocalChange();
+    }
+
+    function addItemToList(listId) {
+      const fieldId = "listNew-" + listId;
+      const input = document.getElementById(fieldId);
+      const l = findList(listId);
+      if (!input || !l || !input.value.trim()) return;
+      const next = applyListEdit(l, { kind: "add", id: newChecklistItemId(), text: input.value });
+      if (!next) return;
+      l.items = next;
+      l.updatedAt = nextStamp(l);
+      input.value = "";
+      commitLocalChange();
+      refocusField(fieldId);
+    }
+
+    // Deletes a List (tombstoned, so it never comes back from the laptop); Undo restores it.
+    function deleteListById(listId) {
+      const l = findList(listId);
+      if (!l) return;
+      playClickSound();
+      const removed = cloneJson(l);
+      const hadTomb = asArray(state.deletedListIds).includes(listId);
+      if (!state.deletedListIds) state.deletedListIds = [];
+      if (!hadTomb) state.deletedListIds.push(listId);
+      state.lists = asArray(state.lists).filter(x => x.id !== listId);
+      commitLocalChange();
+      showToast("List deleted · " + shortTitle(removed.title), {
+        holdSync: !hadTomb,
+        undo: () => undoDeleteList(removed, hadTomb)
+      });
+    }
+
+    function undoDeleteList(removed, hadTomb) {
+      if (findList(removed.id)) return;
+      if (!hadTomb) state.deletedListIds = asArray(state.deletedListIds).filter(id => id !== removed.id);
+      if (!state.lists) state.lists = [];
+      state.lists.push(removed);
+      commitLocalChange();
     }
 
     // The Checklist section of Task Options; "" for a habit day Task (it never holds a Checklist).
@@ -10587,6 +10915,13 @@ var HuntCore = (() => {
             `;
           }).join("") + `</div>`}
         `;
+      }
+
+      // =====================================================================
+      // VIEW 4C: LISTS (standalone, apart from Today)
+      // =====================================================================
+      else if (activeView === "lists") {
+        container.innerHTML = renderListsViewHtml();
       }
 
       // =====================================================================

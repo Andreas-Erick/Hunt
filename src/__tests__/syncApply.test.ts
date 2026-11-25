@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "@/lib/db";
-import type { Quest, Task, TimeLog } from "@/lib/domainTypes";
+import type { List, Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   compareRank,
@@ -88,6 +88,7 @@ describe("applyMergedPayloadToLocalDB (diff-apply against current local rows)", 
     await db.quests.clear();
     await db.tasks.clear();
     await db.timeLogs.clear();
+    await db.lists.clear();
     window.localStorage.clear();
   });
 
@@ -239,6 +240,39 @@ describe("applyMergedPayloadToLocalDB (diff-apply against current local rows)", 
     const next = await buildLocalSyncPayload(NO_FOCUS);
     expect(next.deletedTaskIds).toContain("deleted-after-snapshot");
     expect(next.tasks.map((t) => t.id)).toEqual(["keep"]);
+  });
+
+  it("Lists: a newer remote List replaces ours, an older one does not, a tombstone deletes it; the snapshot carries them", async () => {
+    const list = (id: string, overrides: Partial<List> = {}): List => ({
+      id,
+      title: `List ${id}`,
+      items: [{ id: "chk-1", text: "Milk", done: false }],
+      rank: 1000,
+      createdAt: 1000,
+      updatedAt: 1000,
+      ...overrides,
+    });
+    await db.lists.bulkPut([list("newer-here", { updatedAt: 5000, title: "Mine" }), list("older-here"), list("gone")]);
+
+    const changed = await applyMergedPayloadToLocalDB(payload({
+      lists: [
+        list("newer-here", { title: "Stale" }),
+        list("older-here", { updatedAt: 2000, items: [{ id: "chk-1", text: "Milk", done: true }] }),
+        list("new-remote"),
+      ],
+      deletedListIds: ["gone"],
+    }));
+
+    expect(changed).toBe(true);
+    expect((await db.lists.get("newer-here"))?.title).toBe("Mine");
+    expect((await db.lists.get("older-here"))?.items[0].done).toBe(true);
+    expect(await db.lists.get("new-remote")).toBeDefined();
+    expect(await db.lists.get("gone")).toBeUndefined();
+
+    const next = await buildLocalSyncPayload(NO_FOCUS);
+    expect(next.lists?.map((l) => l.id).sort()).toEqual(["new-remote", "newer-here", "older-here"]);
+    expect(next.deletedListIds).toEqual(["gone"]);
+    expect(await applyMergedPayloadToLocalDB(mergeSyncPayloads(next, next))).toBe(false);
   });
 
   it("performs zero writes (and returns false) when the merged payload equals local state", async () => {

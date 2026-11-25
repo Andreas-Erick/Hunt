@@ -67,6 +67,19 @@ export interface ChecklistItem {
   done: boolean;
 }
 
+/**
+ * A standalone List: a name and items to tick, outside any Task. No date, no
+ * Quest, no focus time. Its items use the Checklist item shape and rules.
+ */
+export interface List {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
+  rank: number;
+  createdAt: number;
+  updatedAt?: number;
+}
+
 export type TaskStatus = "queued" | "active" | "completed" | "archived";
 
 export interface Task {

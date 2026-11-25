@@ -2,6 +2,7 @@ import { db } from "./db";
 import type {
   ActiveFocusState,
   Habit,
+  List,
   Quest,
   Task,
   TimeLog,
@@ -30,23 +31,21 @@ import {
 
 /**
  * Builds a complete SyncPayload from the local device's IndexedDB + focus state.
- * All four tables are read in ONE readonly transaction (consistent snapshot).
+ * All five tables are read in ONE readonly transaction (consistent snapshot).
  */
 export async function buildLocalSyncPayload(
   activeFocus: ActiveFocusState
 ): Promise<SyncPayload> {
-  const [quests, tasks, timeLogs, habits] = await db.transaction(
+  const [quests, tasks, timeLogs, habits, lists] = await db.transaction(
     "r",
-    db.quests,
-    db.tasks,
-    db.timeLogs,
-    db.habits,
+    [db.quests, db.tasks, db.timeLogs, db.habits, db.lists],
     () =>
       Promise.all([
         db.quests.toArray(),
         db.tasks.toArray(),
         db.timeLogs.toArray(),
         db.habits.toArray(),
+        db.lists.toArray(),
       ])
   );
   return {
@@ -54,6 +53,7 @@ export async function buildLocalSyncPayload(
     tasks,
     timeLogs,
     habits,
+    lists,
     ...getLocalTombstones(),
     activeFocus,
     lastSyncedAt: Date.now(),
@@ -98,7 +98,7 @@ function hasStringId<T extends { id: unknown }>(row: T | null | undefined): row 
  *
  * The payload reflects a snapshot taken BEFORE the request went out, so it is
  * diff-merged against the CURRENT local rows inside one rw transaction:
- * - quests/tasks/habits: the newer row wins by the server's per-kind stamp
+ * - quests/tasks/habits/lists: the newer row wins by the server's per-kind stamp
  *   (questOrHabitRowStamp / taskRowStamp); EQUAL timestamps are resolved by the
  *   shared rule R1 (pickRowWinner: smaller canonical content wins, identical
  *   keeps the local row), compared after nulling a `questId` that points at a
@@ -127,6 +127,7 @@ export async function applyMergedPayloadToLocalDB(
   const deletedTasks = new Set(tomb.deletedTaskIds);
   const deletedLogs = new Set(tomb.deletedLogIds);
   const deletedHabits = new Set(tomb.deletedHabitIds);
+  const deletedLists = new Set(tomb.deletedListIds);
 
   const remoteQuests = (merged.quests ?? []).filter(
     (q): q is Quest => hasStringId(q) && !deletedQuests.has(q.id)
@@ -141,10 +142,15 @@ export async function applyMergedPayloadToLocalDB(
     (h): h is Habit => hasStringId(h) && !deletedHabits.has(h.id)
   );
 
+  const remoteLists = (merged.lists ?? []).filter(
+    (l): l is List => hasStringId(l) && !deletedLists.has(l.id)
+  );
+
   const unlinkDeletedQuest = <T extends { questId: string | null }>(row: T): T =>
     row.questId && deletedQuests.has(row.questId) ? { ...row, questId: null } : row;
 
-  return db.transaction("rw", db.quests, db.tasks, db.timeLogs, db.habits, async () => {
+  const tables = [db.quests, db.tasks, db.timeLogs, db.habits, db.lists];
+  return db.transaction("rw", tables, async () => {
     const [
       localQuests,
       localTasks,
@@ -154,6 +160,8 @@ export async function applyMergedPayloadToLocalDB(
       taskDeletes,
       logDeletes,
       habitDeletes,
+      localLists,
+      listDeletes,
     ] = await Promise.all([
       db.quests.bulkGet(remoteQuests.map((q) => q.id)),
       db.tasks.bulkGet(remoteTasks.map((t) => t.id)),
@@ -171,6 +179,10 @@ export async function applyMergedPayloadToLocalDB(
         : Promise.resolve([] as string[]),
       deletedHabits.size
         ? db.habits.where("id").anyOf(Array.from(deletedHabits)).primaryKeys()
+        : Promise.resolve([] as string[]),
+      db.lists.bulkGet(remoteLists.map((l) => l.id)),
+      deletedLists.size
+        ? db.lists.where("id").anyOf(Array.from(deletedLists)).primaryKeys()
         : Promise.resolve([] as string[]),
     ]);
 
@@ -249,6 +261,18 @@ export async function applyMergedPayloadToLocalDB(
       if (winner !== current && !sameRow(winner, current)) habitPuts.push(winner);
     });
 
+    // R1 on the whole List row (its items merge with it).
+    const listPuts: List[] = [];
+    remoteLists.forEach((remote, i) => {
+      const current = localLists[i];
+      if (!current) {
+        listPuts.push(remote);
+        return;
+      }
+      const winner = pickRowWinner(current, questOrHabitRowStamp(current), remote, questOrHabitRowStamp(remote));
+      if (winner !== current && !sameRow(winner, current)) listPuts.push(winner);
+    });
+
     if (questDeletes.length) await db.quests.bulkDelete(questDeletes);
     if (taskDeletes.length) await db.tasks.bulkDelete(taskDeletes);
     if (logDeletes.length) await db.timeLogs.bulkDelete(logDeletes);
@@ -257,6 +281,8 @@ export async function applyMergedPayloadToLocalDB(
     if (taskPuts.length) await db.tasks.bulkPut(taskPuts);
     if (logPuts.length) await db.timeLogs.bulkPut(logPuts);
     if (habitPuts.length) await db.habits.bulkPut(habitPuts);
+    if (listDeletes.length) await db.lists.bulkDelete(listDeletes);
+    if (listPuts.length) await db.lists.bulkPut(listPuts);
 
     return (
       questDeletes.length +
@@ -266,7 +292,9 @@ export async function applyMergedPayloadToLocalDB(
         questPuts.length +
         taskPuts.length +
         logPuts.length +
-        habitPuts.length >
+        habitPuts.length +
+        listDeletes.length +
+        listPuts.length >
       0
     );
   });
