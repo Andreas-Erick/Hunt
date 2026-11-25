@@ -8,6 +8,7 @@ import { accentStyle } from "@/lib/questAccents";
 import { formatChronoMMSS } from "@/lib/dateUtils";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { hudAudio } from "@/lib/hudAudio";
+import { MAX_LONG_TEXT_LENGTH, MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { HeightReveal } from "./HeightReveal";
 import { RowTick } from "./RowTick";
@@ -246,6 +247,7 @@ export const QuestCard = memo(function QuestCard({
         <div className="flex items-center gap-2">
           <input
             type="text"
+            maxLength={MAX_TASK_TITLE_LENGTH}
             value={quickTask}
             onChange={(e) => setQuickTask(e.target.value)}
             onKeyDown={(e) => {
@@ -270,6 +272,7 @@ export const QuestCard = memo(function QuestCard({
         <div className="mt-1.5 border-t border-white/[0.05] pt-1.5">
           <input
             type="text"
+            maxLength={MAX_LONG_TEXT_LENGTH}
             value={quickNotes}
             onChange={(e) => setQuickNotes(e.target.value)}
             onKeyDown={(e) => {

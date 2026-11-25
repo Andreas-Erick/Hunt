@@ -5,6 +5,7 @@ import { ArrowDownToLine, ArrowUpToLine } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
 import type { Quest } from "@/lib/domainTypes";
 import { hudAudio } from "@/lib/hudAudio";
+import { MAX_LONG_TEXT_LENGTH, MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
 
 interface TaskComposerProps {
@@ -83,6 +84,7 @@ export function TaskComposer({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="text"
+          maxLength={MAX_TASK_TITLE_LENGTH}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -121,6 +123,7 @@ export function TaskComposer({
       <div className="mt-2 border-t border-white/[0.05] pt-2">
         <input
           type="text"
+          maxLength={MAX_LONG_TEXT_LENGTH}
           value={newNotes}
           onChange={(e) => setNewNotes(e.target.value)}
           onKeyDown={(e) => {

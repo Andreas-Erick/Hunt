@@ -4,6 +4,7 @@ import React from "react";
 import { Check, Trash2 } from "lucide-react";
 import { QUEST_ACCENT_KEYS, type Quest, type QuestAccent } from "@/lib/domainTypes";
 import { QUEST_ACCENT_STYLES } from "@/lib/questAccents";
+import { MAX_LONG_TEXT_LENGTH, MAX_QUEST_TITLE_LENGTH } from "@/lib/syncTypes";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 
 /** Native `pattern` (matched against the whole value): at least one non-space character. */
@@ -40,7 +41,8 @@ const VARIANTS = {
 
 /**
  * A Quest's title and description inputs, shared by the edit drawer and the
- * New Quest form.
+ * New Quest form. Both cap at the lengths localStore keeps, so nothing typed
+ * is cut silently on save.
  */
 export function QuestTextFields({
   variant,
@@ -73,6 +75,7 @@ export function QuestTextFields({
           required
           autoFocus
           pattern={NON_BLANK_PATTERN}
+          maxLength={MAX_QUEST_TITLE_LENGTH}
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           placeholder={v.titlePlaceholder}
@@ -95,6 +98,7 @@ export function QuestTextFields({
         <input
           id={descId}
           type="text"
+          maxLength={MAX_LONG_TEXT_LENGTH}
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder={v.descriptionPlaceholder}
