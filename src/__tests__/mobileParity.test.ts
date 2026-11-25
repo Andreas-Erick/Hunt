@@ -92,6 +92,13 @@ function genTask(r: Rng): Row {
   };
   if (r.chance(0.5)) task.notes = r.pick(TITLES);
   if (r.chance(0.4)) task.scheduledDate = r.pick(["2026-11-18", "2026-11-19"]);
+  if (r.chance(0.3)) {
+    task.checklist = r.pick([
+      [],
+      [{ id: "chk-1", text: r.pick(TITLES), done: false }],
+      [{ id: "chk-2", text: "Charger", done: true }, { id: "chk-1", text: "Passport", done: false }],
+    ]);
+  }
   return withStamps(r, task, ["updatedAt", "completedAt", "createdAt"]);
 }
 
