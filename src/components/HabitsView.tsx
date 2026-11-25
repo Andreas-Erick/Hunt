@@ -16,6 +16,7 @@ import { habitRowMode, habitTodayTally, summarizeHabitDays } from "@/lib/habitDa
 import { isEndedHabit } from "@/lib/habitEnd";
 import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
+import { MAX_SYNC_HABITS } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
@@ -142,10 +143,13 @@ export function HabitsView() {
     [habits, habitDays, todayKey]
   );
 
+  // Ended Habits count: the sync cap is on every Habit row (ADR-0001).
+  const atHabitCap = (habits?.length ?? 0) >= MAX_SYNC_HABITS;
+
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const title = newTitle.trim();
-    if (!title || !isHabitFrequencyValid(newFrequency) || addingRef.current || !newKind.valid) return;
+    if (!title || !isHabitFrequencyValid(newFrequency) || addingRef.current || !newKind.valid || atHabitCap) return;
     addingRef.current = true;
     const notes = newNotes;
     const frequency = newFrequency;
@@ -256,13 +260,19 @@ export function HabitsView() {
 
           <button
             type="submit"
-            disabled={!newTitle.trim() || !isHabitFrequencyValid(newFrequency) || !newKind.valid}
+            disabled={!newTitle.trim() || !isHabitFrequencyValid(newFrequency) || !newKind.valid || atHabitCap}
             className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>Add Habit</span>
           </button>
         </div>
+
+        {atHabitCap && (
+          <p role="status" className="mt-2 text-xs text-warning">
+            Hunt syncs up to {MAX_SYNC_HABITS} Habits. Delete one, ended ones included, to add another.
+          </p>
+        )}
 
         <div className="mt-2 border-t border-white/[0.05] pt-2">
           <input

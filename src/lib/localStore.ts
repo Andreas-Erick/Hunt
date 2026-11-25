@@ -25,6 +25,7 @@ import {
   MAX_HABIT_TITLE_LENGTH,
   MAX_LONG_TEXT_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
+  MAX_SYNC_HABITS,
   MAX_TASK_TITLE_LENGTH,
 } from "./syncTypes";
 import {
@@ -432,8 +433,10 @@ async function createHabit(params: NewHabit): Promise<boolean> {
   if (!title || !frequency || !kindFields) return false;
   const now = Date.now();
   const todayKey = toLocalDateKey(now);
-  await db.transaction("rw", db.habits, db.tasks, async () => {
+  const added = await db.transaction("rw", db.habits, db.tasks, async () => {
     const existing = (await db.habits.toArray()).sort(compareRank);
+    // Past the sync cap the server would reject every payload; Ended Habits count too.
+    if (existing.length >= MAX_SYNC_HABITS) return false;
     const habit: Habit = {
       id: newId("hab", now),
       title,
@@ -450,8 +453,9 @@ async function createHabit(params: NewHabit): Promise<boolean> {
     if (isHabitScheduledOn(habit, todayKey) && !hasLocalTaskTombstone(habitTaskId(habit.id, todayKey))) {
       await db.tasks.put(buildHabitTaskRow(habit, todayKey));
     }
+    return true;
   });
-  return changed(true);
+  return added ? changed(true) : false;
 }
 
 /**

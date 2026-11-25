@@ -726,7 +726,7 @@ describe("a failed local write resolves and is surfaced as actionError", () => {
     ["reorderTaskQueue", (e) => vi.spyOn(db.tasks, "bulkPut").mockRejectedValueOnce(e), () => store().reorderTaskQueue(["t2", "t1"], "t2"), undefined],
     ["createQuest", (e) => vi.spyOn(db.quests, "add").mockRejectedValueOnce(e), () => store().createQuest({ title: "New quest" }), false],
     ["updateQuest", (e) => vi.spyOn(db.quests, "update").mockRejectedValueOnce(e), () => store().updateQuest("q1", { title: "x" }), false],
-    ["deleteQuest", (e) => vi.spyOn(db.quests, "delete").mockRejectedValueOnce(e), () => store().deleteQuest("q1"), undefined],
+    ["deleteQuest", (e) => vi.spyOn(db.quests, "delete").mockRejectedValueOnce(e), () => store().deleteQuest("q1"), false],
     ["initializeFocus", (e) => vi.spyOn(db.tasks, "update").mockRejectedValueOnce(e), () => store().initializeFocus("t1"), undefined],
     ["deleteTimeLog", (e) => vi.spyOn(db.timeLogs, "delete").mockRejectedValueOnce(e), () => store().deleteTimeLog("log-1"), undefined],
   ];

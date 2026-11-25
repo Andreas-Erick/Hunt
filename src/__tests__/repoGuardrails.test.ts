@@ -172,9 +172,7 @@ describe("module size ratchet", () => {
     "src/components/QuestMatrixPanel.tsx": 1161,
     "src/components/TelemetryDashboardView.tsx": 929,
     "src/lib/questScience.ts": 618,
-    "src/lib/reviewAnalytics.ts": 1012,
-    "src/lib/syncTypes.ts": 772,
-    "src/store/useCommandStore.ts": 801,
+    "src/lib/reviewAnalytics.ts": 649,
   };
 
   it(`keeps production modules within ${NEW_FILE_BUDGET} lines, or within their frozen size`, () => {

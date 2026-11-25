@@ -3297,6 +3297,7 @@ var HuntCore = (() => {
     MAX_LIST_TITLE_LENGTH: () => MAX_LIST_TITLE_LENGTH,
     MAX_LONG_TEXT_LENGTH: () => MAX_LONG_TEXT_LENGTH,
     MAX_QUEST_TITLE_LENGTH: () => MAX_QUEST_TITLE_LENGTH,
+    MAX_SYNC_HABITS: () => MAX_SYNC_HABITS,
     MAX_TASK_TITLE_LENGTH: () => MAX_TASK_TITLE_LENGTH,
     MAX_TIMES_PER_WEEK: () => MAX_TIMES_PER_WEEK,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
@@ -4146,6 +4147,24 @@ var HuntCore = (() => {
     return row;
   }
 
+  // src/lib/syncValidate.ts
+  var MAX_QUEST_TITLE_LENGTH = 300;
+  var MAX_HABIT_TITLE_LENGTH = 300;
+  var MAX_TASK_TITLE_LENGTH = 1e3;
+  var MAX_SYNC_HABITS = 200;
+  var MAX_LONG_TEXT_LENGTH = 2e4;
+  var QUEST_ACCENTS = {
+    cyan: true,
+    emerald: true,
+    amber: true,
+    purple: true,
+    rose: true,
+    sky: true,
+    orange: true,
+    lime: true
+  };
+  var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
+
   // src/lib/syncTypes.ts
   function canonicalString(value) {
     return JSON.stringify(value, (_key, val) => {
@@ -4231,21 +4250,6 @@ var HuntCore = (() => {
     }
     return Math.max(S + 1e3, Math.min(...cands));
   }
-  var MAX_QUEST_TITLE_LENGTH = 300;
-  var MAX_HABIT_TITLE_LENGTH = 300;
-  var MAX_TASK_TITLE_LENGTH = 1e3;
-  var MAX_LONG_TEXT_LENGTH = 2e4;
-  var QUEST_ACCENTS = {
-    cyan: true,
-    emerald: true,
-    amber: true,
-    purple: true,
-    rose: true,
-    sky: true,
-    orange: true,
-    lime: true
-  };
-  var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
   var TOMBSTONE_KEY = {
     quests: "deletedQuestIds",
     tasks: "deletedTaskIds",
@@ -9727,12 +9731,19 @@ var HuntCore = (() => {
       focusFieldSoon("newHabitTitleInput");
     }
 
+    const HABIT_CAP_TEXT = "Hunt syncs up to " + HuntCore.MAX_SYNC_HABITS + " Habits. Delete one, ended ones included, to add another.";
     function saveNewHabit() {
       const tEl = document.getElementById("newHabitTitleInput");
       const nEl = document.getElementById("newHabitNotesInput");
       const title = tEl ? clampTitle(tEl.value, HuntCore.MAX_HABIT_TITLE_LENGTH) : "";
       if (!title) {
         flagInvalidField(tEl);
+        return;
+      }
+      // Past the sync cap the laptop would reject every sync (ADR-0001); Ended Habits count too.
+      // The sheet stays open with the typed text.
+      if ((state.habits || []).length >= HuntCore.MAX_SYNC_HABITS) {
+        showToast(HABIT_CAP_TEXT, { ms: 6000 });
         return;
       }
       const kind = selectedHabitKind === "count" || selectedHabitKind === "avoid" ? selectedHabitKind : "check";

@@ -12,6 +12,7 @@ import type { Habit, Quest, Task } from "@/lib/domainTypes";
 import {
   createEmptySyncPayload,
   isSafeSyncId,
+  MAX_SYNC_HABITS,
   mergeSyncPayloads,
   sanitizeHabit,
   syncContentKey,
@@ -300,6 +301,42 @@ describe("Daily Habits — store lifecycle & daily materialization", () => {
       status: "queued",
       accumulatedSeconds: 900,
     });
+  });
+
+  it("refuses a Habit past the sync cap on the desktop, and says so in the form", async () => {
+    // Ended Habits count toward the cap too (and stay collapsed, which keeps this render cheap).
+    const full = Array.from({ length: MAX_SYNC_HABITS }, (_, i) =>
+      makeHabit(`hab-${i}`, `Habit ${i}`, { rank: (i + 1) * 1000, endDate: "2026-01-01" })
+    );
+    await db.habits.bulkPut(full);
+    // the payload at the cap still validates: one more and every sync would be rejected
+    expect(validateSyncPayload({ ...createEmptySyncPayload(), habits: full })).not.toBeNull();
+
+    expect(await useCommandStore.getState().createHabit({ title: "One too many", notes: "", questId: null })).toBe(false);
+    expect(await db.habits.count()).toBe(MAX_SYNC_HABITS);
+
+    render(<HabitsView />);
+    expect(await screen.findByText(new RegExp(`syncs up to ${MAX_SYNC_HABITS} Habits`))).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "Another" } });
+    expect(screen.getByRole("button", { name: /Add Habit/ })).toBeDisabled();
+  });
+
+  it("phone: refuses a Habit past the sync cap and keeps the sheet open", () => {
+    const habits = Array.from({ length: MAX_SYNC_HABITS }, (_, i) => makeHabit(`hab-${i}`, `Habit ${i}`));
+    const w = loadMobile({ seedState: { quests: [], tasks: [], habits, timeLogs: [] } }) as MobileWindow & {
+      openNewHabitSheet(): void;
+      saveNewHabit(): void;
+    };
+    try {
+      w.openNewHabitSheet();
+      (w.document.getElementById("newHabitTitleInput") as HTMLInputElement).value = "One too many";
+      w.saveNewHabit();
+      expect(readState(w).habits).toHaveLength(MAX_SYNC_HABITS);
+      expect(w.document.getElementById("toastHost")?.textContent).toContain(`syncs up to ${MAX_SYNC_HABITS} Habits`);
+      expect(w.document.getElementById("newHabitTitleInput")).not.toBeNull();
+    } finally {
+      w.close();
+    }
   });
 });
 

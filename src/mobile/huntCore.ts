@@ -76,6 +76,7 @@ export {
   MAX_HABIT_TITLE_LENGTH,
   MAX_LONG_TEXT_LENGTH,
   MAX_QUEST_TITLE_LENGTH,
+  MAX_SYNC_HABITS,
   MAX_TASK_TITLE_LENGTH,
   mergeSyncPayloads,
   sameContent,
