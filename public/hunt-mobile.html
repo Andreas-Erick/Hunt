@@ -1074,7 +1074,6 @@
       overflow-y: auto;
       overscroll-behavior: contain;
       box-shadow: 0 20px 48px -12px rgb(var(--c-black) / 0.78);
-      will-change: transform, opacity;
     }
     body.sheet-typing .bottom-sheet {
       max-height: min(54vh, calc(100vh - var(--safe-top) - var(--eff-kb, 0px) - 28px));
@@ -1094,6 +1093,7 @@
     /* Only a freshly opened sheet glides in; in-place updates never replay the animation. */
     .bottom-sheet.entering {
       animation: slideUp 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform, opacity; /* a layer only while it glides; a resting scroller keeps crisp text */
     }
 
     .sheet-head {
@@ -3188,7 +3188,7 @@
         </svg>
         <span class="brand-word">Hunt</span>
       </button>
-      <span id="headerVersionBadge" class="brand-version-badge">v1.14.1</span>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.15.0</span>
     </div>
 
     <div class="app-bar-actions">
@@ -3293,7 +3293,12 @@ var HuntCore = (() => {
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
     MAX_COUNT_UNIT_LENGTH: () => MAX_COUNT_UNIT_LENGTH,
     MAX_HABIT_REMINDER_TIMES: () => MAX_HABIT_REMINDER_TIMES,
+    MAX_HABIT_TITLE_LENGTH: () => MAX_HABIT_TITLE_LENGTH,
     MAX_LIST_TITLE_LENGTH: () => MAX_LIST_TITLE_LENGTH,
+    MAX_LONG_TEXT_LENGTH: () => MAX_LONG_TEXT_LENGTH,
+    MAX_QUEST_TITLE_LENGTH: () => MAX_QUEST_TITLE_LENGTH,
+    MAX_SYNC_HABITS: () => MAX_SYNC_HABITS,
+    MAX_TASK_TITLE_LENGTH: () => MAX_TASK_TITLE_LENGTH,
     MAX_TIMES_PER_WEEK: () => MAX_TIMES_PER_WEEK,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
     REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
@@ -3313,6 +3318,8 @@ var HuntCore = (() => {
     canonicalString: () => canonicalString,
     checklistOf: () => checklistOf,
     checklistProgress: () => checklistProgress,
+    clampLength: () => clampLength,
+    clampTitle: () => clampTitle,
     cleanListTitle: () => cleanListTitle,
     compareRank: () => compareRank,
     completeTaskRow: () => completeTaskRow,
@@ -4140,6 +4147,24 @@ var HuntCore = (() => {
     return row;
   }
 
+  // src/lib/syncValidate.ts
+  var MAX_QUEST_TITLE_LENGTH = 300;
+  var MAX_HABIT_TITLE_LENGTH = 300;
+  var MAX_TASK_TITLE_LENGTH = 1e3;
+  var MAX_SYNC_HABITS = 200;
+  var MAX_LONG_TEXT_LENGTH = 2e4;
+  var QUEST_ACCENTS = {
+    cyan: true,
+    emerald: true,
+    amber: true,
+    purple: true,
+    rose: true,
+    sky: true,
+    orange: true,
+    lime: true
+  };
+  var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
+
   // src/lib/syncTypes.ts
   function canonicalString(value) {
     return JSON.stringify(value, (_key, val) => {
@@ -4225,17 +4250,6 @@ var HuntCore = (() => {
     }
     return Math.max(S + 1e3, Math.min(...cands));
   }
-  var QUEST_ACCENTS = {
-    cyan: true,
-    emerald: true,
-    amber: true,
-    purple: true,
-    rose: true,
-    sky: true,
-    orange: true,
-    lime: true
-  };
-  var LOG_ACCENTS = { ...QUEST_ACCENTS, slate: true };
   var TOMBSTONE_KEY = {
     quests: "deletedQuestIds",
     tasks: "deletedTaskIds",
@@ -5118,6 +5132,9 @@ var HuntCore = (() => {
     var applyListEdit = HuntCore.applyListEdit;
     var buildList = HuntCore.buildList;
     var cleanListTitle = HuntCore.cleanListTitle;
+    // The sync validator's cuts, so the phone never writes text the server would shorten.
+    var clampLength = HuntCore.clampLength;
+    var clampTitle = HuntCore.clampTitle;
     var listItemsOf = HuntCore.listItemsOf;
     var listProgress = HuntCore.listProgress;
     var newListId = HuntCore.newListId;
@@ -5150,9 +5167,9 @@ var HuntCore = (() => {
         if (vpMeta) vpMeta.setAttribute("content", "width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=overlays-content");
         window.__huntNativeImeBoot = true;
       }
-    } catch (e) {}
+    } catch (e) { /* an old WebView without the IME hooks just keeps the default keyboard handling */ }
 
-    const APP_VERSION = "1.14.1";
+    const APP_VERSION = "1.15.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -5654,7 +5671,7 @@ var HuntCore = (() => {
       savedMetaAt = now;
       try {
         localStorage.setItem(SYNC_META_KEY, JSON.stringify(syncMeta));
-      } catch (e) {}
+      } catch (e) { /* sync bookkeeping only (last route, timestamps); the next sync rebuilds it */ }
     }
 
     // Local edits not yet acknowledged by the laptop (localRev bumps per mutation; syncedRev = rev that was sent).
@@ -5690,7 +5707,7 @@ var HuntCore = (() => {
       if (!url) {
         try {
           url = normalizeLaptopUrl(localStorage.getItem(LAPTOP_URL_KEY));
-        } catch (e) {}
+        } catch (e) { /* private mode or blocked storage: fall back to the URL kept in memory */ }
       }
       if (!url && location.protocol.startsWith("http")) url = location.origin;
       cachedLaptopUrl = url;
@@ -5702,7 +5719,7 @@ var HuntCore = (() => {
       const clean = normalizeLaptopUrl(url);
       try {
         localStorage.setItem(LAPTOP_URL_KEY, clean);
-      } catch (e) {}
+      } catch (e) { /* private mode or blocked storage: the URL stays in memory for this session */ }
       bridgeCall("saveLaptopUrl", clean);
       cachedLaptopUrl = clean || null; // native normalizes the same way; no read-back needed
       syncMeta.lastUrl = null;
@@ -5784,7 +5801,7 @@ var HuntCore = (() => {
       playClickSound();
       try {
         window.location.assign(pendingNativePairHref);
-      } catch (e) {}
+      } catch (e) { /* the shell's pair link is best-effort; the pairing sheet stays open to retry */ }
     }
 
     async function copyBrowserPairingLink() {
@@ -5810,7 +5827,7 @@ var HuntCore = (() => {
       const nextUrl = info && typeof info.url === "string" ? normalizeLaptopUrl(info.url) : "";
       if (nextUrl) {
         cachedLaptopUrl = nextUrl;
-        try { localStorage.setItem(LAPTOP_URL_KEY, nextUrl); } catch (e) {}
+        try { localStorage.setItem(LAPTOP_URL_KEY, nextUrl); } catch (e) { /* private mode or blocked storage: the URL stays in memory for this session */ }
       }
       syncMeta.lastUrl = null;
       syncRun.routeEpoch++;
@@ -5836,7 +5853,7 @@ var HuntCore = (() => {
       const query = params.toString();
       try {
         history.replaceState(history.state, "", location.pathname + (query ? "?" + query : "") + location.hash);
-      } catch (e) {}
+      } catch (e) { /* cosmetic: tidies the address bar only */ }
       renderApkPairBanner();
     }
 
@@ -5850,17 +5867,43 @@ var HuntCore = (() => {
     }
 
     // ----- Persistence (separate from rendering) -----
+    const PERSIST_FAILED_TEXT = "Storage is full, so changes aren't saved on this device. Sync with the laptop to keep them.";
+    let persistFailureReported = false;
+    function reportPersistFailure() {
+      if (persistFailureReported) return;
+      persistFailureReported = true;
+      // A save can run at boot, before the toast and breadcrumb state below exist; the warning then
+      // waits for the next failed save, which retries anyway.
+      try {
+        recordMobileBreadcrumb("ERROR", "storage", "persist_failed");
+        showToast(PERSIST_FAILED_TEXT, { ms: 8000 });
+      } catch (e) {
+        persistFailureReported = false;
+      }
+    }
+
     // Stringifies once and skips all I/O when nothing changed. Each store is written in its own try.
     function persistState(json) {
       const text = typeof json === "string" ? json : JSON.stringify(state);
       syncKeepScreenOn();
       if (persistBlocked) return false;
       if (text === lastPersistedJson) return false;
-      lastPersistedJson = text;
       bridgeCall("saveState", text);
+      let savedLocally = true;
       try {
         localStorage.setItem(STORAGE_KEY, text);
-      } catch (e) {}
+      } catch (e) {
+        savedLocally = false;
+      }
+      // In the APK the shell's file is the store (it logs its own failures), so a full localStorage
+      // loses nothing. In a browser localStorage is the only store: leave lastPersistedJson stale so
+      // the next save retries, and tell the user once instead of dropping every edit on reload.
+      if (!savedLocally && !hasNativeStore()) {
+        reportPersistFailure();
+        return false;
+      }
+      persistFailureReported = false;
+      lastPersistedJson = text;
       publishWidgetSnapshot();
       publishReminderPlan();
       return true;
@@ -6366,7 +6409,7 @@ var HuntCore = (() => {
           body
         });
         if (!res.ok) {
-          try { await res.text(); } catch (e) {}
+          try { await res.text(); } catch (e) { /* draining the error body only; the status code is what is reported */ }
           const ms = Date.now() - started;
           recordMobileBreadcrumb("WARN", "sync", "http_error", { status: res.status }, correlationId, ms);
           return { reason: httpFailureReason(res.status), code: res.status, body: "", answered: true, ms };
@@ -6478,7 +6521,7 @@ var HuntCore = (() => {
         const data = JSON.parse(body);
         if (isPlainRecord(data) && isPlainRecord(data.payload)) return data;
         if (isPlainRecord(data) && Array.isArray(data.tasks)) return { payload: data }; // legacy bare payload
-      } catch (e) {}
+      } catch (e) { /* an unparseable body is reported as a bad response by the caller (null) */ }
       return null;
     }
 
@@ -6625,7 +6668,7 @@ var HuntCore = (() => {
           if (syncRun.inFlight) {
             const sentRouteEpoch = syncRun.sentRouteEpoch;
             let autoResult = null;
-            try { autoResult = await syncRun.inFlight; } catch (e) {}
+            try { autoResult = await syncRun.inFlight; } catch (e) { /* the auto-sync's failure is its own to report; Sync Now starts a fresh run below */ }
             if (autoResultAnswersSyncNow(autoResult, sentRouteEpoch)) {
               // that result is now Sync Now's answer: a failure must show as one (no reconnect grace)
               if (syncRun.lastResult === autoResult) syncRun.lastManual = true;
@@ -7090,7 +7133,7 @@ var HuntCore = (() => {
       try {
         const covered = el.getBoundingClientRect().bottom - ((window.innerHeight || 0) - kbPx - 16);
         if (covered > 0) window.scrollBy({ top: covered, behavior: prefersReducedMotionMobile() ? "auto" : "smooth" });
-      } catch (e) {}
+      } catch (e) { /* best-effort scroll to keep the field above the keyboard */ }
     }
 
     // Called frame-by-frame by MainActivity's WindowInsetsAnimation.Callback on Android 11+.
@@ -7177,7 +7220,7 @@ var HuntCore = (() => {
             if (sr.height > 0 && er.bottom > sr.bottom - 64) {
               el.scrollIntoView({ block: "nearest", behavior: "smooth" });
             }
-          } catch (e) {}
+          } catch (e) { /* best-effort scroll to keep the field in view */ }
         }, 100);
       }
     }
@@ -7255,7 +7298,7 @@ var HuntCore = (() => {
             if (activeView === "plan") renderAppSafely();
           });
         }
-      } catch (e) {}
+      } catch (e) { /* old WebViews without matchMedia listeners keep the layout chosen at boot */ }
     }
 
     function installLifecycleHooks() {
@@ -8037,7 +8080,7 @@ var HuntCore = (() => {
       document.body.style.right = "";
       document.body.style.width = "";
       if (restoreY > 0) {
-        try { window.scrollTo(0, restoreY); } catch (e) {}
+        try { window.scrollTo(0, restoreY); } catch (e) { /* best-effort scroll restore */ }
       }
     }
 
@@ -8312,7 +8355,7 @@ var HuntCore = (() => {
         if (d && typeof d.title === "string" && typeof d.notes === "string" && (d.title.trim() || d.notes.trim())) {
           return { title: d.title, notes: d.notes };
         }
-      } catch (e) {}
+      } catch (e) { /* an unreadable draft is dropped: it is a convenience copy, never the saved Task */ }
       return null;
     }
 
@@ -8324,7 +8367,7 @@ var HuntCore = (() => {
         if (json) localStorage.setItem(COMPOSER_DRAFT_KEY, json);
         else localStorage.removeItem(COMPOSER_DRAFT_KEY);
         storedComposerDraftJson = json;
-      } catch (e) {}
+      } catch (e) { /* the draft stays in memory; only a relaunch would miss it, and the Task itself is unaffected */ }
     }
 
     function captureComposerDraft() {
@@ -8463,8 +8506,8 @@ var HuntCore = (() => {
       const firstRects = captureTaskFlipRects();
       state.tasks.push({
         id: newTaskId,
-        title: titleEl.value.trim(),
-        notes: notesEl ? notesEl.value.trim() : "",
+        title: clampTitle(titleEl.value, HuntCore.MAX_TASK_TITLE_LENGTH),
+        notes: notesEl ? clampTitle(notesEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         questId: resolveComposerQuestId(composerQuestId),
         status: "queued",
         rank,
@@ -8919,13 +8962,13 @@ var HuntCore = (() => {
       }
       playCompleteSound();
       const now = Date.now();
-      const title = tEl.value.trim();
+      const title = clampTitle(tEl.value, HuntCore.MAX_QUEST_TITLE_LENGTH);
       state.quests.push({
         id: "quest-" + now + "-" + Math.random().toString(36).slice(2, 6),
         slotIndex: activeQuestsList().length % 3,
-        code: title.slice(0, 10).toUpperCase(),
+        code: clampLength(title, 10).toUpperCase(),
         title,
-        description: dEl ? dEl.value.trim() : "",
+        description: dEl ? clampTitle(dEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         accentColor: selectedQuestColor || "cyan",
         targetWeeklyHours: target,
         archived: false,
@@ -8997,8 +9040,8 @@ var HuntCore = (() => {
       const dEl = document.getElementById("sheetQuestDesc");
       const hEl = document.getElementById("sheetQuestTarget");
       const before = JSON.stringify(q);
-      if (tEl && tEl.value.trim()) q.title = tEl.value.trim();
-      if (dEl) q.description = dEl.value.trim();
+      if (tEl && tEl.value.trim()) q.title = clampTitle(tEl.value, HuntCore.MAX_QUEST_TITLE_LENGTH);
+      if (dEl) q.description = clampTitle(dEl.value, HuntCore.MAX_LONG_TEXT_LENGTH);
       const target = hEl ? parseWeeklyTarget(hEl.value) : null;
       if (target !== null) q.targetWeeklyHours = target; // blank or invalid keeps the saved target, like a blank title
       q.accentColor = selectedQuestColor || q.accentColor;
@@ -9294,7 +9337,7 @@ var HuntCore = (() => {
             return;
           }
         }
-      } catch (e) {}
+      } catch (e) { /* no clipboard access: the user pastes into the field by hand */ }
       if (input) {
         input.focus();
         if (typeof input.select === "function") input.select();
@@ -9688,12 +9731,19 @@ var HuntCore = (() => {
       focusFieldSoon("newHabitTitleInput");
     }
 
+    const HABIT_CAP_TEXT = "Hunt syncs up to " + HuntCore.MAX_SYNC_HABITS + " Habits. Delete one, ended ones included, to add another.";
     function saveNewHabit() {
       const tEl = document.getElementById("newHabitTitleInput");
       const nEl = document.getElementById("newHabitNotesInput");
-      const title = tEl ? tEl.value.trim().slice(0, 300) : "";
+      const title = tEl ? clampTitle(tEl.value, HuntCore.MAX_HABIT_TITLE_LENGTH) : "";
       if (!title) {
         flagInvalidField(tEl);
+        return;
+      }
+      // Past the sync cap the laptop would reject every sync (ADR-0001); Ended Habits count too.
+      // The sheet stays open with the typed text.
+      if ((state.habits || []).length >= HuntCore.MAX_SYNC_HABITS) {
+        showToast(HABIT_CAP_TEXT, { ms: 6000 });
         return;
       }
       const kind = selectedHabitKind === "count" || selectedHabitKind === "avoid" ? selectedHabitKind : "check";
@@ -9713,7 +9763,7 @@ var HuntCore = (() => {
       const habit = {
         id: "hab-" + now + "-" + Math.random().toString(36).slice(2, 6),
         title,
-        notes: nEl ? nEl.value.trim() : "",
+        notes: nEl ? clampTitle(nEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : "",
         questId: selectedHabitQuestId || null,
         rank,
         createdAt: now,
@@ -9722,7 +9772,7 @@ var HuntCore = (() => {
       };
       if (kind === "count") {
         habit.target = target;
-        habit.unit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : "";
+        habit.unit = unitEl ? clampTitle(unitEl.value, HuntCore.MAX_COUNT_UNIT_LENGTH) : "";
       }
       const todayKey = toLocalDateKey(now);
       const frequencyHistory = HuntCore.withHabitFrequency(habit, frequency, todayKey);
@@ -9982,7 +10032,7 @@ var HuntCore = (() => {
       if (!h) { closeSheet(); return; }
       const tEl = document.getElementById("editHabitTitleInput");
       const nEl = document.getElementById("editHabitNotesInput");
-      const title = tEl ? tEl.value.trim().slice(0, 300) : "";
+      const title = tEl ? clampTitle(tEl.value, HuntCore.MAX_HABIT_TITLE_LENGTH) : "";
       if (!title) {
         flagInvalidField(tEl);
         return;
@@ -9999,7 +10049,7 @@ var HuntCore = (() => {
       const now = Date.now();
       const todayKey = toLocalDateKey(now);
       const prev = cloneJson(h);
-      const nextNotes = nEl ? nEl.value.trim() : (h.notes || "");
+      const nextNotes = nEl ? clampTitle(nEl.value, HuntCore.MAX_LONG_TEXT_LENGTH) : (h.notes || "");
       const nextQuestId = selectedHabitQuestId || null;
       let nextTarget = null;
       let nextUnit = null;
@@ -10011,7 +10061,7 @@ var HuntCore = (() => {
           flagInvalidField(targetEl);
           return;
         }
-        nextUnit = unitEl ? unitEl.value.trim().slice(0, HuntCore.MAX_COUNT_UNIT_LENGTH) : (h.unit || "");
+        nextUnit = unitEl ? clampTitle(unitEl.value, HuntCore.MAX_COUNT_UNIT_LENGTH) : (h.unit || "");
       }
       const before = JSON.stringify(h);
       h.title = title;
@@ -10998,7 +11048,7 @@ var HuntCore = (() => {
     }
 
     function saveGuideTask() {
-      const title = guideTaskTitle.trim();
+      const title = clampTitle(guideTaskTitle, HuntCore.MAX_TASK_TITLE_LENGTH);
       if (!title) {
         const el = document.getElementById("guideTaskTitleInput");
         if (el) el.focus();
@@ -11014,7 +11064,7 @@ var HuntCore = (() => {
       state.tasks.push({
         id: "tsk-" + now + "-" + Math.random().toString(36).slice(2, 6),
         title,
-        notes: guideTaskNotes.trim(),
+        notes: clampTitle(guideTaskNotes, HuntCore.MAX_LONG_TEXT_LENGTH),
         questId: qId,
         status: "queued",
         rank,
@@ -11030,7 +11080,7 @@ var HuntCore = (() => {
     }
 
     function saveGuideQuest() {
-      const title = guideQuestTitle.trim();
+      const title = clampTitle(guideQuestTitle, HuntCore.MAX_QUEST_TITLE_LENGTH);
       const hrs = Number(guideQuestHours);
       if (!title) {
         const el = document.getElementById("guideQuestTitleInput");
@@ -11049,9 +11099,9 @@ var HuntCore = (() => {
       state.quests.push({
         id: "quest-" + now + "-" + Math.random().toString(36).slice(2, 6),
         slotIndex: activeQuestsList().length % 3,
-        code: title.slice(0, 10).toUpperCase(),
+        code: clampLength(title, 10).toUpperCase(),
         title,
-        description: guideQuestDesc.trim(),
+        description: clampTitle(guideQuestDesc, HuntCore.MAX_LONG_TEXT_LENGTH),
         accentColor: guideQuestColor || "cyan",
         targetWeeklyHours: Math.max(1, hrs),
         archived: false,
@@ -12901,7 +12951,7 @@ var HuntCore = (() => {
     function newCorrelationId() {
       try {
         if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-      } catch (e) {}
+      } catch (e) { /* no crypto.randomUUID: fall back to the time-and-random id below */ }
       return "mcid-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
     }
     function recordMobileBreadcrumb(level, domain, event, context, correlationId, durationMs) {

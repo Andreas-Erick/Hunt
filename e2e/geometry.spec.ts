@@ -304,12 +304,19 @@ async function seedDesktopDb(page: Page, fixtures: GeometryFixtures): Promise<vo
   );
 }
 
+/**
+ * Midday UTC on a fixed date. The browser's clock is pinned here and the fixtures are built from
+ * it, so a run that crosses midnight cannot seed "today" rows that the app reads as yesterday.
+ */
+const FIXED_NOW = Date.UTC(2026, 4, 11, 12);
+
 async function openSeededDesktopApp(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FIXED_NOW);
   await blockSync(page);
   await page.goto("/");
   // The first boot creates the Dexie schema (and seeds its starter template).
   await expect(page.locator("header nav")).toBeVisible({ timeout: 30_000 });
-  await seedDesktopDb(page, buildFixtures());
+  await seedDesktopDb(page, buildFixtures(FIXED_NOW));
   await page.reload();
   await expect(page.locator("header nav")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(LONG_TASK_TITLE).first()).toBeVisible();
@@ -463,8 +470,9 @@ const MOBILE_VIEWS: Array<{ name: string; bodyView: string; open: string | null 
 ];
 
 async function openSeededPhoneApp(page: Page): Promise<void> {
+  await page.clock.setFixedTime(FIXED_NOW);
   await blockSync(page);
-  const state = JSON.stringify(buildMobileState(buildFixtures()));
+  const state = JSON.stringify(buildMobileState(buildFixtures(FIXED_NOW)));
   await page.addInitScript(
     ([key, value]) => {
       window.localStorage.setItem(key, value);

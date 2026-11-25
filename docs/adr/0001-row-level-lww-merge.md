@@ -49,6 +49,13 @@ associativity and idempotence over 400 seeds.
 - Tombstone lists are capped at 5,000 per collection
   (`MAX_TOMBSTONES_PER_KIND`). A device offline long enough
   to miss more deletions than that can bring old rows back.
+- Row counts are capped too (`MAX_SYNC_HABITS` = 200,
+  `MAX_SYNC_QUESTS`, `MAX_SYNC_TASKS`, `MAX_SYNC_LOGS`,
+  `MAX_SYNC_LISTS`). Unlike a bad row, which is dropped, a
+  collection over its cap makes the validator reject the
+  whole payload, and every later sync with it. So both
+  devices refuse to create a Habit at the cap instead of
+  letting sync wedge (ADR-0008).
 - A Task's Checklist is stored on the Task row and merges
   with it as one row. Two devices that edit the same
   Checklist while apart keep only the newer row's items.

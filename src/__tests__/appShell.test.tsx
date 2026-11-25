@@ -29,6 +29,8 @@ import {
   NOTES_DRAFT_KEY_PREFIX,
   restoreMirroredNoteDrafts,
 } from "@/components/TaskNotesField";
+import { CONFLICTED_DRAFT_MARKER } from "@/lib/noteDraftStore";
+import { getBreadcrumbs } from "@/lib/diagnostics";
 
 // next/font is a Next.js build-time transform; outside Next the module has no runtime exports.
 vi.mock("next/font/google", () => {
@@ -1110,6 +1112,19 @@ describe("MobileSyncModal: actions", () => {
     expect(errors).toHaveBeenCalledWith("[hunt] snapshot_import_failed", failure);
   });
 
+  it("an import whose file cannot be read says so (not 'Invalid snapshot file.') and logs it", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failure = namedError("NotReadableError", "file moved");
+    const file = new File(["{}"], "snap.json", { type: "application/json" });
+    file.text = () => Promise.reject(failure);
+
+    render(<MobileSyncModal isOpen onClose={() => undefined} />);
+    const input = screen.getByRole("dialog").querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(status()).toHaveTextContent("Could not read the file."));
+    expect(errors).toHaveBeenCalledWith("[hunt] snapshot_read_failed", failure);
+  });
+
   it("a successful import merges, syncs, and the message clears after a moment", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const payload = await buildLocalSyncPayload({
@@ -1208,6 +1223,27 @@ describe("restoreMirroredNoteDrafts: keeps a draft the restore could not write",
     put("tsk-01", { draft: "same text", base: "same text" });
     expect(await restoreMirroredNoteDrafts()).toBe(0);
     expect(mirrorKeys()).toEqual([]);
+  });
+
+  it("keeps a draft whose notes changed on another device, appended under a marker, and logs it", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await db.tasks.update("tsk-01", { notes: "phone wrote this" });
+    put("tsk-01", { draft: "typed here before reload", base: "older notes" });
+
+    expect(await restoreMirroredNoteDrafts()).toBe(1);
+    expect(mirrorKeys()).toEqual([]);
+    expect((await db.tasks.get("tsk-01"))?.notes).toBe(
+      `phone wrote this\n\n${CONFLICTED_DRAFT_MARKER}\ntyped here before reload`
+    );
+    expect(getBreadcrumbs().some((b) => b.event === "draft_conflict_kept" && b.level === "WARN")).toBe(true);
+  });
+
+  it("logs a draft it drops because its task was deleted", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    put("tsk-deleted", { draft: "orphan", base: "" });
+    expect(await restoreMirroredNoteDrafts()).toBe(0);
+    expect(mirrorKeys()).toEqual([]);
+    expect(getBreadcrumbs().some((b) => b.event === "draft_task_gone")).toBe(true);
   });
 
   it("one failing transaction keeps only its own key", async () => {

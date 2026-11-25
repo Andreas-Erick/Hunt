@@ -15,7 +15,9 @@ import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
 import { habitRowMode, habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import { isEndedHabit } from "@/lib/habitEnd";
 import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor } from "@/lib/habitFrequency";
+import { MAX_HABIT_TITLE_LENGTH, MAX_LONG_TEXT_LENGTH } from "@/lib/syncTypes";
 import { useCommandStore } from "@/store/useCommandStore";
+import { MAX_SYNC_HABITS } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
@@ -26,7 +28,8 @@ import { HabitSkipToday } from "./HabitDayStrip";
 import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
-import { confirmDiscardHabitEdit, HabitEditForm } from "./HabitEditForm";
+import { HabitEditForm } from "./HabitEditForm";
+import { confirmDiscard } from "./useDiscardGuard";
 import { HabitReminderBadge } from "./HabitReminderTimes";
 
 export { computeHabitStreak };
@@ -142,10 +145,13 @@ export function HabitsView() {
     [habits, habitDays, todayKey]
   );
 
+  // Ended Habits count: the sync cap is on every Habit row (ADR-0001).
+  const atHabitCap = (habits?.length ?? 0) >= MAX_SYNC_HABITS;
+
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const title = newTitle.trim();
-    if (!title || !isHabitFrequencyValid(newFrequency) || addingRef.current || !newKind.valid) return;
+    if (!title || !isHabitFrequencyValid(newFrequency) || addingRef.current || !newKind.valid || atHabitCap) return;
     addingRef.current = true;
     const notes = newNotes;
     const frequency = newFrequency;
@@ -173,7 +179,7 @@ export function HabitsView() {
 
   const startEdit = (habit: Habit, toggle: HTMLButtonElement) => {
     hudAudio.playClick();
-    if (!confirmDiscardHabitEdit(editingHabitId !== null && editDirty)) return;
+    if (!confirmDiscard(editingHabitId !== null && editDirty)) return;
     setEditDirty(false);
     editToggleRef.current = toggle;
     setEditingHabitId((cur) => (cur === habit.id ? null : habit.id));
@@ -247,6 +253,7 @@ export function HabitsView() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
             type="text"
+            maxLength={MAX_HABIT_TITLE_LENGTH}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Add a daily habit..."
@@ -256,7 +263,7 @@ export function HabitsView() {
 
           <button
             type="submit"
-            disabled={!newTitle.trim() || !isHabitFrequencyValid(newFrequency) || !newKind.valid}
+            disabled={!newTitle.trim() || !isHabitFrequencyValid(newFrequency) || !newKind.valid || atHabitCap}
             className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -264,9 +271,16 @@ export function HabitsView() {
           </button>
         </div>
 
+        {atHabitCap && (
+          <p role="status" className="mt-2 text-xs text-warning">
+            Hunt syncs up to {MAX_SYNC_HABITS} Habits. Delete one, ended ones included, to add another.
+          </p>
+        )}
+
         <div className="mt-2 border-t border-white/[0.05] pt-2">
           <input
             type="text"
+            maxLength={MAX_LONG_TEXT_LENGTH}
             value={newNotes}
             onChange={(e) => setNewNotes(e.target.value)}
             placeholder="Add description (optional)..."

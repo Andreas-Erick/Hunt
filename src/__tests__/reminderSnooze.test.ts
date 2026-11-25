@@ -68,6 +68,12 @@ describe("Snooze 10 min", () => {
     expect(dueReminders({ tasks: [task()], snoozes }, { from: at(9, 13), to: at(10) })).toEqual([]);
   });
 
+  it("treats the window as [from, to): a snooze ending exactly at `to` waits for the next window", () => {
+    const snoozes = [snoozeReminder(original(), at(9, 2))]; // ends 09:12
+    expect(dueReminders({ tasks: [task()], snoozes }, { from: at(9, 5), to: at(9, 12) })).toEqual([]);
+    expect(dueReminders({ tasks: [task()], snoozes }, { from: at(9, 12), to: at(9, 20) })).toHaveLength(1);
+  });
+
   it("reads stored snoozes defensively: malformed ones are dropped, and one snooze per reminder (the latest) is kept", () => {
     const raw = [
       { key: KEY, fireAt: at(9), until: at(9, 12) },

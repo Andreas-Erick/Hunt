@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import QRCode from "qrcode";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -21,15 +21,13 @@ import { hudAudio } from "@/lib/hudAudio";
 import { toLocalDateKey } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { formatAgo, usePhoneLink, useServerLink } from "./SyncStatus";
-import { useDocumentScrollLock } from "./useDocumentScrollLock";
+import { useModalDialog } from "./useModalDialog";
 
 interface MobileSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-/** What Tab / Shift+Tab cycle through inside the dialog. */
-const FOCUSABLE_SELECTOR = 'button, a[href], input:not([type="hidden"])';
 /** How long "Copied" / "Saved" stay on their buttons. */
 const ACK_MS = 2000;
 /** How long a success message stays in the footer status line. */
@@ -42,6 +40,8 @@ const QR_FAILED_TEXT = "Couldn't draw the QR code. Use Copy to get the pairing l
 const EXPORT_FAILED_TEXT = "Could not export the snapshot. Reload Hunt and try again.";
 const IMPORT_BAD_FILE_TEXT = "Invalid snapshot file. Choose a .json snapshot exported from Hunt.";
 const IMPORT_SAVE_FAILED_TEXT = "Could not save the snapshot locally. Reload Hunt and try again.";
+/** file.text() rejected: the file went away or the browser could not read it. */
+const IMPORT_READ_FAILED_TEXT = "Could not read the file. Choose the snapshot again.";
 const IMPORT_OK_TEXT = "Snapshot merged · syncing";
 
 interface FooterStatus {
@@ -73,14 +73,6 @@ export function buildPairingUrl(baseUrl: string, token: string): string {
   if (!token) return baseUrl;
   const origin = baseUrl.replace(/\/+$/, "");
   return `${origin}/hunt-mobile.html?token=${encodeURIComponent(token)}`;
-}
-
-/** A file that is not a Hunt snapshot (as opposed to a failed local save). */
-function isBadSnapshotFile(err: unknown): boolean {
-  return (
-    err instanceof SyntaxError ||
-    (err instanceof Error && err.name === "SnapshotFormatError")
-  );
 }
 
 interface ParsedQrSvg {
@@ -145,7 +137,6 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
   const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState<FooterStatus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   /** Export / import in flight (a ref, so a second click in the same tick is refused too). */
   const busyRef = useRef(false);
@@ -153,8 +144,10 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
   const aliveRef = useRef(true);
   /** The current click started on the backdrop (a drag out of the card must not close). */
   const pressOnBackdropRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const { dialogRef, onKeyDown: handleDialogKeyDown } = useModalDialog<HTMLDivElement>({
+    onClose,
+    initialFocusRef: closeButtonRef,
+  });
 
   const activeUrl =
     (selectedUrl && lanUrls.includes(selectedUrl) ? selectedUrl : null) ??
@@ -172,58 +165,10 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Scroll locked; focus moves in, siblings go `inert`, and both are undone (layout effect) before the nodes go.
-  useDocumentScrollLock();
-  useLayoutEffect(() => {
-    const active = document.activeElement;
-    const opener =
-      active instanceof HTMLElement && active !== document.body ? active : null;
-
-    const inerted: HTMLElement[] = [];
-    let current: HTMLElement | null = dialogRef.current;
-    while (current && current !== document.body) {
-      const parent: HTMLElement | null = current.parentElement;
-      if (!parent) break;
-      for (const sibling of Array.from(parent.children)) {
-        if (
-          sibling !== current &&
-          sibling instanceof HTMLElement &&
-          sibling.tagName !== "SCRIPT" &&
-          sibling.tagName !== "STYLE" &&
-          !sibling.inert &&
-          !sibling.hasAttribute("inert")
-        ) {
-          sibling.inert = true;
-          sibling.setAttribute("inert", "");
-          inerted.push(sibling);
-        }
-      }
-      current = parent;
-    }
-
-    closeButtonRef.current?.focus();
-    return () => {
-      for (const el of inerted) {
-        el.inert = false;
-        el.removeAttribute("inert");
-      }
-      if (opener && opener.isConnected) opener.focus();
-    };
-  }, []);
-
   // Fresh status as soon as the modal opens.
   useEffect(() => {
     void syncNow();
   }, [syncNow]);
-
-  // Escape closes the modal.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   // Acknowledgements revert after a moment; each timer is cleared on unmount.
   useEffect(() => {
@@ -278,24 +223,6 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     };
   }, [pairingUrl]);
 
-  /** Tab / Shift+Tab wrap between the first and last controls of the dialog. */
-  const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const root = dialogRef.current;
-    if (!root) return;
-    const items = Array.from(
-      root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ).filter((el) => el.tabIndex >= 0 && !el.hasAttribute("disabled"));
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey ? active === first || active === root : active === last) {
-      e.preventDefault();
-      (e.shiftKey ? last : first).focus();
-    }
-  };
-
   const handleManualSync = async () => {
     if (syncing) return;
     hudAudio.playClick();
@@ -307,6 +234,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       // automatic sync is already running.
       ok = await syncNow();
     } catch {
+      // syncNow never rejects (it resolves false on failure); this only guards
+      // the spinner against a future change, and false already shows the error.
       ok = false;
     }
     if (!aliveRef.current) return;
@@ -407,13 +336,14 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
       // Push the merged rows to the server in the background (never rejects).
       void syncNow();
     } catch (err) {
-      const badFile = isBadSnapshotFile(err);
-      if (!badFile) console.error("[hunt] snapshot_import_failed", err);
+      // importSnapshot reports bad files and failed saves in its result, so
+      // only file.text() can land here.
+      console.error("[hunt] snapshot_read_failed", err);
       if (aliveRef.current) {
         setStatus({
           source: "import",
           tone: "error",
-          text: badFile ? IMPORT_BAD_FILE_TEXT : IMPORT_SAVE_FAILED_TEXT,
+          text: IMPORT_READ_FAILED_TEXT,
         });
       }
     } finally {
@@ -454,9 +384,9 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         pressOnBackdropRef.current = false;
         if (onBackdrop) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
+      className="hunt-backdrop-enter fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
     >
-      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
+      <div className="hunt-panel-enter relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
         {/* Top Modal Header */}
         <div className="flex items-start justify-between gap-3 sm:gap-4">
           <div className="flex min-w-0 items-center gap-3">

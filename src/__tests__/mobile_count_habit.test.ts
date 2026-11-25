@@ -2,7 +2,7 @@
 // Count Habits on the phone (GLOSSARY: Habit Kind, Count Habit), through the same shared rules as
 // the desktop: the Kind is chosen when the Habit is made and shown read-only after; a tap on the
 // +1 adds one, a long press types an exact total, and rows show "n / target unit".
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { click, loadMobile, pageErrors, readState, type MobileWindow } from "./helpers/loadMobile";
 
 type Page = MobileWindow & {
@@ -24,10 +24,18 @@ const JOG = {
   unit: "miles",
 };
 
+// Monday 11 May 2026, 10:00 local: far from midnight, so boot and every assertion share one day key.
+const NOW = new Date(2026, 4, 11, 10).getTime();
+
 let w: Page | null = null;
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+});
 afterEach(() => {
   w?.close();
   w = null;
+  vi.useRealTimers();
 });
 
 function boot(habits: unknown[] = [JOG], tasks: unknown[] = []): Page {
@@ -119,16 +127,21 @@ describe("Count Habits on the phone", () => {
     expect(main(p).textContent).toContain("2.5 / 3 miles");
   });
 
-  it("a press held on +1 opens exact entry and the click that ends it adds nothing", async () => {
+  it("a press held on +1 for the long-press time opens exact entry and the click that ends it adds nothing", () => {
     const p = boot();
     p.switchView("habits");
     const plus = plusButton(p)!;
     plus.dispatchEvent(new p.Event("pointerdown", { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 650));
+    vi.advanceTimersByTime(499);
+    expect(p.document.getElementById("habitAmountInput")).toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(p.document.getElementById("habitAmountInput")).not.toBeNull();
     plus.dispatchEvent(new p.Event("pointerup", { bubbles: true }));
     click(p, plus);
     expect(p.document.getElementById("habitAmountInput")).not.toBeNull();
-    expect(todayRow(p)?.amount ?? 0).toBe(0);
+    const row = todayRow(p);
+    expect(row).toBeDefined(); // the day's row must exist, so the next line cannot pass vacuously
+    expect(row!.amount ?? 0).toBe(0);
   });
 
   it("the Today row of a Count Habit shows its progress and taps +1", () => {

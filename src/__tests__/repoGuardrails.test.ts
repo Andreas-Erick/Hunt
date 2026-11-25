@@ -95,6 +95,23 @@ describe("phone page uses the shared core for domain rows", () => {
 });
 
 // ---------------------------------------------------------------------------
+// CODING_STANDARDS "Empty catch": a swallowed error says why losing it is safe
+// ---------------------------------------------------------------------------
+describe("no silent catch blocks", () => {
+  const EMPTY_CATCH = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/g;
+  const emptyCatches = (file: string, text: string) =>
+    [...text.matchAll(EMPTY_CATCH)].map((m) => `${file}:${text.slice(0, m.index).split("\n").length}`);
+
+  it("every empty catch in the desktop source and the phone page carries a comment", () => {
+    const offenders = [
+      ...productionFiles.flatMap((f) => emptyCatches(rel(f), fs.readFileSync(f, "utf8"))),
+      ...emptyCatches("public/hunt-mobile.html", read("public", "hunt-mobile.html")),
+    ];
+    expect(offenders, "write `catch (e) { /* why losing this error is safe */ }`").toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests are named after behaviour and exercise behaviour
 // ---------------------------------------------------------------------------
 describe("tests describe behaviour", () => {
@@ -149,15 +166,12 @@ describe("module size ratchet", () => {
   // Over budget when the ratchet was added (2026-11-22). A file may shrink; lower its number when it
   // does. A file that must grow past its number gets split instead.
   const FROZEN: Record<string, number> = {
-    "src/components/GuideLabSection.tsx": 767,
-    "src/components/MobileSyncModal.tsx": 772,
+    "src/components/GuideLabSection.tsx": 750,
+    "src/components/MobileSyncModal.tsx": 702,
     "src/components/PlanWeekView.tsx": 737,
-    "src/components/QuestMatrixPanel.tsx": 1161,
-    "src/components/TelemetryDashboardView.tsx": 929,
+    "src/components/TelemetryDashboardView.tsx": 679,
     "src/lib/questScience.ts": 618,
-    "src/lib/reviewAnalytics.ts": 1012,
-    "src/lib/syncTypes.ts": 772,
-    "src/store/useCommandStore.ts": 801,
+    "src/lib/reviewAnalytics.ts": 649,
   };
 
   it(`keeps production modules within ${NEW_FILE_BUDGET} lines, or within their frozen size`, () => {

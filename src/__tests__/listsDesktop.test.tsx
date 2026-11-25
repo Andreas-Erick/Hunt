@@ -46,6 +46,17 @@ describe("the Lists section", () => {
     expect(await screen.findByRole("region", { name: "Weekly shop" })).toBeTruthy();
   });
 
+  it("creates one List when the form is submitted twice before the write lands", async () => {
+    render(<ListsView />);
+    expect(await screen.findByText(/No Lists yet/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("New List name"), { target: { value: "Groceries" } });
+    const form = screen.getByLabelText("New List name").closest("form")!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(await screen.findByRole("region", { name: "Groceries" })).toBeTruthy();
+    expect(await db.lists.count()).toBe(1);
+  });
+
   it("shows items struck through in place, with progress", async () => {
     await db.lists.put(seedList());
     render(<ListsView />);

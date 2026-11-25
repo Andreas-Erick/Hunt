@@ -162,7 +162,7 @@ export function HabitKindPicker({
           <label
             key={o.value}
             className={`flex min-h-8 coarse:min-h-11 cursor-pointer items-center rounded-full px-3 text-xs transition-[color,background-color] duration-150 ease-out has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
-              kind === o.value ? "bg-white/[0.08] font-medium text-white" : "text-hud-muted hover:text-neutral-200"
+              kind === o.value ? "bg-white/[0.08] text-white" : "text-hud-muted hover:text-neutral-200"
             }`}
           >
             <input

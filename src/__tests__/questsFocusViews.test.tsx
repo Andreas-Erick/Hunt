@@ -22,6 +22,8 @@ const TOMBSTONE_KEY = "hunt-sync-tombstones-v1";
 const STORE_KEY = "journey-hud-command-store";
 /** Fixed creation/update stamp, so a rewrite of a row is visible in updatedAt. */
 const T0 = 1_700_000_000_000;
+// A fixed local mid-morning "today" (Mon 11 May 2026, 10:00): the test and the app read the same day key.
+const TODAY = new Date(2026, 4, 11, 10).getTime();
 const ALL_DONE = "All tasks completed for today.";
 const DISCARD_PROMPT = "Discard unsaved changes?";
 
@@ -218,6 +220,8 @@ async function settled(spy: { mock: { results: Array<{ value: unknown }> } }) {
 }
 
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(TODAY);
   await db.quests.clear();
   await db.tasks.clear();
   await db.timeLogs.clear();

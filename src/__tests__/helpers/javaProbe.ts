@@ -29,6 +29,11 @@ const javaExe = findJdkTool("java");
 const javacExe = javaExe ? findJdkTool("javac") : null;
 /** True when probes can run; use with describe.skipIf(!hasJdk). */
 export const hasJdk = Boolean(javaExe && javacExe);
+// Without a JDK the Java suites skip, which is fine on a laptop. On CI it would hide untested
+// Android code behind a green run, so fail loudly instead.
+if (process.env.CI && !hasJdk) {
+  throw new Error("CI has no JDK 11+ (java and javac): the Android Java suites would silently skip.");
+}
 
 function listJava(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

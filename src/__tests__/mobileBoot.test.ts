@@ -201,3 +201,53 @@ describe("phone boot over corrupt saved state", () => {
     expect(pageErrors(w)).toEqual([]);
   });
 });
+
+describe("a save the browser's storage refuses (quota full)", () => {
+  function bootWithStorage(bridge?: MobileWindow["AndroidBridge"]) {
+    const ctl = { full: false, stateWrites: 0 };
+    w = loadMobile({
+      seedState: { tasks: [] },
+      ...(bridge ? { bridge } : {}),
+      beforeBoot(win) {
+        const proto = Object.getPrototypeOf(win.localStorage) as Storage;
+        const realSet = proto.setItem;
+        proto.setItem = function (this: Storage, key: string, value: string) {
+          if (key === STATE_KEY) {
+            ctl.stateWrites++;
+            if (ctl.full) throw new win.DOMException("full", "QuotaExceededError");
+          }
+          return realSet.call(this, key, value);
+        };
+      },
+    });
+    return ctl;
+  }
+  const toastText = () => w!.document.getElementById("toastHost")?.textContent ?? "";
+
+  it("in a browser, warns once, and retries the same state until it is saved", () => {
+    const ctl = bootWithStorage();
+    ctl.full = true;
+    const next = JSON.stringify({ tasks: [{ id: "tsk-1", title: "kept", status: "queued", rank: 0 }] });
+
+    expect(w!.persistState(next)).toBe(false);
+    expect(toastText()).toContain("Storage is full");
+    const writes = ctl.stateWrites;
+    expect(w!.persistState(next)).toBe(false); // unchanged text is retried, not skipped as already saved
+    expect(ctl.stateWrites).toBe(writes + 1);
+    expect(toastText().match(/Storage is full/g)).toHaveLength(1);
+
+    ctl.full = false;
+    expect(w!.persistState(next)).toBe(true);
+    expect(w!.localStorage.getItem(STATE_KEY)).toBe(next);
+  });
+
+  it("in the APK, the shell's file is the store, so a full localStorage is not reported", () => {
+    const saved: string[] = [];
+    const ctl = bootWithStorage({ saveState: (json: string) => void saved.push(json) } as MobileWindow["AndroidBridge"]);
+    ctl.full = true;
+    const next = JSON.stringify({ tasks: [] , quests: [] });
+    expect(w!.persistState(next)).toBe(true);
+    expect(saved.at(-1)).toBe(next);
+    expect(toastText()).not.toContain("Storage is full");
+  });
+});

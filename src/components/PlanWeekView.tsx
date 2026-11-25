@@ -22,7 +22,7 @@ import {
 } from "@/lib/dateUtils";
 import type { Quest, Task } from "@/lib/domainTypes";
 import { useCommandStore } from "@/store/useCommandStore";
-import { compareRank } from "@/lib/syncTypes";
+import { compareRank, MAX_LONG_TEXT_LENGTH, MAX_TASK_TITLE_LENGTH } from "@/lib/syncTypes";
 import { hudAudio } from "@/lib/hudAudio";
 import {
   COMPLETION_HIGHLIGHT_MS,
@@ -380,7 +380,7 @@ export function PlanWeekView() {
                   aria-pressed={isSelected}
                   className={`flex min-h-8 coarse:min-h-11 min-w-0 max-w-full sm:max-w-[200px] items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                     isSelected
-                      ? "bg-white/10 text-white font-medium"
+                      ? "bg-white/10 text-white"
                       : "text-neutral-400 hover:text-neutral-200"
                   }`}
                 >
@@ -400,7 +400,7 @@ export function PlanWeekView() {
               aria-pressed={otherSelected}
               className={`flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs ${PRESSABLE} ${
                 otherSelected
-                  ? "bg-white/10 text-white font-medium"
+                  ? "bg-white/10 text-white"
                   : "text-hud-muted hover:text-neutral-300"
               }`}
             >
@@ -511,7 +511,7 @@ export function PlanWeekView() {
                   <div className="flex items-center justify-between gap-2">
                     <input
                       type="text"
-                      value={dayInput}
+                      value={dayInput} maxLength={MAX_TASK_TITLE_LENGTH}
                       onChange={(e) =>
                         setInputsByDay((prev) => ({
                           ...prev,
@@ -552,7 +552,7 @@ export function PlanWeekView() {
                   <div className="mt-1 border-t border-white/[0.05]">
                     <input
                       type="text"
-                      value={notesByDay[col.dateKey] ?? ""}
+                      value={notesByDay[col.dateKey] ?? ""} maxLength={MAX_LONG_TEXT_LENGTH}
                       onChange={(e) =>
                         setNotesByDay((prev) => ({
                           ...prev,

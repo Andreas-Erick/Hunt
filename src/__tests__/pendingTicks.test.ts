@@ -129,6 +129,14 @@ describe("applyPendingTicks", () => {
       expect(after.tasks[0]).toMatchObject({ amount: 4, completedAt: 5 });
     });
 
+    it("skips a +1 on an archived day and leaves its total alone", () => {
+      const archived = { ...buildHabitTaskRow(jog, DAY), amount: 1, status: "archived" as const };
+      const before = state({ habits: [jog], tasks: [archived] });
+      const { state: after, skipped } = applyPendingTicks(before, [plus(TICKED_AT)]);
+      expect(skipped.map((s) => s.reason)).toEqual(["archived"]);
+      expect(after).toEqual(before);
+    });
+
     it("never mixes up the two kinds: +1 on a Check row, or a done tick on a Count row, is skipped", () => {
       const check = state({ habits: [habit, jog], tasks: [task()] });
       const wrong = [plus(TICKED_AT, "tsk-1"), { taskId: jogId, dateKey: DAY, tickedAt: TICKED_AT }];
