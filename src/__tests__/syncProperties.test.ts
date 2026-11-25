@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { ChecklistItem, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
+import type {
+  ChecklistItem,
+  Habit,
+  HabitFrequencyChange,
+  Quest,
+  QuestAccent,
+  Task,
+  TaskStatus,
+  TimeLog,
+} from "@/lib/domainTypes";
 import {
   canonicalString,
   mergeSyncPayloads,
@@ -54,6 +63,16 @@ const STAMPS = [1000, 2000, 3000]; // few values, so equal stamps are frequent
 const LOG_STARTS = [10_000, 20_000];
 const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${start}-${taskId}`));
 const DURATIONS = [60, 600, 1800];
+const HABIT_IDS = ["hab-1763400000000-aaaa", "hab-1763400000001-bbbb"];
+// Frequency histories (a daily row without one, chosen weekdays, a change back to every day).
+const FREQUENCY_HISTORIES: ReadonlyArray<HabitFrequencyChange[] | undefined> = [
+  undefined,
+  [{ effectiveFrom: "2026-11-18", frequency: { type: "weekdays", weekdays: [1, 3, 5] } }],
+  [
+    { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [0] } },
+    { effectiveFrom: "2026-11-19", frequency: { type: "everyDay" } },
+  ],
+];
 const STATUSES: readonly TaskStatus[] = ["queued", "active", "completed", "archived"];
 const ACCENTS: readonly QuestAccent[] = ["cyan", "emerald", "amber"];
 const CHECKLISTS: readonly ChecklistItem[][] = [
@@ -141,10 +160,27 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
         ? { activeTaskId: runningTask, isRunning: false, sessionStartedAt: null, updatedAt: pick([1000, 2000, 3000, 4000]) }
         : { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: pick([0, 1000, 2000, 3000, 4000]) };
 
+  const habits: Habit[] = HABIT_IDS.filter(() => chance(0.6)).map((id) => {
+    const habit: Habit = {
+      id,
+      title: pick(["Gym", "Read"]),
+      notes: "",
+      questId: null,
+      rank: pick([1000, 2000]),
+      createdAt: 500,
+      updatedAt: pick(STAMPS),
+    };
+    const history = pick(FREQUENCY_HISTORIES);
+    if (history) habit.frequencyHistory = history;
+    return habit;
+  });
+
   const raw: SyncPayload = {
     quests,
     tasks,
     timeLogs,
+    habits,
+    deletedHabitIds: HABIT_IDS.filter(() => chance(0.15)),
     deletedQuestIds: QUEST_IDS.filter(() => chance(0.15)),
     deletedTaskIds: TASK_IDS.filter(() => chance(0.15)),
     deletedLogIds: LOG_IDS.filter(() => chance(0.1)),
@@ -172,6 +208,8 @@ function rowsKey(p: SyncPayload, options: { withCounters: boolean }): string {
   return canonicalString({
     quests: rows(p.quests),
     tasks: rows(p.tasks),
+    habits: rows(p.habits ?? []),
+    deletedHabitIds: ids(p.deletedHabitIds),
     timeLogs: rows(p.timeLogs),
     deletedQuestIds: ids(p.deletedQuestIds),
     deletedTaskIds: ids(p.deletedTaskIds),
@@ -181,8 +219,13 @@ function rowsKey(p: SyncPayload, options: { withCounters: boolean }): string {
 
 /** No tombstoned row survives, and no task keeps a tombstoned quest. */
 function expectTombstonesWin(p: SyncPayload, msg: string): void {
-  const deleted = new Set([...(p.deletedQuestIds ?? []), ...p.deletedTaskIds, ...p.deletedLogIds]);
-  for (const row of [...p.quests, ...p.tasks, ...p.timeLogs]) {
+  const deleted = new Set([
+    ...(p.deletedQuestIds ?? []),
+    ...p.deletedTaskIds,
+    ...p.deletedLogIds,
+    ...(p.deletedHabitIds ?? []),
+  ]);
+  for (const row of [...p.quests, ...p.tasks, ...p.timeLogs, ...(p.habits ?? [])]) {
     expect(deleted.has(row.id), `${msg} ${row.id} survived its tombstone`).toBe(false);
   }
   for (const task of p.tasks) {

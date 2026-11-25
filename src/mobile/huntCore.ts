@@ -17,7 +17,7 @@ export {
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
+export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
   applyChecklistEdit,
@@ -26,6 +26,15 @@ export {
   checklistProgress,
   newChecklistItemId,
 } from "../lib/checklist";
+export {
+  HABIT_WEEKDAYS,
+  habitFrequencyLabel,
+  habitFrequencyOn,
+  isHabitScheduledOn,
+  parseHabitFrequency,
+  sameHabitFrequency,
+  withHabitFrequency,
+} from "../lib/habitFrequency";
 export {
   canonicalString,
   compareRank,
@@ -43,6 +52,8 @@ export {
   buildBurstLog,
   buildHabitTaskRow,
   completeTaskRow,
+  habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   pickNextFocusTask,
   sessionLogId,

@@ -2,15 +2,9 @@ import type { ActiveFocusState, Habit, Quest, QuestAccent, Task, TaskStatus, Tim
 import { sanitizeChecklist } from "./checklist";
 import { isReminderTime } from "./reminders";
 import { isSafeSyncId, MAX_ENTITY_ID_LENGTH, MAX_LOG_ID_LENGTH } from "./syncIds";
+import { sanitizeHabitFrequencyHistory } from "./habitFrequency";
 import {
-  clamp,
-  clampText,
-  finiteOr,
-  isDateKey,
-  isRecord,
-  isStamp,
-  isTableKey,
-  type UnknownRecord,
+  clamp, clampText, finiteOr, isDateKey, isRecord, isStamp, isTableKey, type UnknownRecord,
 } from "./syncValues";
 
 export type { ActiveFocusState } from "./domainTypes";
@@ -316,7 +310,7 @@ const TASK_FIELDS: ReadonlySet<string> = new Set([
   "scheduledDate", "skipped", "checklist", "reminderTime", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
-  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
+  "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt", "frequencyHistory",
 ]);
 const LOG_FIELDS: ReadonlySet<string> = new Set([
   "id", "taskId", "taskTitleSnapshot", "questId", "accentColorSnapshot", "startTime",
@@ -473,6 +467,8 @@ export function sanitizeHabit(raw: unknown): Habit | null {
   if (typeof rank === "number" && Number.isFinite(rank)) habit.rank = rank;
   if (isStamp(raw.createdAt)) habit.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) habit.updatedAt = raw.updatedAt;
+  const frequencyHistory = sanitizeHabitFrequencyHistory(raw.frequencyHistory);
+  if (frequencyHistory) habit.frequencyHistory = frequencyHistory;
   copyScalarExtras(habit, raw, HABIT_FIELDS);
   return habit as Habit;
 }
