@@ -2,9 +2,8 @@ import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habitFrequency";
 import { habitSuccessRate } from "./habitInsight";
-import { habitKindOf } from "./habitKind";
+import { habitDayAmount, habitKindOf, habitKindRules, type HabitKindRules } from "./habitKind";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
-import { habitDayAmount } from "./habitKind";
 import { habitScore } from "./habitStats";
 import {
   frequencyUnitStart,
@@ -237,6 +236,29 @@ export function summarizeHabitDays(
  */
 export function habitWantsDayTask(summary: Pick<HabitDaySummary, "askedToday" | "skipState">): boolean {
   return summary.askedToday && summary.skipState !== "skipped";
+}
+
+/** How a Habit card's row logs today (habitRowMode). */
+export interface HabitRowMode {
+  /**
+   * "tick", "count" (+1 / an exact total) or "slip" by the Habit's Kind on a
+   * day it asks for; "skipped" on a day (or Habit Week) set aside; "unasked"
+   * on a day it does not ask for.
+   */
+  mode: HabitKindRules["logs"] | "skipped" | "unasked";
+  /** Whether the row offers to start focus on today: asked, not done, and a Kind that can be worked on. */
+  focusable: boolean;
+}
+
+/** SHARED row rule of the Habit card on both apps: which control logs today, and whether focus is offered. */
+export function habitRowMode(
+  habit: { readonly kind?: unknown },
+  summary: Pick<HabitDaySummary, "askedToday" | "skipState" | "doneToday">
+): HabitRowMode {
+  if (summary.skipState === "skipped") return { mode: "skipped", focusable: false };
+  if (!summary.askedToday) return { mode: "unasked", focusable: false };
+  const rules = habitKindRules(habit);
+  return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday };
 }
 
 /**

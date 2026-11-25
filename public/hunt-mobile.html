@@ -3289,6 +3289,7 @@ var HuntCore = (() => {
     habitKindRules: () => habitKindRules,
     habitMonth: () => habitMonth,
     habitMonthAmounts: () => habitMonthAmounts,
+    habitRowMode: () => habitRowMode,
     habitScore: () => habitScore,
     habitSkipRows: () => habitSkipRows,
     habitStartKey: () => habitStartKey,
@@ -3904,6 +3905,12 @@ var HuntCore = (() => {
   }
   function habitWantsDayTask(summary) {
     return summary.askedToday && summary.skipState !== "skipped";
+  }
+  function habitRowMode(habit, summary) {
+    if (summary.skipState === "skipped") return { mode: "skipped", focusable: false };
+    if (!summary.askedToday) return { mode: "unasked", focusable: false };
+    const rules = habitKindRules(habit);
+    return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday };
   }
   function habitTodayTally(habits, summaryFor, _todayKey) {
     let done = 0;
@@ -9669,7 +9676,7 @@ var HuntCore = (() => {
           <textarea maxlength="20000" id="editHabitNotesInput" class="sheet-input" rows="2" placeholder="Optional default notes..." aria-label="Habit notes">${escapeHtml(h.notes || "")}</textarea>
 
           <div class="sheet-label">Kind</div>
-          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${{ count: "Count Habit", avoid: "Avoid Habit" }[habitKindOf(h)] || "Check Habit"}</div>
+          <div style="font-size:13px;color:var(--text-2);margin-bottom:6px;">${escapeHtml(HuntCore.habitKindRules(h).label)}</div>
           ${habitKindOf(h) === "count" ? `
             <div style="display:flex;gap:8px;">
               <input id="editHabitTargetInput" class="sheet-input" inputmode="decimal" value="${escapeHtml(formatCountAmount(countTargetOf(h)))}" placeholder="Daily target" aria-label="Daily target" style="flex:1;min-width:0;" />
@@ -12419,19 +12426,20 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + currentHabits.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, skipState, week, todayTask } = habitDays.summaryFor(h.id);
-            // An N per week Habit is set aside (and judged) by its whole Habit Week.
-            const skippedToday = skipState === "skipped";
+            const summary = habitDays.summaryFor(h.id);
+            const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, week, todayTask } = summary;
+            // The shared row rule (the desktop's too): a Count Habit logs +1 / an exact total, an Avoid
+            // Habit a Slip from its own button (never a tick); an N per week Habit is set aside by its week.
+            const row = HuntCore.habitRowMode(h, summary);
+            const skippedToday = row.mode === "skipped";
             const period = week ? "this week" : "today";
             const title = escapeHtml(h.title);
             const frequencyLabel = escapeHtml(habitFrequencyLabel(habitFrequencyOn(h, todayKey)));
-            // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
-            const isCount = habitKindOf(h) === "count" && asked && !skippedToday;
-            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
-            const isAvoid = habitKindOf(h) === "avoid" && asked && !skippedToday;
+            const isCount = row.mode === "count";
+            const isAvoid = row.mode === "slip";
             const slips = habitDaySlips(todayTask);
             const stripHtml = habitStripHtml(todayKey, outcomeOn, hex, todayKey);
-            const successRate = habitSuccessRateLabel(habitDays.summaryFor(h.id).successRate());
+            const successRate = habitSuccessRateLabel(summary.successRate());
 
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
@@ -12464,7 +12472,7 @@ var HuntCore = (() => {
                   ${skippedToday
                     ? `<button class="sync-chip pressable" style="height:var(--touch-min);padding:0 12px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, false)" aria-label="Undo skip: ${title}">Undo skip</button>`
                     : isAvoid ? avoidSlipButtonHtml(h, slips)
-                    : asked && !doneToday ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
+                    : row.focusable ? `<button class="mini-play-btn" onclick="focusHabitToday(${jsArg(h.id)})" aria-label="Start focus on ${title}">${SVG_PLAY}</button>` : ""}
                   <button class="more-dots-btn" onclick="openHabitEditorSheet(${jsArg(h.id)})" aria-label="Edit habit ${title}">${SVG_MORE}</button>
                 </div>
               </div>

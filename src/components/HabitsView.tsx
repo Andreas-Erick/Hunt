@@ -6,13 +6,13 @@ import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
 import { Check, Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { habitDayAmount, habitDaySlips, habitKindOf, habitKindRules } from "@/lib/habitKind";
+import { habitDayAmount, habitDaySlips, habitKindRules } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import * as Avoid from "./AvoidHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
 import { computeHabitStreak } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
-import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
+import { habitRowMode, habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import { isEndedHabit } from "@/lib/habitEnd";
 import { habitFrequencyLabel, habitFrequencyOn, isFrequencyAllowedFor, sameHabitFrequency } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -386,11 +386,11 @@ export function HabitsView() {
             const skippedToday = summary.skipState === "skipped";
             const isEditing = editingHabit?.id === habit.id;
             const weekly = summary.week !== null;
-            // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
-            const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
+            // A Count Habit logs +1 / an exact total, an Avoid Habit a Slip (never a tick) on a day it asks for.
+            const row = habitRowMode(habit, summary);
+            const isCount = row.mode === "count";
             const todayAmount = habitDayAmount(todayTask);
-            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
-            const isAvoid = habitKindOf(habit) === "avoid" && askedToday && !skippedToday;
+            const isAvoid = row.mode === "slip";
 
             return (
               <div
@@ -447,7 +447,7 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {askedToday && !doneToday && !skippedToday && habitKindOf(habit) !== "avoid" && (
+                      {row.focusable && (
                         <button
                           type="button"
                           onClick={() => void handleFocusToday(habit)}
