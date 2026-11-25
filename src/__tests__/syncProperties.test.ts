@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
+import type { ChecklistItem, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   mergeSyncPayloads,
@@ -56,6 +56,15 @@ const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${st
 const DURATIONS = [60, 600, 1800];
 const STATUSES: readonly TaskStatus[] = ["queued", "active", "completed", "archived"];
 const ACCENTS: readonly QuestAccent[] = ["cyan", "emerald", "amber"];
+const CHECKLISTS: readonly ChecklistItem[][] = [
+  [],
+  [{ id: "chk-1", text: "Passport", done: false }],
+  [{ id: "chk-1", text: "Passport", done: true }],
+  [
+    { id: "chk-2", text: "Charger", done: false },
+    { id: "chk-1", text: "Passport", done: true },
+  ],
+];
 
 /** Equal-stamp versions of one task share their questId (third known exception above). */
 function taskQuestId(taskIndex: number, updatedAt: number): string | null {
@@ -96,6 +105,8 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     };
     if (chance(0.3)) task.completedAt = updatedAt;
     if (chance(0.5)) task.scheduledDate = pick(["2026-11-18", "2026-11-19"]);
+    // Equal-stamp versions often hold different Checklists: R1's tie-break decides the whole row.
+    if (chance(0.4)) task.checklist = pick(CHECKLISTS);
     tasks.push(task);
   });
 
@@ -219,6 +230,7 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     let sharedIdCases = 0;
     let equalStampCases = 0;
     let tombstoneCases = 0;
+    let checklistConflictCases = 0;
 
     for (let i = 0; i < ITERATIONS; i++) {
       const seed = BASE_SEED + i;
@@ -287,6 +299,9 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
       if (sharedTaskIds.some((t) => b.tasks.some((u) => u.id === t.id && u.updatedAt === t.updatedAt))) {
         equalStampCases++;
       }
+      const differentChecklists = (t: Task) =>
+        b.tasks.some((u) => u.id === t.id && canonicalString(u.checklist) !== canonicalString(t.checklist));
+      if (sharedTaskIds.some(differentChecklists)) checklistConflictCases++;
       if (a.deletedTaskIds.length + (a.deletedQuestIds ?? []).length + a.deletedLogIds.length > 0) {
         tombstoneCases++;
       }
@@ -296,5 +311,6 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     expect(sharedIdCases).toBeGreaterThan(ITERATIONS / 2);
     expect(equalStampCases).toBeGreaterThan(ITERATIONS / 5);
     expect(tombstoneCases).toBeGreaterThan(ITERATIONS / 4);
+    expect(checklistConflictCases).toBeGreaterThan(ITERATIONS / 5);
   });
 });

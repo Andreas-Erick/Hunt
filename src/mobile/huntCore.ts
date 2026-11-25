@@ -19,10 +19,18 @@ export {
 } from "../lib/dateUtils";
 export { completionDateKey } from "../lib/habitDay";
 export {
+  applyChecklistEdit,
+  canHoldChecklist,
+  checklistOf,
+  checklistProgress,
+  newChecklistItemId,
+} from "../lib/checklist";
+export {
   canonicalString,
   compareRank,
   isSafeSyncId,
   losingSessionEndAt,
+  MAX_CHECKLIST_TEXT_LENGTH,
   mergeSyncPayloads,
   sameContent,
   SYNCED_ENTITY_KEYS,

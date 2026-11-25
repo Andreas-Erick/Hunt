@@ -14,6 +14,7 @@ import {
 } from "@/lib/taskCompletionMotion";
 import { useCommandStore } from "@/store/useCommandStore";
 import { TaskNotesField } from "./TaskNotesField";
+import { ChecklistProgressBadge, TaskChecklistEditor } from "./TaskChecklist";
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import type { QueueRowReorderHandlers } from "./useQueueReorder";
 import { HeightReveal } from "./HeightReveal";
@@ -186,6 +187,7 @@ function MaintenanceTaskRow({
           </span>
 
           {task.habitId && <DailyHabitBadge />}
+          <ChecklistProgressBadge task={task} />
 
           <button
             type="button"
@@ -305,6 +307,7 @@ function QueueTaskRow({
             )}
 
             {task.habitId && <DailyHabitBadge />}
+            <ChecklistProgressBadge task={task} />
 
             {/* Timer / Play Button */}
             {isCurrentlyActive && isRunning ? (
@@ -378,6 +381,8 @@ function QueueTaskRow({
             aria-label={`Notes for ${task.title}`}
             className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-neutral-200 placeholder:text-hud-muted focus:border-accent/50 focus:outline-none"
           />
+
+          <TaskChecklistEditor task={task} />
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -516,6 +521,8 @@ function CompletedTaskRow({
               {questLabel}
             </span>
           </span>
+
+          <ChecklistProgressBadge task={task} />
 
           {task.accumulatedSeconds > 0 && (
             <span className="shrink-0 font-mono text-xs tabular-nums text-hud-muted">
