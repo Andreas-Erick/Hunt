@@ -82,6 +82,11 @@ associativity and idempotence over 400 seeds.
   same way: the later Habit row wins with both. The
   validator keeps only valid date keys
   (`sanitizeHabitEnd`), at most 100 stretches.
+- A Count Habit stores one running total per day, and the
+  whole row wins or loses. If two devices each add to the
+  same day while out of sync, one of the additions is lost.
+  This is accepted: one person rarely logs on two devices
+  at once.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator (in its own module: `lists.ts` for Lists), a
