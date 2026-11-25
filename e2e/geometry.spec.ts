@@ -117,6 +117,38 @@ async function expectNoHorizontalOverflow(
   }
 }
 
+/**
+ * The Checklist editor (`[role=group][aria-label=Checklist]`) keeps every item control inside its
+ * own box (a card with overflow hidden would clip, not scroll, so the page check cannot see it),
+ * and each control is at least `minTarget` px square.
+ */
+async function checkChecklistEditor(
+  page: Page,
+  editor: ReturnType<Page["locator"]>,
+  minTarget: number,
+  where: string,
+  failures: string[]
+): Promise<void> {
+  await expect(editor).toBeVisible();
+  await settle(page);
+  const problems = await editor.evaluate((root, min) => {
+    const box = root.getBoundingClientRect();
+    const out: string[] = [];
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>("button, input"))) {
+      const r = el.getBoundingClientRect();
+      const name = el.getAttribute("aria-label") || el.tagName.toLowerCase();
+      if (r.right > box.right + 1 || r.left < box.left - 1) {
+        out.push(`"${name.slice(0, 40)}" spans x=${Math.round(r.left)}..${Math.round(r.right)} outside ${Math.round(box.left)}..${Math.round(box.right)}`);
+      }
+      if (el.tagName === "BUTTON" && (r.width < min - 0.5 || r.height < min - 0.5)) {
+        out.push(`"${name.slice(0, 40)}" is ${Math.round(r.width)}x${Math.round(r.height)}px (< ${min}px)`);
+      }
+    }
+    return out;
+  }, minTarget);
+  for (const p of problems) failures.push(`${where} Checklist: ${p}`);
+}
+
 // ---------------------------------------------------------------------------
 // Desktop app (/)
 // ---------------------------------------------------------------------------
@@ -234,6 +266,14 @@ test.describe(`desktop app geometry (${look})`, () => {
         if (view.nav === "Review") await checkReviewScopeMenu(page, vp, failures);
       }
 
+      // The Checklist editor inside the long Task's drawer (n/m progress shows on its row).
+      await clickDesktopNav(page, "Home");
+      const longRow = page.locator("[data-testid='task-row'][data-task-id='task-long']");
+      await expect(longRow.getByLabel("Checklist: 1 of 3 done")).toBeVisible();
+      await longRow.getByTitle("Task notes & options").click();
+      await checkChecklistEditor(page, longRow.getByRole("group", { name: "Checklist" }), 32, `${label(vp)} desktop Home`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Home drawer`);
+
       // Focus hides the header, so it goes last.
       await clickDesktopNav(page, "Focus");
       await expect(page.locator("header")).toHaveCount(0);
@@ -324,6 +364,16 @@ test.describe(`phone app geometry (${look})`, () => {
           await checkTabletPlanTitles(page, vp, failures);
         }
       }
+
+      // Task Options of the long Task: its Checklist editor (48px Android targets).
+      await openMobileView(page, MOBILE_VIEWS[0]);
+      await expect(page.getByLabel("Checklist: 1 of 3 done").first()).toBeVisible();
+      await page.evaluate(() => {
+        (window as unknown as { openTaskInspectorSheet: (id: string) => void }).openTaskInspectorSheet("task-long");
+      });
+      const sheetEditor = page.locator("#sheetContainer").getByRole("group", { name: "Checklist" });
+      await checkChecklistEditor(page, sheetEditor, 48, `${label(vp)} phone-app Task Options`, failures);
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Task Options`);
 
       expect(failures, failures.join("\n")).toEqual([]);
     });

@@ -1,4 +1,6 @@
 import { db, loadSortedQuests } from "./db";
+import { applyChecklistEdit, type ChecklistEdit } from "./checklist";
+import { clampLength, clampTitle } from "./textLimits";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
 import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
@@ -85,39 +87,24 @@ function changed<T>(wrote: T, options?: LocalWriteOptions): T {
   return wrote;
 }
 
-/**
- * Trimmed `title` cut to at most `max` UTF-16 units without splitting a
- * surrogate pair (the same cut the sync validator applies), so the server
- * never has to change a title saved here.
- */
-export function clampTitle(title: string, max: number): string {
-  return clampLength(title.trim(), max);
-}
-
-/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair (not trimmed). */
-export function clampLength(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
 function newId(prefix: string, now: number): string {
   return `${prefix}-${now}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /**
- * Writes `changes` to an existing task with an R6 stamp, reading the row in the
- * same rw transaction (so a flush or sync that just wrote it is seen). Returns
- * false when the task does not exist.
+ * Writes `changes` (or `changes(row)`; null writes nothing) to an existing task with an R6 stamp,
+ * reading the row in the same rw transaction (so a flush or sync that just wrote it is seen).
+ * Returns false when the task does not exist or nothing was written.
  */
 async function writeTask(
   taskId: string,
-  changes: Partial<Omit<Task, "id" | "updatedAt">>
+  changes: Partial<Omit<Task, "id" | "updatedAt">> | ((row: Task) => Partial<Task> | null)
 ): Promise<boolean> {
   return db.transaction("rw", db.tasks, async () => {
     const row = await db.tasks.get(taskId);
-    if (!row) return false;
-    await db.tasks.update(taskId, { ...changes, updatedAt: nextStamp(row) });
+    const patch = row && (typeof changes === "function" ? changes(row) : changes);
+    if (!row || !patch) return false;
+    await db.tasks.update(taskId, { ...patch, updatedAt: nextStamp(row) });
     return true;
   });
 }
@@ -212,6 +199,14 @@ async function updateTask(taskId: string, updates: TaskChanges): Promise<boolean
   return changed(await writeTask(taskId, changes));
 }
 
+/** One Checklist edit by the shared rule (the phone's too); false when refused, e.g. on a habit day Task. */
+async function editChecklist(taskId: string, edit: ChecklistEdit): Promise<boolean> {
+  return changed(await writeTask(taskId, (row) => {
+    const checklist = applyChecklistEdit(row, edit);
+    return checklist && { checklist };
+  }));
+}
+
 /**
  * Completes a task with the shared rule (completeTaskRow, the phone's too),
  * reading the row in the same rw transaction. False when it does not exist.
@@ -220,7 +215,7 @@ async function completeTask(taskId: string, completedAt: number = Date.now()): P
   const done = await db.transaction("rw", db.tasks, async () => {
     const row = await db.tasks.get(taskId);
     if (!row) return false;
-    await db.tasks.update(taskId, completeTaskRow(row, completedAt));
+    await db.tasks.update(taskId, { ...completeTaskRow(row, completedAt) });
     return true;
   });
   return changed(done);
@@ -578,6 +573,7 @@ async function deleteTimeLog(logId: string): Promise<void> {
 export const localStore = {
   createTask,
   updateTask,
+  editChecklist,
   completeTask,
   reopenTask,
   deleteTask,
