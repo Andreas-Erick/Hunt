@@ -3045,6 +3045,7 @@ var HuntCore = (() => {
   __export(huntCore_exports, {
     HABIT_WEEKDAYS: () => HABIT_WEEKDAYS,
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
+    MAX_TIMES_PER_WEEK: () => MAX_TIMES_PER_WEEK,
     REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
     REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
@@ -3068,6 +3069,7 @@ var HuntCore = (() => {
     habitDayOutcome: () => habitDayOutcome,
     habitFrequencyLabel: () => habitFrequencyLabel,
     habitFrequencyOn: () => habitFrequencyOn,
+    habitSkipRows: () => habitSkipRows,
     habitStreakOf: () => habitStreakOf,
     habitTaskId: () => habitTaskId,
     habitTodayTally: () => habitTodayTally,
@@ -3123,13 +3125,19 @@ var HuntCore = (() => {
     if (a.type === "weekdays" && b.type === "weekdays") {
       return normalizedWeekdays(a.weekdays).join() === normalizedWeekdays(b.weekdays).join();
     }
+    if (a.type === "perWeek" && b.type === "perWeek") return a.times === b.times;
     return true;
   }
   function normalizedWeekdays(weekdays) {
     return Array.from(new Set(weekdays)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b);
   }
   function normalizedFrequency(frequency) {
+    if (frequency.type === "perWeek") return { type: "perWeek", times: frequency.times };
     return frequency.type === "weekdays" ? { type: "weekdays", weekdays: normalizedWeekdays(frequency.weekdays) } : EVERY_DAY;
+  }
+  var MAX_TIMES_PER_WEEK = 7;
+  function isPerWeekFrequency(frequency) {
+    return frequency.type === "perWeek";
   }
   function withHabitFrequency(habit, frequency, todayKey) {
     var _a;
@@ -3140,6 +3148,7 @@ var HuntCore = (() => {
   }
   function habitFrequencyLabel(frequency) {
     if (frequency.type === "everyDay") return "Every day";
+    if (frequency.type === "perWeek") return frequency.times === 1 ? "Once a week" : `${frequency.times} times a week`;
     return WEEK_ORDER.filter((d) => frequency.weekdays.includes(d)).map((d) => WEEKDAY_SHORT[d]).join(", ");
   }
   var WEEKDAY_NAME = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -3156,6 +3165,10 @@ var HuntCore = (() => {
       const weekdays = normalizedWeekdays(raw.weekdays.filter((d) => typeof d === "number"));
       return weekdays.length > 0 ? { type: "weekdays", weekdays } : null;
     }
+    const { times } = raw;
+    if (raw.type === "perWeek" && Number.isInteger(times) && Number(times) >= 1 && Number(times) <= MAX_TIMES_PER_WEEK) {
+      return { type: "perWeek", times: Number(times) };
+    }
     return null;
   }
 
@@ -3165,7 +3178,7 @@ var HuntCore = (() => {
     if ((dayTask == null ? void 0 : dayTask.status) === "completed") return "met";
     if (dayTask == null ? void 0 : dayTask.skipped) return "skipped";
     if (dayKey === todayKey || (dayTask == null ? void 0 : dayTask.status) === "active") return "open";
-    return "missed";
+    return habitFrequencyOn(habit, dayKey).type === "perWeek" ? null : "missed";
   }
   function habitStreakOf(outcomes) {
     let streak = 0;
@@ -3233,6 +3246,56 @@ var HuntCore = (() => {
       }),
       firstDayKey
     );
+  }
+
+  // src/lib/habitWeek.ts
+  function habitWeekStart(dayKey) {
+    return dateKeyFromOffset(dayKey, -((weekdayOfKey(dayKey) + 6) % 7));
+  }
+  function habitWeekDays(weekStart) {
+    return Array.from({ length: 7 }, (_, i) => dateKeyFromOffset(weekStart, i));
+  }
+  function habitWeekOf(habit, dayKey, dayTaskOn, todayKey, firstDayKey) {
+    const start = habitWeekStart(dayKey);
+    const days = habitWeekDays(start);
+    const frequencies = days.map((day) => habitFrequencyOn(habit, day));
+    const perWeek = frequencies.filter(isPerWeekFrequency);
+    if (perWeek.length === 0) return null;
+    const inForce = habitFrequencyOn(habit, todayKey < days[6] ? todayKey : days[6]);
+    const target = isPerWeekFrequency(inForce) ? inForce.times : perWeek[0].times;
+    const partial = start < firstDayKey || perWeek.length < 7 || perWeek.some((f) => f.times !== perWeek[0].times);
+    const tasks = days.map(dayTaskOn);
+    const met = tasks.filter((t) => (t == null ? void 0 : t.status) === "completed").length;
+    const skipped = tasks.some((t) => Boolean(t == null ? void 0 : t.skipped));
+    let outcome;
+    if (start > todayKey) outcome = null;
+    else if (partial) outcome = "skipped";
+    else if (met >= target) outcome = "met";
+    else if (skipped) outcome = "skipped";
+    else if (days[6] >= todayKey || tasks.some((t) => (t == null ? void 0 : t.status) === "active")) outcome = "open";
+    else outcome = "missed";
+    return { start, target, met, skipped, partial, outcome };
+  }
+  function frequencyUnitStart(habit, todayKey) {
+    var _a;
+    let weekly = false;
+    let start = "";
+    for (const change of (_a = habit.frequencyHistory) != null ? _a : []) {
+      if (change.effectiveFrom > todayKey) break;
+      if (isPerWeekFrequency(change.frequency) === weekly) continue;
+      weekly = !weekly;
+      start = change.effectiveFrom;
+    }
+    return start;
+  }
+  function habitWeekStreakOn(todayKey, weekOutcomeOn, firstDayKey) {
+    const floor = habitWeekStart(firstDayKey);
+    function* weeksBack() {
+      for (let week = habitWeekStart(todayKey); week >= floor; week = dateKeyFromOffset(week, -7)) {
+        yield weekOutcomeOn(week);
+      }
+    }
+    return habitStreakOf(weeksBack());
   }
 
   // src/lib/habitDay.ts
@@ -3305,12 +3368,29 @@ var HuntCore = (() => {
           const completedDates = (_a = datesByHabit.get(habitId)) != null ? _a : EMPTY_DATES;
           const dayTasks = dayTasksByHabit.get(habitId);
           const habit = (_b = habitById.get(habitId)) != null ? _b : { id: habitId };
-          const outcomeOn = (dayKey) => habitDayOutcome({ habit, dayKey, dayTask: dayTasks == null ? void 0 : dayTasks.get(dayKey), todayKey });
+          const dayTaskOn = (dayKey) => dayTasks == null ? void 0 : dayTasks.get(dayKey);
+          const outcomeOn = (dayKey) => habitDayOutcome({ habit, dayKey, dayTask: dayTaskOn(dayKey), todayKey });
+          const firstDay = firstHabitDay(habit, dayTasks, todayKey);
+          const weekOn = (dayKey) => habitWeekOf(habit, dayKey, dayTaskOn, todayKey, firstDay);
+          const weekOutcomeOn = (dayKey) => {
+            var _a2, _b2;
+            return (_b2 = (_a2 = weekOn(dayKey)) == null ? void 0 : _a2.outcome) != null ? _b2 : null;
+          };
+          const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
+          const week = weekly ? weekOn(todayKey) : null;
+          const doneToday = (todayTask == null ? void 0 : todayTask.status) === "completed";
+          const unitStart = frequencyUnitStart(habit, todayKey);
+          const streakFrom = unitStart > firstDay ? unitStart : firstDay;
           summary = {
             todayTask,
             completedDates,
-            streak: habitStreakOn(todayKey, outcomeOn, firstHabitDay(habit, dayTasks, todayKey)),
-            doneToday: (todayTask == null ? void 0 : todayTask.status) === "completed",
+            streak: weekly ? habitWeekStreakOn(todayKey, weekOutcomeOn, streakFrom) : habitStreakOn(todayKey, outcomeOn, streakFrom),
+            streakUnit: weekly ? "week" : "day",
+            doneToday,
+            askedToday: week ? week.met - (doneToday ? 1 : 0) < week.target : isHabitScheduledOn(habit, todayKey),
+            skipState: !week ? outcomeOn(todayKey) : week.met >= week.target ? "met" : week.skipped ? "skipped" : "open",
+            week,
+            weekOutcomeOn,
             outcomeOn
           };
           cache.set(habitId, summary);
@@ -3319,13 +3399,15 @@ var HuntCore = (() => {
       }
     };
   }
-  function habitTodayTally(habits, summaryFor, todayKey) {
+  function habitWantsDayTask(summary) {
+    return summary.askedToday && summary.skipState !== "skipped";
+  }
+  function habitTodayTally(habits, summaryFor, _todayKey) {
     let done = 0;
     let asked = 0;
     for (const habit of habits) {
-      if (!isHabitScheduledOn(habit, todayKey)) continue;
       const summary = summaryFor(habit.id);
-      if (summary.outcomeOn(todayKey) === "skipped") continue;
+      if (!habitWantsDayTask(summary)) continue;
       asked += 1;
       if (summary.doneToday) done += 1;
     }
@@ -3663,6 +3745,110 @@ var HuntCore = (() => {
     };
   }
 
+  // src/lib/taskQueue.ts
+  function sessionLogId(taskId, sessionStartedAt) {
+    return `log-${sessionStartedAt}-${taskId}`;
+  }
+  function burstSeconds(sessionStartedAt, endAt) {
+    return Math.max(1, Math.round((endAt - sessionStartedAt) / 1e3));
+  }
+  function buildBurstLog(task, quest, sessionStartedAt, endAt) {
+    return {
+      id: sessionLogId(task.id, sessionStartedAt),
+      taskId: task.id,
+      taskTitleSnapshot: task.title,
+      questId: task.questId,
+      questCodeSnapshot: quest ? quest.title : "Other",
+      accentColorSnapshot: quest ? quest.accentColor : "slate",
+      startTime: sessionStartedAt,
+      endTime: endAt,
+      durationSeconds: burstSeconds(sessionStartedAt, endAt),
+      dateKey: toLocalDateKey(endAt)
+    };
+  }
+  function pickNextFocusTask(tasks, todayKey) {
+    var _a, _b;
+    const today = tasks.filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
+    return (_b = (_a = today.find((t) => t.questId !== null)) != null ? _a : today[0]) != null ? _b : null;
+  }
+  var RANK_STEP = 1e3;
+  function buildHabitTaskRow(habit, dateKey) {
+    const stamp = Math.max(1, Number(habit.createdAt) || 1);
+    return {
+      id: habitTaskId(habit.id, dateKey),
+      title: habit.title,
+      notes: habit.notes || "",
+      questId: habit.questId || null,
+      habitId: habit.id,
+      status: "queued",
+      rank: Number.isFinite(habit.rank) ? habit.rank : RANK_STEP,
+      accumulatedSeconds: 0,
+      scheduledDate: dateKey,
+      createdAt: stamp,
+      updatedAt: stamp
+    };
+  }
+  function missingHabitRows(state, dateKey) {
+    var _a, _b, _c, _d;
+    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
+    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
+    const habits = ((_c = state.habits) != null ? _c : []).filter((h) => !known.has(habitTaskId(h.id, dateKey)));
+    if (habits.length === 0) return [];
+    const { summaryFor } = summarizeHabitDays((_d = state.tasks) != null ? _d : [], dateKey, habits);
+    return habits.filter((h) => habitWantsDayTask(summaryFor(h.id))).map((h) => buildHabitTaskRow(h, dateKey));
+  }
+  function todayTaskForFrequency(habit, todayTask, todayKey) {
+    if (isHabitScheduledOn(habit, todayKey)) {
+      if (!todayTask) return buildHabitTaskRow(habit, todayKey);
+      return todayTask.status === "archived" ? { ...todayTask, status: "queued" } : todayTask;
+    }
+    if (!todayTask || todayTask.status !== "queued" || (todayTask.accumulatedSeconds || 0) > 0) return todayTask;
+    return { ...todayTask, status: "archived" };
+  }
+  function habitTodayTaskAfterEdit(before, after, todayTask, todayKey, now = Date.now()) {
+    var _a, _b;
+    const frequencyChanged = JSON.stringify((_a = before.frequencyHistory) != null ? _a : []) !== JSON.stringify((_b = after.frequencyHistory) != null ? _b : []);
+    const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+    if (!task) return null;
+    const next = { ...task };
+    if (next.status === "queued" || next.status === "active") {
+      next.title = after.title;
+      next.questId = after.questId;
+      if ((next.notes || "") === (before.notes || "")) next.notes = after.notes;
+    }
+    if (!todayTask) return next;
+    if (JSON.stringify(next) === JSON.stringify(todayTask)) return null;
+    return { ...next, updatedAt: nextStamp(todayTask, now) };
+  }
+  function nextStamp(row, now = Date.now()) {
+    return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
+  }
+  function completeTaskRow(task, completedAt) {
+    const done = {
+      ...task,
+      status: "completed",
+      completedAt,
+      updatedAt: nextStamp(task, completedAt)
+    };
+    if (done.skipped) done.skipped = void 0;
+    return done;
+  }
+  function skipHabitDayRow(task, skipped, at) {
+    return { ...task, skipped: skipped || void 0, updatedAt: nextStamp(task, at) };
+  }
+
+  // src/lib/habitSkip.ts
+  function habitSkipRows(habit, dayKey, habitTasks, skipped, at) {
+    var _a;
+    const byId = new Map(habitTasks.filter((t) => t.habitId === habit.id).map((t) => [t.id, t]));
+    const dayRow = (day) => byId.get(habitTaskId(habit.id, day));
+    const days = isPerWeekFrequency(habitFrequencyOn(habit, dayKey)) ? habitWeekDays(habitWeekStart(dayKey)) : [dayKey];
+    const flagged = days.map(dayRow).filter((t) => Boolean(t == null ? void 0 : t.skipped));
+    if (!skipped) return flagged.map((t) => skipHabitDayRow(t, false, at));
+    if (flagged.length > 0) return [];
+    return [skipHabitDayRow((_a = dayRow(dayKey)) != null ? _a : buildHabitTaskRow(habit, dayKey), true, at)];
+  }
+
   // src/lib/domainTypes.ts
   var QUEST_ACCENT_KEYS = [
     "cyan",
@@ -3786,95 +3972,6 @@ var HuntCore = (() => {
     }
   }
 
-  // src/lib/taskQueue.ts
-  function sessionLogId(taskId, sessionStartedAt) {
-    return `log-${sessionStartedAt}-${taskId}`;
-  }
-  function burstSeconds(sessionStartedAt, endAt) {
-    return Math.max(1, Math.round((endAt - sessionStartedAt) / 1e3));
-  }
-  function buildBurstLog(task, quest, sessionStartedAt, endAt) {
-    return {
-      id: sessionLogId(task.id, sessionStartedAt),
-      taskId: task.id,
-      taskTitleSnapshot: task.title,
-      questId: task.questId,
-      questCodeSnapshot: quest ? quest.title : "Other",
-      accentColorSnapshot: quest ? quest.accentColor : "slate",
-      startTime: sessionStartedAt,
-      endTime: endAt,
-      durationSeconds: burstSeconds(sessionStartedAt, endAt),
-      dateKey: toLocalDateKey(endAt)
-    };
-  }
-  function pickNextFocusTask(tasks, todayKey) {
-    var _a, _b;
-    const today = tasks.filter((t) => t.status === "queued" && isTaskVisibleToday(t, todayKey)).sort(compareRank);
-    return (_b = (_a = today.find((t) => t.questId !== null)) != null ? _a : today[0]) != null ? _b : null;
-  }
-  var RANK_STEP = 1e3;
-  function buildHabitTaskRow(habit, dateKey) {
-    const stamp = Math.max(1, Number(habit.createdAt) || 1);
-    return {
-      id: habitTaskId(habit.id, dateKey),
-      title: habit.title,
-      notes: habit.notes || "",
-      questId: habit.questId || null,
-      habitId: habit.id,
-      status: "queued",
-      rank: Number.isFinite(habit.rank) ? habit.rank : RANK_STEP,
-      accumulatedSeconds: 0,
-      scheduledDate: dateKey,
-      createdAt: stamp,
-      updatedAt: stamp
-    };
-  }
-  function missingHabitRows(state, dateKey) {
-    var _a, _b, _c;
-    const known = new Set(((_a = state.tasks) != null ? _a : []).map((t) => t.id));
-    for (const id of (_b = state.deletedTaskIds) != null ? _b : []) known.add(id);
-    return ((_c = state.habits) != null ? _c : []).filter((h) => isHabitScheduledOn(h, dateKey) && !known.has(habitTaskId(h.id, dateKey))).map((h) => buildHabitTaskRow(h, dateKey));
-  }
-  function todayTaskForFrequency(habit, todayTask, todayKey) {
-    if (isHabitScheduledOn(habit, todayKey)) {
-      if (!todayTask) return buildHabitTaskRow(habit, todayKey);
-      return todayTask.status === "archived" ? { ...todayTask, status: "queued" } : todayTask;
-    }
-    if (!todayTask || todayTask.status !== "queued" || (todayTask.accumulatedSeconds || 0) > 0) return todayTask;
-    return { ...todayTask, status: "archived" };
-  }
-  function habitTodayTaskAfterEdit(before, after, todayTask, todayKey, now = Date.now()) {
-    var _a, _b;
-    const frequencyChanged = JSON.stringify((_a = before.frequencyHistory) != null ? _a : []) !== JSON.stringify((_b = after.frequencyHistory) != null ? _b : []);
-    const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
-    if (!task) return null;
-    const next = { ...task };
-    if (next.status === "queued" || next.status === "active") {
-      next.title = after.title;
-      next.questId = after.questId;
-      if ((next.notes || "") === (before.notes || "")) next.notes = after.notes;
-    }
-    if (!todayTask) return next;
-    if (JSON.stringify(next) === JSON.stringify(todayTask)) return null;
-    return { ...next, updatedAt: nextStamp(todayTask, now) };
-  }
-  function nextStamp(row, now = Date.now()) {
-    return Math.max(now, ((row == null ? void 0 : row.updatedAt) || 0) + 1);
-  }
-  function completeTaskRow(task, completedAt) {
-    const done = {
-      ...task,
-      status: "completed",
-      completedAt,
-      updatedAt: nextStamp(task, completedAt)
-    };
-    if (done.skipped) done.skipped = void 0;
-    return done;
-  }
-  function skipHabitDayRow(task, skipped, at) {
-    return { ...task, skipped: skipped || void 0, updatedAt: nextStamp(task, at) };
-  }
-
   // src/lib/questProgress.ts
   var QUEST_WEEK_DAYS = 7;
   function rollingWeekKeys(todayKey) {
@@ -3968,7 +4065,10 @@ var HuntCore = (() => {
           met: p.met
         };
       }),
-      streaks: ((_e = state.habits) != null ? _e : []).slice().sort(compareRank).map((h) => ({ title: h.title, days: summaryFor(h.id).streak }))
+      streaks: ((_e = state.habits) != null ? _e : []).slice().sort(compareRank).map((h) => {
+        const { streak, streakUnit } = summaryFor(h.id);
+        return streakUnit === "week" ? { title: h.title, days: streak, unit: "week" } : { title: h.title, days: streak };
+      })
     };
   }
   function buildWidgetStats(state, todayKey) {
@@ -8278,12 +8378,23 @@ var HuntCore = (() => {
           }).join("")}
         </div>
         ${chosen.length ? "" : `<div style="margin:-8px 0 16px;font-size:12px;color:var(--dim);">Pick at least one day</div>`}` : "";
+      const times = habitFrequencyDraft.type === "perWeek" ? habitFrequencyDraft.times : null;
+      const timesRow = times !== null ? `
+        <div class="sheet-pill-group" role="group" aria-label="Times per Habit Week">
+          ${Array.from({ length: HuntCore.MAX_TIMES_PER_WEEK }, (_, i) => i + 1).map(n => {
+            const label = habitFrequencyLabel({ type: "perWeek", times: n });
+            return `<button class="sheet-pill weekday-pill ${n === times ? "selected" : ""}" aria-label="${label}" aria-pressed="${n === times}" onclick="setHabitTimesPerWeek(${jsArg(n)})">${n}</button>`;
+          }).join("")}
+        </div>
+        <div style="margin:-8px 0 16px;font-size:12px;color:var(--dim);">Per week, Monday to Sunday</div>` : "";
+      const daily = !chosen && times === null;
       return `
         <div class="sheet-pill-group" role="group" aria-label="Habit frequency">
-          <button class="sheet-pill ${chosen ? "" : "selected"}" aria-label="Every day" aria-pressed="${!chosen}" onclick="setHabitFrequencyType('everyDay')">Every day</button>
+          <button class="sheet-pill ${daily ? "selected" : ""}" aria-label="Every day" aria-pressed="${daily}" onclick="setHabitFrequencyType('everyDay')">Every day</button>
           <button class="sheet-pill ${chosen ? "selected" : ""}" aria-label="Chosen days" aria-pressed="${!!chosen}" onclick="setHabitFrequencyType('weekdays')">Chosen days</button>
+          <button class="sheet-pill ${times !== null ? "selected" : ""}" aria-label="Times a week" aria-pressed="${times !== null}" onclick="setHabitFrequencyType('perWeek')">Times a week</button>
         </div>
-        ${weekdays}`;
+        ${weekdays}${timesRow}`;
     }
 
     // Redraws the picker in place and puts focus back on the chip that was pressed.
@@ -8298,8 +8409,19 @@ var HuntCore = (() => {
     function setHabitFrequencyType(type) {
       playClickSound();
       if (type === "everyDay") habitFrequencyDraft = { type: "everyDay" };
-      else if (habitFrequencyDraft.type !== "weekdays") habitFrequencyDraft = { type: "weekdays", weekdays: [] };
-      renderHabitFrequencyPicker(type === "everyDay" ? "Every day" : "Chosen days");
+      else if (type === "perWeek") {
+        // A fresh "Times a week" choice starts at 3, as on the desktop.
+        if (habitFrequencyDraft.type !== "perWeek") habitFrequencyDraft = { type: "perWeek", times: 3 };
+      } else if (habitFrequencyDraft.type !== "weekdays") habitFrequencyDraft = { type: "weekdays", weekdays: [] };
+      renderHabitFrequencyPicker(type === "everyDay" ? "Every day" : type === "perWeek" ? "Times a week" : "Chosen days");
+    }
+
+    function setHabitTimesPerWeek(timesArg) {
+      const times = Number(timesArg); // jsArg passes the count as a string
+      if (habitFrequencyDraft.type !== "perWeek") return;
+      playClickSound();
+      habitFrequencyDraft = { type: "perWeek", times };
+      renderHabitFrequencyPicker(habitFrequencyLabel(habitFrequencyDraft));
     }
 
     function toggleHabitWeekday(dayArg) {
@@ -8436,16 +8558,18 @@ var HuntCore = (() => {
     }
 
     // The sheet's "Skip today" row: only for a scheduled day still waiting to be done (not ticked,
-    // not Skipped, no focus running on it). An unscheduled day has no Outcome, so no row.
+    // not Skipped, no focus running on it). An unscheduled day has no Outcome, so no row. An N per
+    // week Habit skips its whole Habit Week instead (the shared skipState).
     function habitSkipTodayHtml(h) {
       const todayKey = toLocalDateKey();
       const today = summarizeHabitDays(state.tasks, todayKey, asArray(state.habits)).summaryFor(h.id);
-      if (today.outcomeOn(todayKey) !== "open" || (today.todayTask && today.todayTask.status === "active")) return "";
+      if (today.skipState !== "open" || (today.todayTask && today.todayTask.status === "active")) return "";
+      const period = today.week ? "this week" : "today";
       return `
-          <div class="sheet-label">Today</div>
+          <div class="sheet-label">${today.week ? "This week" : "Today"}</div>
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:12px;">
-            <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 16px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, true)" aria-label="Skip today: ${escapeHtml(h.title)}">Skip today</button>
-            <span style="font-size:12px;color:var(--muted);line-height:1.35;flex:1;min-width:160px;">Sick or travelling? A Skipped day neither breaks nor adds to the streak.</span>
+            <button class="sync-chip pressable" style="height:var(--touch-min);padding:0 16px;" onclick="setHabitTodaySkipped(${jsArg(h.id)}, true)" aria-label="Skip ${period}: ${escapeHtml(h.title)}">Skip ${period}</button>
+            <span style="font-size:12px;color:var(--muted);line-height:1.35;flex:1;min-width:160px;">Sick or travelling? A Skipped ${today.week ? "week" : "day"} neither breaks nor adds to the streak.</span>
           </div>`;
     }
 
@@ -8549,26 +8673,29 @@ var HuntCore = (() => {
       else completeTaskDirect(t.id);
     }
 
-    // Sets today's day of a Habit aside (Skipped) or back to an ordinary day, with the shared rule
-    // (HuntCore.skipHabitDayRow, the desktop's too). A Skipped day leaves Today and the Day Widget and
-    // neither adds to nor breaks the Streak.
+    // Sets today's day of a Habit aside (Skipped) or back to an ordinary day, or for an N per week
+    // Habit its whole Habit Week, with the shared rule (HuntCore.habitSkipRows, the desktop's too).
+    // A Skipped day or week leaves Today and the Day Widget and neither adds to nor breaks the Streak.
     function setHabitTodaySkipped(habitId, skipped) {
       const todayKey = toLocalDateKey();
-      const tid = habitTaskId(habitId, todayKey);
-      let t = state.tasks.find(x => x.id === tid);
-      if (!t) {
-        const h = asArray(state.habits).find(x => x.id === habitId);
-        if (!h || !isHabitScheduledOn(h, todayKey)) return;
-        state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== tid);
-        t = buildHabitTaskRow(h, todayKey);
-        state.tasks.push(t);
-        state.tasks.sort(compareRank);
-      }
+      const h = asArray(state.habits).find(x => x.id === habitId);
       closeSheet();
-      if (Boolean(t.skipped) === Boolean(skipped)) return;
+      if (!h || !isHabitScheduledOn(h, todayKey)) return;
+      const rows = HuntCore.habitSkipRows(h, todayKey, state.tasks, Boolean(skipped), Date.now());
+      if (rows.length === 0) return;
       playClickSound();
-      Object.assign(t, HuntCore.skipHabitDayRow(t, Boolean(skipped), Date.now()));
-      if (!t.skipped) delete t.skipped;
+      rows.forEach(row => {
+        if (!row.skipped) delete row.skipped;
+        const held = state.tasks.find(x => x.id === row.id);
+        if (held) {
+          Object.assign(held, row);
+          if (!row.skipped) delete held.skipped;
+        } else {
+          state.deletedTaskIds = asArray(state.deletedTaskIds).filter(id => id !== row.id);
+          state.tasks.push(row);
+        }
+      });
+      state.tasks.sort(compareRank);
       commitLocalChange();
     }
 
@@ -10541,10 +10668,11 @@ var HuntCore = (() => {
           ) : `<div class="habits-grid">` + habitsList.map(h => {
             const q = state.quests.find(x => x.id === h.questId);
             const hex = ACCENT_HEX[q ? q.accentColor : "slate"] || ACCENT_HEX.slate;
-            const { doneToday, streak, outcomeOn } = habitDays.summaryFor(h.id);
-            const skippedToday = outcomeOn(todayKey) === "skipped";
+            const { doneToday, streak, streakUnit, outcomeOn, askedToday: asked, skipState, week } = habitDays.summaryFor(h.id);
+            // An N per week Habit is set aside (and judged) by its whole Habit Week.
+            const skippedToday = skipState === "skipped";
+            const period = week ? "this week" : "today";
             const title = escapeHtml(h.title);
-            const asked = isHabitScheduledOn(h, todayKey);
             const frequencyLabel = escapeHtml(habitFrequencyLabel(habitFrequencyOn(h, todayKey)));
             const dotsHtml = recentDays.map(dk => {
               const outcome = outcomeOn(dk);
@@ -10558,12 +10686,12 @@ var HuntCore = (() => {
             return `
               <div class="queue-item-card ${doneToday ? "completed" : ""}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px;">
                 <div class="card-edge-bar" style="background:${hex};"></div>
-                ${asked ? `<button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">` : `<button class="task-check-ring" style="margin-top:2px;" disabled aria-label="Not scheduled today: ${title}">`}
+                ${asked ? `<button class="task-check-ring ${doneToday ? "done" : ""}" style="${doneToday ? `background:${hex};` : ""}margin-top:2px;" onclick="toggleHabitToday(${jsArg(h.id)})" aria-label="${doneToday ? "Reopen" : "Complete"} today's habit ${title}" aria-pressed="${doneToday}">` : `<button class="task-check-ring" style="margin-top:2px;" disabled aria-label="${week ? "Not asked again this week" : "Not scheduled today"}: ${title}">`}
                   ${SVG_CHECK}
                 </button>
                 <div class="queue-item-body" role="button" onclick="openHabitEditorSheet(${jsArg(h.id)})">
                   <div class="queue-item-title" style="${doneToday ? "text-decoration:line-through;color:var(--muted);" : skippedToday ? "color:var(--muted);" : ""}">${title}</div>
-                  ${skippedToday ? `<div style="font-size:12px;color:var(--muted);margin-top:-2px;">Skipped today</div>` : ""}
+                  ${skippedToday ? `<div style="font-size:12px;color:var(--muted);margin-top:-2px;">Skipped ${period}</div>` : ""}
                   ${h.notes ? `<div style="font-size:12px;color:var(--dim);margin-top:3px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(h.notes)}</div>` : ""}
                   <div class="queue-item-sub" style="margin-top:8px;flex-wrap:wrap;justify-content:space-between;gap:6px 10px;">
                     <span style="display:inline-flex;align-items:center;gap:5px;min-width:0;flex:1;">
@@ -10573,7 +10701,8 @@ var HuntCore = (() => {
                     </span>
                     <span style="display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
                       <span style="display:inline-flex;align-items:center;gap:4px;">${dotsHtml}</span>
-                      ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">${streak}d</span>` : ""}
+                      ${week ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;">${week.met} / ${week.target} this week</span>` : ""}
+                      ${streak > 0 ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;">${streak}${streakUnit === "week" ? "w" : "d"}</span>` : ""}
                     </span>
                   </div>
                 </div>

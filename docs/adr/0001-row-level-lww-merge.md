@@ -60,6 +60,17 @@ associativity and idempotence over 400 seeds.
   whole history. The validator rebuilds the list from known
   shapes only (`sanitizeHabitFrequencyHistory`), so it stays
   bounded.
+- A Skipped Habit Week (N times per week) has no row of its
+  own. The Skip is the `skipped` flag on the day Task of the
+  day it was made (`habitSkipRows`), and the week reads
+  Skipped while any of its day Tasks carries the flag. So a
+  Skip races only with a tick of that same day, never with
+  another day's row, and the week's Outcome is a function of
+  the merged rows, whatever order they arrive in. Undo clears
+  the flag on every day Task of the week; a Skip made on one
+  device for a different day while the other undoes keeps
+  the week Skipped. This is accepted: Skipping is rare, and
+  Undo can be repeated.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator, and a Dexie table.

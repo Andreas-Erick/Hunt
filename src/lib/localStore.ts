@@ -7,6 +7,8 @@ import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { habitSkipRows } from "./habitSkip";
+import { habitWeekDays, habitWeekStart } from "./habitWeek";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -27,6 +29,7 @@ import {
   buildHabitTaskRow,
   completeTaskRow,
   habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   planRankMoves,
   RANK_STEP,
@@ -502,14 +505,10 @@ async function materializeHabits(dateKey: string, options?: LocalWriteOptions): 
   const added = await db.transaction("rw", db.habits, db.tasks, async () => {
     const habits = (await db.habits.toArray()).sort(compareRank);
     if (habits.length === 0) return 0;
-    const candidateIds = habits.map((h) => habitTaskId(h.id, dateKey));
-    const existing = await db.tasks.bulkGet(candidateIds);
-    const toAdd: Task[] = [];
-    habits.forEach((habit, i) => {
-      if (!isHabitScheduledOn(habit, dateKey)) return;
-      if (existing[i] || hasLocalTaskTombstone(candidateIds[i])) return;
-      toAdd.push(buildHabitTaskRow(habit, dateKey));
-    });
+    const existing = await db.tasks.bulkGet(habits.map((h) => habitTaskId(h.id, dateKey)));
+    // The Habit Week's day Tasks decide whether an N per week Habit still asks for the day.
+    const tasks = [...(await habitWeekTasks(dateKey)), ...existing.filter((t): t is Task => Boolean(t))];
+    const toAdd = missingHabitRows({ habits, tasks }, dateKey).filter((t) => !hasLocalTaskTombstone(t.id));
     if (toAdd.length > 0) await db.tasks.bulkPut(toAdd);
     return toAdd.length;
   });
@@ -524,15 +523,34 @@ async function ensureHabitTaskForDay(habitId: string, dateKey: string): Promise<
   const id = habitTaskId(habitId, dateKey);
   const existing = await db.tasks.get(id);
   if (existing) return existing;
-  await materializeHabits(dateKey);
+  const habit = await db.habits.get(habitId);
+  if (!habit || !isHabitScheduledOn(habit, dateKey) || hasLocalTaskTombstone(id)) return undefined;
+  await db.tasks.put(buildHabitTaskRow(habit, dateKey));
+  emitChange();
   return db.tasks.get(id);
 }
 
-/** Sets a habit day Skipped or back, materializing it first: the row skipHabitDayRow builds. */
+/** Every habit day Task of the Habit Week holding `dateKey`. */
+async function habitWeekTasks(dateKey: string): Promise<Task[]> {
+  const days = habitWeekDays(habitWeekStart(dateKey));
+  return (await db.tasks.where("scheduledDate").between(days[0], days[6], true, true).toArray()).filter((t) => t.habitId);
+}
+
+/** Sets a habit day (an N per week Habit: its Habit Week) Skipped or back: the rows habitSkipRows builds. */
 async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boolean): Promise<boolean> {
-  const day = await ensureHabitTaskForDay(habitId, dateKey);
-  if (!day || Boolean(day.skipped) === skipped) return false;
-  return changed(await writeTask(day.id, { skipped: skipped || undefined }));
+  const wrote = await db.transaction("rw", db.habits, db.tasks, async () => {
+    // A day Task whose Habit row is gone (not synced yet) is judged as an old daily row.
+    const habit = (await db.habits.get(habitId)) ?? ({ id: habitId } as Habit);
+    const weekTasks = await habitWeekTasks(dateKey);
+    const rows = habitSkipRows(habit, dateKey, weekTasks, skipped, Date.now());
+    const known = habit.title === undefined ? new Set(weekTasks.map((t) => t.id)) : null;
+    const allowed = rows.filter((t) => !hasLocalTaskTombstone(t.id) && (!known || known.has(t.id)));
+    // An un-Skipped row is stored without the flag (`skipped: undefined` would keep the key).
+    const stored = allowed.map(({ skipped: flag, ...rest }) => (flag ? { ...rest, skipped: flag } : rest));
+    if (stored.length > 0) await db.tasks.bulkPut(stored);
+    return allowed.length > 0;
+  });
+  return changed(wrote);
 }
 
 // ── Time logs ────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import type { Habit, Task } from "./domainTypes";
-import { isHabitScheduledOn } from "./habitFrequency";
+import { habitFrequencyOn, isHabitScheduledOn } from "./habitFrequency";
 
 /**
  * How a scheduled Habit day ended (GLOSSARY: Outcome). Derived, never stored.
@@ -32,14 +32,16 @@ export interface HabitDay {
  * none (yet): a day after today, or a day its Frequency did not ask for then. A
  * ticked day is Met; a day set aside on purpose (its day Task `skipped`) is
  * Skipped; today, and a past day whose focus is still running across midnight,
- * are Open; any other past day is Missed.
+ * are Open; any other past day is Missed, except a day of an N per week Habit,
+ * which has no Outcome of its own (its Habit Week has one).
  */
 export function habitDayOutcome({ habit, dayKey, dayTask, todayKey }: HabitDay): HabitOutcome | null {
   if (dayKey > todayKey || !isHabitScheduledOn(habit, dayKey)) return null;
   if (dayTask?.status === "completed") return "met";
   if (dayTask?.skipped) return "skipped";
   if (dayKey === todayKey || dayTask?.status === "active") return "open";
-  return "missed";
+  // N per week: the Habit Week is judged (habitWeek.ts); a single day is never Missed.
+  return habitFrequencyOn(habit, dayKey).type === "perWeek" ? null : "missed";
 }
 
 /**

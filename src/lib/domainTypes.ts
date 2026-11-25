@@ -37,7 +37,8 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
  */
 export type HabitFrequency =
   | { type: "everyDay" }
-  | { type: "weekdays"; weekdays: Weekday[] }; // non-empty, ascending, unique
+  | { type: "weekdays"; weekdays: Weekday[] } // non-empty, ascending, unique
+  | { type: "perWeek"; times: number }; // N times per Habit Week, an integer 1-7
 
 /** One Frequency change: `frequency` is in force from `effectiveFrom` (YYYY-MM-DD) on. */
 export interface HabitFrequencyChange {

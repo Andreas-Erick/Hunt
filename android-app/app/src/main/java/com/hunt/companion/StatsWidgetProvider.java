@@ -141,7 +141,7 @@ public class StatsWidgetProvider extends AppWidgetProvider {
             views.setViewVisibility(STREAK_ROWS[i], s == null ? View.GONE : View.VISIBLE);
             if (s == null) continue;
             views.setTextViewText(STREAK_TITLES[i], s.optString("title", ""));
-            views.setTextViewText(STREAK_DAYS[i], Math.max(0, s.optInt("days", 0)) + "d");
+            views.setTextViewText(STREAK_DAYS[i], StatsWidgetFit.formatStreak(s.optInt("days", 0), s.optString("unit", "")));
         }
         showMore(ctx, views, R.id.widget_stats_streaks_more, fit.streaksMore);
         return views;

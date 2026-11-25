@@ -19,7 +19,6 @@ import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
 import {
   habitFrequencyLabel,
   habitFrequencyOn,
-  isHabitScheduledOn,
   sameHabitFrequency,
 } from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -29,7 +28,7 @@ import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
-import { HabitTodayCheck } from "./HabitCardParts";
+import { HabitStreak, HabitTodayCheck } from "./HabitCardParts";
 import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
 
 export { computeHabitStreak };
@@ -413,11 +412,11 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, outcomeOn, streak, todayTask } =
-              habitDays.summaryFor(habit.id);
-            const skippedToday = outcomeOn(todayKey) === "skipped";
+            const summary = habitDays.summaryFor(habit.id);
+            const { doneToday, outcomeOn, todayTask, askedToday } = summary;
+            const skippedToday = summary.skipState === "skipped";
             const isEditing = editingHabit?.id === habit.id;
-            const askedToday = isHabitScheduledOn(habit, todayKey);
+            const weekly = summary.week !== null;
 
             return (
               <div
@@ -438,6 +437,7 @@ export function HabitsView() {
                       <HabitTodayCheck
                         title={habit.title}
                         askedToday={askedToday}
+                        weekly={weekly}
                         doneToday={doneToday}
                         accentBg={style.bg}
                         onToggle={() => void handleToggleToday(habit)}
@@ -519,7 +519,8 @@ export function HabitsView() {
                       <HabitSkipToday
                         habit={habit}
                         todayKey={todayKey}
-                        outcome={outcomeOn(todayKey)}
+                        outcome={summary.skipState}
+                        weekly={weekly}
                         focusRunning={todayTask?.status === "active"}
                       />
                       <HabitRecentDays
@@ -529,11 +530,7 @@ export function HabitsView() {
                         metClass={style.bg}
                       />
 
-                      {streak > 0 && (
-                        <span className="font-mono text-xs tabular-nums text-neutral-300">
-                          {streak}d streak
-                        </span>
-                      )}
+                      <HabitStreak summary={summary} />
                     </div>
                   </div>
                 </div>

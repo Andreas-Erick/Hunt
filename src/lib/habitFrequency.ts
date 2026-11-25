@@ -36,7 +36,11 @@ export function habitFrequencyOn(habit: FrequencySource, dayKey: string): HabitF
   return inForce;
 }
 
-/** Whether the Habit asks for `dayKey` under the Frequency in force that day. */
+/**
+ * Whether the Habit's Frequency in force on `dayKey` may ask for that day. An N
+ * per week Habit may be asked any day of its Habit Week; whether it still is,
+ * once N are Met, is the Habit Week rule (habitWeek.ts).
+ */
 export function isHabitScheduledOn(habit: FrequencySource, dayKey: string): boolean {
   const frequency = habitFrequencyOn(habit, dayKey);
   return frequency.type !== "weekdays" || frequency.weekdays.includes(weekdayOfKey(dayKey));
@@ -48,6 +52,7 @@ export function sameHabitFrequency(a: HabitFrequency, b: HabitFrequency): boolea
   if (a.type === "weekdays" && b.type === "weekdays") {
     return normalizedWeekdays(a.weekdays).join() === normalizedWeekdays(b.weekdays).join();
   }
+  if (a.type === "perWeek" && b.type === "perWeek") return a.times === b.times;
   return true;
 }
 
@@ -59,9 +64,20 @@ function normalizedWeekdays(weekdays: readonly number[]): Weekday[] {
 
 /** A copy of `frequency` in stored form (weekdays ascending and unique). */
 function normalizedFrequency(frequency: HabitFrequency): HabitFrequency {
+  if (frequency.type === "perWeek") return { type: "perWeek", times: frequency.times };
   return frequency.type === "weekdays"
     ? { type: "weekdays", weekdays: normalizedWeekdays(frequency.weekdays) }
     : EVERY_DAY;
+}
+
+/** Most times per Habit Week an N per week Frequency can ask for. */
+export const MAX_TIMES_PER_WEEK = 7;
+
+/** Whether a Frequency asks N times per Habit Week (judged by the week, not the day). */
+export function isPerWeekFrequency(
+  frequency: HabitFrequency
+): frequency is Extract<HabitFrequency, { type: "perWeek" }> {
+  return frequency.type === "perWeek";
 }
 
 /**
@@ -81,9 +97,10 @@ export function withHabitFrequency(
   return [...kept, { effectiveFrom: todayKey, frequency: normalizedFrequency(frequency) }];
 }
 
-/** Short label of a Frequency for the Habit card: "Every day" or "Mon, Wed, Fri". */
+/** Short label of a Frequency for the Habit card: "Every day", "Mon, Wed, Fri" or "3 times a week". */
 export function habitFrequencyLabel(frequency: HabitFrequency): string {
   if (frequency.type === "everyDay") return "Every day";
+  if (frequency.type === "perWeek") return frequency.times === 1 ? "Once a week" : `${frequency.times} times a week`;
   return WEEK_ORDER.filter((d) => frequency.weekdays.includes(d))
     .map((d) => WEEKDAY_SHORT[d])
     .join(", ");
@@ -99,13 +116,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A valid Frequency in stored form from untrusted input, or null (unknown type, no weekdays). */
+/** A valid Frequency in stored form from untrusted input, or null (unknown type, no weekdays, times not 1-7). */
 export function parseHabitFrequency(raw: unknown): HabitFrequency | null {
   if (!isRecord(raw)) return null;
   if (raw.type === "everyDay") return EVERY_DAY;
   if (raw.type === "weekdays" && Array.isArray(raw.weekdays)) {
     const weekdays = normalizedWeekdays(raw.weekdays.filter((d): d is number => typeof d === "number"));
     return weekdays.length > 0 ? { type: "weekdays", weekdays } : null;
+  }
+  const { times } = raw;
+  if (raw.type === "perWeek" && Number.isInteger(times) && Number(times) >= 1 && Number(times) <= MAX_TIMES_PER_WEEK) {
+    return { type: "perWeek", times: Number(times) };
   }
   return null;
 }

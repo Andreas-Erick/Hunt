@@ -31,10 +31,12 @@ export {
   habitFrequencyLabel,
   habitFrequencyOn,
   isHabitScheduledOn,
+  MAX_TIMES_PER_WEEK,
   parseHabitFrequency,
   sameHabitFrequency,
   withHabitFrequency,
 } from "../lib/habitFrequency";
+export { habitSkipRows } from "../lib/habitSkip";
 export {
   canonicalString,
   compareRank,
