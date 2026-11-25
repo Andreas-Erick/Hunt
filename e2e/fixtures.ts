@@ -83,7 +83,18 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
   });
 
   const tasks: Task[] = [
-    task({ id: "task-long", title: LONG_TASK_TITLE, notes: LONG_NOTE, rank: 1000, accumulatedSeconds: 5400 }),
+    task({
+      id: "task-long",
+      title: LONG_TASK_TITLE,
+      notes: LONG_NOTE,
+      rank: 1000,
+      accumulatedSeconds: 5400,
+      checklist: [
+        { id: "chk-geom-1", text: URL_TASK_TITLE, done: true },
+        { id: "chk-geom-2", text: LONG_TASK_TITLE, done: false },
+        { id: "chk-geom-3", text: LONG_QUEST_TITLE, done: false },
+      ],
+    }),
     task({ id: "task-url", title: URL_TASK_TITLE, notes: URL_TASK_TITLE, rank: 2000, accumulatedSeconds: 1800 }),
     task({ id: "task-other", title: URL_TASK_TITLE, questId: null, rank: 3000 }),
     task({ id: "task-tomorrow", title: LONG_TASK_TITLE, questId: "quest-slot-1", rank: 4000, scheduledDate: tomorrow }),

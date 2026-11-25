@@ -19,8 +19,16 @@ ADR-0005 (looks), ADR-0006 (widgets and Pending Ticks).
   `DayWidgetService`, `StatsWidgetProvider` or `DayWidgetTapActivity`
   removes users' placed widgets. PendingIntent request codes live in
   `WidgetRequestCodes` and never change value.
-- **Permissions are pinned** to INTERNET, ACCESS_NETWORK_STATE and
-  VIBRATE (a test). Midnight refresh uses inexact `AlarmManager.set`.
+- **Permissions are pinned** to INTERNET, ACCESS_NETWORK_STATE,
+  VIBRATE and, for reminders, POST_NOTIFICATIONS,
+  SCHEDULE_EXACT_ALARM and RECEIVE_BOOT_COMPLETED (a test).
+  Midnight refresh uses inexact `AlarmManager.set`.
+- **Reminders only arm and post** (ADR-0007). The page hands the
+  bridge the Reminder Plan from HuntCore's `reminderPlan`; only
+  the bridge writes `hunt-reminder-plan.json`. `Reminders` posts
+  each key once and arms one exact alarm (inexact without the
+  grant); `ReminderAlarmReceiver` re-arms after boot, clock and
+  update. Request codes and the channel id never change.
 - **Same signing key, always.** A different cert forces an uninstall,
   which wipes on-phone data. Never `adb uninstall`; use `install -r`.
 - **Row taps go through `DayWidgetTapActivity`.** A broadcast receiver

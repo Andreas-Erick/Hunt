@@ -32,14 +32,15 @@ export function habitTaskId(habitId: string, dateKey: string): string {
 /**
  * Whether an open task belongs in today's Home queue / Focus picker.
  * Regular tasks carry over if overdue (<= todayKey) or unscheduled; daily
- * habit instances show ONLY on their own day so missed habits never pile up.
+ * habit instances show ONLY on their own day so missed habits never pile up,
+ * and not at all once Skipped (a day set aside is not asked of the user).
  */
 export function isTaskVisibleToday(
-  task: Pick<Task, "scheduledDate" | "habitId">,
+  task: Pick<Task, "scheduledDate" | "habitId" | "skipped">,
   todayKey: string
 ): boolean {
   if (task.habitId) {
-    return task.scheduledDate === todayKey;
+    return task.scheduledDate === todayKey && !task.skipped;
   }
   return !task.scheduledDate || task.scheduledDate <= todayKey;
 }
@@ -65,14 +66,16 @@ export function isMissedHabitTask(
 
 /**
  * SHARED open-task rule for every list, count and picker of open work on
- * `todayKey`: queued or active, minus missed daily habit days.
+ * `todayKey`: queued or active, minus missed and Skipped habit days (a Skipped
+ * day is not asked of the user, so it leaves Today and the Day Widget).
  */
 export function isOpenTask(
-  task: Pick<Task, "status" | "scheduledDate" | "habitId">,
+  task: Pick<Task, "status" | "scheduledDate" | "habitId" | "skipped">,
   todayKey: string
 ): boolean {
   return (
     (task.status === "queued" || task.status === "active") &&
+    !(task.habitId && task.skipped) &&
     !isMissedHabitTask(task, todayKey)
   );
 }
@@ -121,20 +124,31 @@ export function msUntilNextLocalMidnight(nowMs: number = Date.now()): number {
   return Math.max(50, nextMidnight - nowMs);
 }
 
-/** `outcomeOn` for each day from `todayKey` back in time, without end. */
+/** `outcomeOn` for each day from `todayKey` back to `firstDayKey` (inclusive). */
 function* outcomesBackFrom(
   todayKey: string,
+  firstDayKey: string,
   outcomeOn: (dayKey: string) => HabitOutcome | null
 ): Generator<HabitOutcome | null> {
-  for (let offset = 0; ; offset -= 1) yield outcomeOn(dateKeyFromOffset(todayKey, offset));
+  for (let offset = 0; ; offset -= 1) {
+    const dayKey = dateKeyFromOffset(todayKey, offset);
+    if (dayKey < firstDayKey) return;
+    yield outcomeOn(dayKey);
+  }
 }
 
-/** A Habit's Streak on `todayKey`, from its Outcome on each day (habitStreakOf). */
+/**
+ * A Habit's Streak on `todayKey`, from its Outcome on each day (habitStreakOf),
+ * reading no further back than `firstDayKey`, the first day the Habit could
+ * have been Met. The bound ends the walk when unscheduled days (no Outcome)
+ * would otherwise be passed over forever.
+ */
 export function habitStreakOn(
   todayKey: string,
-  outcomeOn: (dayKey: string) => HabitOutcome | null
+  outcomeOn: (dayKey: string) => HabitOutcome | null,
+  firstDayKey: string
 ): number {
-  return habitStreakOf(outcomesBackFrom(todayKey, outcomeOn));
+  return habitStreakOf(outcomesBackFrom(todayKey, firstDayKey, outcomeOn));
 }
 
 const TICKED_DAY: Pick<Task, "status"> = { status: "completed" };
@@ -147,13 +161,18 @@ export function computeHabitStreak(
   completedDates: ReadonlySet<string>,
   todayKey: string
 ): number {
-  return habitStreakOn(todayKey, (dayKey) =>
-    habitDayOutcome({
-      habit: {},
-      dayKey,
-      dayTask: completedDates.has(dayKey) ? TICKED_DAY : undefined,
-      todayKey,
-    })
+  let firstDayKey = todayKey;
+  for (const dayKey of completedDates) if (dayKey < firstDayKey) firstDayKey = dayKey;
+  return habitStreakOn(
+    todayKey,
+    (dayKey) =>
+      habitDayOutcome({
+        habit: {},
+        dayKey,
+        dayTask: completedDates.has(dayKey) ? TICKED_DAY : undefined,
+        todayKey,
+      }),
+    firstDayKey
   );
 }
 

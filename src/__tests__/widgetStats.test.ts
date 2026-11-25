@@ -174,6 +174,16 @@ describe("buildWidgetSnapshot (Stats Widget)", () => {
     ]);
   });
 
+  it("passes over the days a chosen-weekdays Habit is not asked for", () => {
+    // Sunday 22 Nov: Mon/Wed/Fri gym, Met Wed 18 and Fri 20; the weekend is not scheduled.
+    const gym: Habit = {
+      ...habit("gym", "Gym", 100),
+      frequencyHistory: [{ effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [1, 3, 5] } }],
+    };
+    const tasks = [doneHabitDay("gym", "2026-11-18"), doneHabitDay("gym", "2026-11-20")];
+    expect(statsOf(state({ habits: [gym], tasks }))[0].streaks).toEqual([{ title: "Gym", days: 2 }]);
+  });
+
   it("has no Quest rows and no streaks for a user without Quests or Habits", () => {
     const [today] = statsOf(state({ tasks: [doneHabitDay("x", TODAY)] }));
     expect(today).toEqual({ dateKey: TODAY, focusSeconds: 0, quests: [], streaks: [] });

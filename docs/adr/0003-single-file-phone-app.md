@@ -30,7 +30,7 @@ state machine, burst logs, task completion, the next-task
 rule, and the Android widgets' side of it (ADR-0006): the
 Widget Snapshot the widgets draw (rows, which can be
 ticked, Quest progress and streaks) and applying Pending
-Ticks.
+Ticks. It also holds the due-reminders rule (ADR-0007).
 
 Tests enforce the arrangement:
 

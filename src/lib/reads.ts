@@ -30,6 +30,10 @@ export const reads = {
 
   queuedTasks: (): Promise<Task[]> => db.tasks.where("status").equals("queued").toArray(),
 
+  /** Queued and in-Focus Tasks: the ones a reminder can still be due for. */
+  undoneTasks: (): Promise<Task[]> =>
+    db.tasks.where("status").anyOf(["queued", "active"]).toArray(),
+
   completedTasks: (): Promise<Task[]> =>
     db.tasks.where("status").equals("completed").toArray(),
 

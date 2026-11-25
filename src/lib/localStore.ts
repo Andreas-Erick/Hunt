@@ -1,8 +1,13 @@
 import { db, loadSortedQuests } from "./db";
+import { changed, emitChange, type LocalWriteOptions } from "./localChange";
+import { applyChecklistEdit, type ChecklistEdit } from "./checklist";
+import { clampLength, clampTitle } from "./textLimits";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
+import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
-import type { Habit, Quest, QuestAccent, Task } from "./domainTypes";
-import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabit } from "./localHabitCount";
+import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
+import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
 import {
   hasLocalLogTombstone,
   hasLocalTaskTombstone,
@@ -21,6 +26,7 @@ import {
 import {
   buildBurstLog,
   buildHabitTaskRow,
+  habitTodayTaskAfterEdit,
   nextStamp,
   planRankMoves,
   RANK_STEP,
@@ -29,6 +35,7 @@ import {
 } from "./taskQueue";
 
 export { nextStamp };
+export { onLocalChange, type LocalWriteOptions } from "./localChange";
 
 /**
  * The Local Store: every write this device makes to its own IndexedDB data.
@@ -47,76 +54,24 @@ export { nextStamp };
  * Rows written by the sync engine (remote payloads) do not go through here.
  */
 
-/** Options for operations that the sync path also runs. */
-export interface LocalWriteOptions {
-  /**
-   * Emit the local-change signal (default true). The sync path passes false:
-   * its own rerun pushes what it wrote, so a debounced extra sync is not needed.
-   */
-  notify?: boolean;
-}
-
-type LocalChangeListener = () => void;
-const listeners = new Set<LocalChangeListener>();
-
-/** Subscribes to local writes; returns the unsubscribe function. */
-export function onLocalChange(listener: LocalChangeListener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function emitChange(options?: LocalWriteOptions): void {
-  if (options?.notify === false) return;
-  for (const listener of Array.from(listeners)) {
-    try {
-      listener();
-    } catch {
-      // A listener must not turn a successful write into a failed action.
-    }
-  }
-}
-
-/** Emits the signal when `wrote` is truthy; returns `wrote`. */
-function changed<T>(wrote: T, options?: LocalWriteOptions): T {
-  if (wrote) emitChange(options);
-  return wrote;
-}
-
-/**
- * Trimmed `title` cut to at most `max` UTF-16 units without splitting a
- * surrogate pair (the same cut the sync validator applies), so the server
- * never has to change a title saved here.
- */
-export function clampTitle(title: string, max: number): string {
-  return clampLength(title.trim(), max);
-}
-
-/** `text` cut to at most `max` UTF-16 units without splitting a surrogate pair (not trimmed). */
-export function clampLength(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
-
 function newId(prefix: string, now: number): string {
   return `${prefix}-${now}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /**
- * Writes `changes` to an existing task with an R6 stamp, reading the row in the
- * same rw transaction (so a flush or sync that just wrote it is seen). Returns
- * false when the task does not exist.
+ * Writes `changes` (or `changes(row)`; null writes nothing) to an existing task with an R6 stamp,
+ * reading the row in the same rw transaction (so a flush or sync that just wrote it is seen).
+ * Returns false when the task does not exist or nothing was written.
  */
 async function writeTask(
   taskId: string,
-  changes: Partial<Omit<Task, "id" | "updatedAt">>
+  changes: Partial<Omit<Task, "id" | "updatedAt">> | ((row: Task) => Partial<Task> | null)
 ): Promise<boolean> {
   return db.transaction("rw", db.tasks, async () => {
     const row = await db.tasks.get(taskId);
-    if (!row) return false;
-    await db.tasks.update(taskId, { ...changes, updatedAt: nextStamp(row) });
+    const patch = row && (typeof changes === "function" ? changes(row) : changes);
+    if (!row || !patch) return false;
+    await db.tasks.update(taskId, { ...patch, updatedAt: nextStamp(row) });
     return true;
   });
 }
@@ -181,15 +136,25 @@ async function createTask(params: {
   return changed(true);
 }
 
+/** The Task fields an edit may change; a `reminderTime` of null clears the reminder. */
+export type TaskChanges = Partial<{
+  title: string;
+  notes: string;
+  questId: string | null;
+  scheduledDate: string;
+  reminderTime: string | null;
+}>;
+
 /**
  * Edits a task. The title is trimmed and cut to MAX_TASK_TITLE_LENGTH; an empty
  * one keeps the old title. False when the task does not exist.
  */
-async function updateTask(
-  taskId: string,
-  updates: Partial<{ title: string; notes: string; questId: string | null; scheduledDate: string }>
-): Promise<boolean> {
-  const changes = { ...updates };
+async function updateTask(taskId: string, updates: TaskChanges): Promise<boolean> {
+  const { reminderTime, ...rest } = updates;
+  const changes: Partial<Omit<Task, "id" | "updatedAt">> = { ...rest };
+  // Only a local "HH:MM" is saved (the sync validator drops anything else); null clears it.
+  if (reminderTime === null) changes.reminderTime = undefined;
+  else if (isReminderTime(reminderTime)) changes.reminderTime = reminderTime;
   if (typeof updates.title === "string") {
     const title = clampTitle(updates.title, MAX_TASK_TITLE_LENGTH);
     if (title) changes.title = title;
@@ -201,6 +166,14 @@ async function updateTask(
   return changed(await writeTask(taskId, changes));
 }
 
+/** One Checklist edit by the shared rule (the phone's too); false when refused, e.g. on a habit day Task. */
+async function editChecklist(taskId: string, edit: ChecklistEdit): Promise<boolean> {
+  return changed(await writeTask(taskId, (row) => {
+    const checklist = applyChecklistEdit(row, edit);
+    return checklist && { checklist };
+  }));
+}
+
 /**
  * Completes a task with the shared rule (completeTaskRow, the phone's too; a
  * Count Habit's day counts +1 instead: completedRow), reading the row in the
@@ -210,7 +183,7 @@ async function completeTask(taskId: string, completedAt: number = Date.now()): P
   const done = await db.transaction("rw", db.tasks, db.habits, async () => {
     const row = await db.tasks.get(taskId);
     if (!row) return false;
-    await db.tasks.update(taskId, await completedRow(row, completedAt));
+    await db.tasks.update(taskId, { ...(await completedRow(row, completedAt)) });
     return true;
   });
   return changed(done);
@@ -438,15 +411,18 @@ async function deleteQuest(questId: string): Promise<void> {
 
 // ── Daily habits ─────────────────────────────────────────────────────────
 
-/** Daily habit fields the edit form can change (never the Habit Kind, fixed at creation). */
-export type HabitChanges = Partial<Pick<Habit, "title" | "notes" | "questId" | "target" | "unit">>;
-export type { NewHabit };
+/** A new habit: every day unless `frequency` says otherwise; a Check Habit unless its Kind says Count. */
+export type NewHabit = { title: string; notes?: string; questId: string | null; frequency?: HabitFrequency } & NewHabitKind;
+/** Habit fields the edit form can change (never the Kind); a new `frequency` applies from today (withHabitFrequency). */
+export type HabitChanges = Partial<Omit<NewHabit, "kind">>;
 
-/** Adds a habit at the end and materializes today's instance (unless tombstoned). False for no title, or a Count Habit with no target. */
+/** Adds a habit at the end, with today's instance when its Frequency asks for today (unless tombstoned).
+ * False for an empty title, an invalid Frequency (no weekday chosen) or a Count Habit with no target. */
 async function createHabit(params: NewHabit): Promise<boolean> {
   const title = clampTitle(params.title, MAX_HABIT_TITLE_LENGTH);
+  const frequency = params.frequency ? parseHabitFrequency(params.frequency) : EVERY_DAY;
   const kindFields = newHabitKindFields(params);
-  if (!title || !kindFields) return false;
+  if (!title || !frequency || !kindFields) return false;
   const now = Date.now();
   const todayKey = toLocalDateKey(now);
   await db.transaction("rw", db.habits, db.tasks, async () => {
@@ -461,8 +437,10 @@ async function createHabit(params: NewHabit): Promise<boolean> {
       updatedAt: now,
       ...kindFields,
     };
+    const frequencyHistory = withHabitFrequency(habit, frequency, todayKey);
+    if (frequencyHistory.length > 0) habit.frequencyHistory = frequencyHistory;
     await db.habits.add(habit);
-    if (!hasLocalTaskTombstone(habitTaskId(habit.id, todayKey))) {
+    if (isHabitScheduledOn(habit, todayKey) && !hasLocalTaskTombstone(habitTaskId(habit.id, todayKey))) {
       await db.tasks.put(buildHabitTaskRow(habit, todayKey));
     }
   });
@@ -470,8 +448,8 @@ async function createHabit(params: NewHabit): Promise<boolean> {
 }
 
 /**
- * Edits a habit and keeps today's OPEN instance aligned (title, quest, and the
- * notes when they were not edited on the instance). False when it does not exist.
+ * Edits a habit and keeps today's instance in step (habitTodayTaskAfterEdit). False when it
+ * does not exist or the new Frequency is invalid.
  */
 async function updateHabit(habitId: string, changes: HabitChanges): Promise<boolean> {
   const todayKey = toLocalDateKey();
@@ -486,21 +464,16 @@ async function updateHabit(habitId: string, changes: HabitChanges): Promise<bool
     if (typeof changes.notes === "string") patch.notes = clampTitle(changes.notes, MAX_LONG_TEXT_LENGTH);
     if (changes.questId !== undefined) patch.questId = changes.questId;
     Object.assign(patch, countFieldChanges(row, changes));
+    if (changes.frequency !== undefined) {
+      const frequency = parseHabitFrequency(changes.frequency);
+      if (!frequency) return false;
+      patch.frequencyHistory = withHabitFrequency(row, frequency, todayKey);
+    }
     await db.habits.update(habitId, { ...patch, updatedAt: nextStamp(row) });
 
     const todayTaskId = habitTaskId(habitId, todayKey);
-    const todayTask = await db.tasks.get(todayTaskId);
-    if (todayTask && (todayTask.status === "queued" || todayTask.status === "active")) {
-      const taskPatch: Partial<Task> = {};
-      if (patch.title !== undefined) taskPatch.title = patch.title;
-      if (patch.questId !== undefined) taskPatch.questId = patch.questId;
-      if (patch.notes !== undefined && (todayTask.notes || "") === (row.notes || "")) {
-        taskPatch.notes = patch.notes;
-      }
-      if (Object.keys(taskPatch).length > 0) {
-        await db.tasks.update(todayTaskId, { ...taskPatch, updatedAt: nextStamp(todayTask) });
-      }
-    }
+    const todayTask = habitTodayTaskAfterEdit(row, { ...row, ...patch }, await db.tasks.get(todayTaskId), todayKey);
+    if (todayTask && !hasLocalTaskTombstone(todayTaskId)) await db.tasks.put(todayTask);
     return true;
   });
   return changed(wrote);
@@ -538,6 +511,7 @@ async function materializeHabits(dateKey: string, options?: LocalWriteOptions): 
     const existing = await db.tasks.bulkGet(candidateIds);
     const toAdd: Task[] = [];
     habits.forEach((habit, i) => {
+      if (!isHabitScheduledOn(habit, dateKey)) return;
       if (existing[i] || hasLocalTaskTombstone(candidateIds[i])) return;
       toAdd.push(buildHabitTaskRow(habit, dateKey));
     });
@@ -559,6 +533,13 @@ async function ensureHabitTaskForDay(habitId: string, dateKey: string): Promise<
   return db.tasks.get(id);
 }
 
+/** Sets a habit day Skipped or back, materializing it first: the row skipHabitDayRow builds. */
+async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boolean): Promise<boolean> {
+  const day = await ensureHabitTaskForDay(habitId, dateKey);
+  if (!day || Boolean(day.skipped) === skipped) return false;
+  return changed(await writeTask(day.id, { skipped: skipped || undefined }));
+}
+
 // ── Time logs ────────────────────────────────────────────────────────────
 
 /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -573,6 +554,7 @@ async function deleteTimeLog(logId: string): Promise<void> {
 export const localStore = {
   createTask,
   updateTask,
+  editChecklist,
   completeTask,
   reopenTask,
   deleteTask,
@@ -592,5 +574,6 @@ export const localStore = {
   ensureHabitTaskForDay,
   /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
   logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
+  setHabitDaySkipped,
   deleteTimeLog,
 };

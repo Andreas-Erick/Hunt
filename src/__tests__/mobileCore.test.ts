@@ -43,6 +43,11 @@ describe("the phone runs the shared implementations", () => {
       "buildHabitTaskRow",
       "computeHabitStreak",
       "completionDateKey",
+      "applyChecklistEdit",
+      "canHoldChecklist",
+      "checklistOf",
+      "checklistProgress",
+      "newChecklistItemId",
     ];
     for (const name of bound) {
       expect(typeof page.HuntCore[name], name).toBe("function");

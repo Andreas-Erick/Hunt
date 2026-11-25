@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { Habit, Quest, QuestAccent, Task, TaskStatus, TimeLog } from "@/lib/domainTypes";
+import type {
+  ChecklistItem,
+  Habit,
+  HabitFrequencyChange,
+  Quest,
+  QuestAccent,
+  Task,
+  TaskStatus,
+  TimeLog,
+} from "@/lib/domainTypes";
 import {
   canonicalString,
   mergeSyncPayloads,
@@ -50,13 +59,31 @@ const TASK_IDS = [
   "tsk-1763400000003-dddd",
   "tsk-01",
 ];
-const HABIT_IDS = ["hab-1763400000000-jog1", "hab-1763400000001-read"];
 const STAMPS = [1000, 2000, 3000]; // few values, so equal stamps are frequent
 const LOG_STARTS = [10_000, 20_000];
 const LOG_IDS = TASK_IDS.flatMap((taskId) => LOG_STARTS.map((start) => `log-${start}-${taskId}`));
 const DURATIONS = [60, 600, 1800];
+const HABIT_IDS = ["hab-1763400000000-aaaa", "hab-1763400000001-bbbb"];
+// Frequency histories (a daily row without one, chosen weekdays, a change back to every day).
+const FREQUENCY_HISTORIES: ReadonlyArray<HabitFrequencyChange[] | undefined> = [
+  undefined,
+  [{ effectiveFrom: "2026-11-18", frequency: { type: "weekdays", weekdays: [1, 3, 5] } }],
+  [
+    { effectiveFrom: "2026-11-01", frequency: { type: "weekdays", weekdays: [0] } },
+    { effectiveFrom: "2026-11-19", frequency: { type: "everyDay" } },
+  ],
+];
 const STATUSES: readonly TaskStatus[] = ["queued", "active", "completed", "archived"];
 const ACCENTS: readonly QuestAccent[] = ["cyan", "emerald", "amber"];
+const CHECKLISTS: readonly ChecklistItem[][] = [
+  [],
+  [{ id: "chk-1", text: "Passport", done: false }],
+  [{ id: "chk-1", text: "Passport", done: true }],
+  [
+    { id: "chk-2", text: "Charger", done: false },
+    { id: "chk-1", text: "Passport", done: true },
+  ],
+];
 
 /** Equal-stamp versions of one task share their questId (third known exception above). */
 function taskQuestId(taskIndex: number, updatedAt: number): string | null {
@@ -97,31 +124,14 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     };
     if (chance(0.3)) task.completedAt = updatedAt;
     if (chance(0.5)) task.scheduledDate = pick(["2026-11-18", "2026-11-19"]);
+    // A Skipped habit day: the flag rides on the row, merged with it under R1.
+    if (chance(0.25)) task.skipped = true;
+    // Equal-stamp versions often hold different Checklists: R1's tie-break decides the whole row.
+    if (chance(0.4)) task.checklist = pick(CHECKLISTS);
     // A Count Habit day's total and +1 tick time ride on the row (merged whole, ADR-0001).
     if (chance(0.3)) task.amount = pick([0, 1, 2.5, 7]);
     if (chance(0.2)) task.countTickedAt = pick(STAMPS);
     tasks.push(task);
-  });
-
-  // Habits of every Kind; old rows without one read as Check. questId stays null so the
-  // equal-stamp questId exception above cannot arise.
-  const habits: Habit[] = HABIT_IDS.filter(() => chance(0.7)).map((id) => {
-    const habit: Habit = {
-      id,
-      title: pick(["Jog", "Read"]),
-      notes: pick(["", "n"]),
-      questId: null,
-      rank: pick([1000, 2000]),
-      createdAt: 500,
-      updatedAt: pick(STAMPS),
-    };
-    const kind = pick([undefined, "check", "count"] as const);
-    if (kind) habit.kind = kind;
-    if (kind === "count") {
-      habit.target = pick([1, 3, 2.5]);
-      habit.unit = pick(["", "miles"]);
-    }
-    return habit;
   });
 
   const timeLogs: TimeLog[] = [];
@@ -153,12 +163,34 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
         ? { activeTaskId: runningTask, isRunning: false, sessionStartedAt: null, updatedAt: pick([1000, 2000, 3000, 4000]) }
         : { activeTaskId: null, isRunning: false, sessionStartedAt: null, updatedAt: pick([0, 1000, 2000, 3000, 4000]) };
 
+  const habits: Habit[] = HABIT_IDS.filter(() => chance(0.6)).map((id) => {
+    const habit: Habit = {
+      id,
+      title: pick(["Gym", "Read"]),
+      notes: "",
+      questId: null,
+      rank: pick([1000, 2000]),
+      createdAt: 500,
+      updatedAt: pick(STAMPS),
+    };
+    const history = pick(FREQUENCY_HISTORIES);
+    if (history) habit.frequencyHistory = history;
+    // Habits of every Kind; old rows without one read as Check.
+    const kind = pick([undefined, "check", "count"] as const);
+    if (kind) habit.kind = kind;
+    if (kind === "count") {
+      habit.target = pick([1, 3, 2.5]);
+      habit.unit = pick(["", "miles"]);
+    }
+    return habit;
+  });
+
   const raw: SyncPayload = {
     quests,
     tasks,
     timeLogs,
     habits,
-    deletedHabitIds: HABIT_IDS.filter(() => chance(0.1)),
+    deletedHabitIds: HABIT_IDS.filter(() => chance(0.15)),
     deletedQuestIds: QUEST_IDS.filter(() => chance(0.15)),
     deletedTaskIds: TASK_IDS.filter(() => chance(0.15)),
     deletedLogIds: LOG_IDS.filter(() => chance(0.1)),
@@ -186,6 +218,8 @@ function rowsKey(p: SyncPayload, options: { withCounters: boolean }): string {
   return canonicalString({
     quests: rows(p.quests),
     tasks: rows(p.tasks),
+    habits: rows(p.habits ?? []),
+    deletedHabitIds: ids(p.deletedHabitIds),
     timeLogs: rows(p.timeLogs),
     deletedQuestIds: ids(p.deletedQuestIds),
     deletedTaskIds: ids(p.deletedTaskIds),
@@ -195,8 +229,13 @@ function rowsKey(p: SyncPayload, options: { withCounters: boolean }): string {
 
 /** No tombstoned row survives, and no task keeps a tombstoned quest. */
 function expectTombstonesWin(p: SyncPayload, msg: string): void {
-  const deleted = new Set([...(p.deletedQuestIds ?? []), ...p.deletedTaskIds, ...p.deletedLogIds]);
-  for (const row of [...p.quests, ...p.tasks, ...p.timeLogs]) {
+  const deleted = new Set([
+    ...(p.deletedQuestIds ?? []),
+    ...p.deletedTaskIds,
+    ...p.deletedLogIds,
+    ...(p.deletedHabitIds ?? []),
+  ]);
+  for (const row of [...p.quests, ...p.tasks, ...p.timeLogs, ...(p.habits ?? [])]) {
     expect(deleted.has(row.id), `${msg} ${row.id} survived its tombstone`).toBe(false);
   }
   for (const task of p.tasks) {
@@ -246,6 +285,7 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     let sharedIdCases = 0;
     let equalStampCases = 0;
     let tombstoneCases = 0;
+    let checklistConflictCases = 0;
 
     for (let i = 0; i < ITERATIONS; i++) {
       const seed = BASE_SEED + i;
@@ -314,6 +354,9 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
       if (sharedTaskIds.some((t) => b.tasks.some((u) => u.id === t.id && u.updatedAt === t.updatedAt))) {
         equalStampCases++;
       }
+      const differentChecklists = (t: Task) =>
+        b.tasks.some((u) => u.id === t.id && canonicalString(u.checklist) !== canonicalString(t.checklist));
+      if (sharedTaskIds.some(differentChecklists)) checklistConflictCases++;
       if (a.deletedTaskIds.length + (a.deletedQuestIds ?? []).length + a.deletedLogIds.length > 0) {
         tombstoneCases++;
       }
@@ -323,5 +366,6 @@ describe(`mergeSyncPayloads properties (${ITERATIONS} seeds from ${BASE_SEED})`,
     expect(sharedIdCases).toBeGreaterThan(ITERATIONS / 2);
     expect(equalStampCases).toBeGreaterThan(ITERATIONS / 5);
     expect(tombstoneCases).toBeGreaterThan(ITERATIONS / 4);
+    expect(checklistConflictCases).toBeGreaterThan(ITERATIONS / 5);
   });
 });

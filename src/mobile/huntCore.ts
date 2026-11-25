@@ -17,7 +17,7 @@ export {
   isTaskVisibleToday,
   toLocalDateKey,
 } from "../lib/dateUtils";
-export { completionDateKey, summarizeHabitDays } from "../lib/habitDay";
+export { completionDateKey, habitTodayTally, summarizeHabitDays } from "../lib/habitDay";
 export { habitDayOutcome, habitStreakOf } from "../lib/habitOutcome";
 export {
   countProgressLabel,
@@ -31,10 +31,27 @@ export {
 } from "../lib/habitKind";
 export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
 export {
+  applyChecklistEdit,
+  canHoldChecklist,
+  checklistOf,
+  checklistProgress,
+  newChecklistItemId,
+} from "../lib/checklist";
+export {
+  HABIT_WEEKDAYS,
+  habitFrequencyLabel,
+  habitFrequencyOn,
+  isHabitScheduledOn,
+  parseHabitFrequency,
+  sameHabitFrequency,
+  withHabitFrequency,
+} from "../lib/habitFrequency";
+export {
   canonicalString,
   compareRank,
   isSafeSyncId,
   losingSessionEndAt,
+  MAX_CHECKLIST_TEXT_LENGTH,
   mergeSyncPayloads,
   sameContent,
   SYNCED_ENTITY_KEYS,
@@ -46,9 +63,14 @@ export {
   buildBurstLog,
   buildHabitTaskRow,
   completeTaskRow,
+  habitTodayTaskAfterEdit,
+  missingHabitRows,
   nextStamp,
   pickNextFocusTask,
   sessionLogId,
+  skipHabitDayRow,
 } from "../lib/taskQueue";
 export { buildWidgetSnapshot, WIDGET_SNAPSHOT_VERSION } from "../lib/widgetSnapshot";
 export { applyPendingTicks } from "../lib/pendingTicks";
+export { dueReminders, isReminderTime } from "../lib/reminders";
+export { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "../lib/reminderPlan";

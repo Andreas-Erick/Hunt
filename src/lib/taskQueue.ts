@@ -1,5 +1,6 @@
 import { habitTaskId, isTaskVisibleToday, toLocalDateKey } from "./dateUtils";
 import type { Habit, Quest, Task, TimeLog } from "./domainTypes";
+import { isHabitScheduledOn } from "./habitFrequency";
 import { compareRank } from "./syncTypes";
 import type { SyncPayload } from "./syncTypes";
 
@@ -215,8 +216,52 @@ export function missingHabitRows(
   const known = new Set((state.tasks ?? []).map((t) => t.id));
   for (const id of state.deletedTaskIds ?? []) known.add(id);
   return (state.habits ?? [])
-    .filter((h) => !known.has(habitTaskId(h.id, dateKey)))
+    .filter((h) => isHabitScheduledOn(h, dateKey) && !known.has(habitTaskId(h.id, dateKey)))
     .map((h) => buildHabitTaskRow(h, dateKey));
+}
+
+/**
+ * Today's day Task after a Frequency change (it applies from today). Today no
+ * longer scheduled sets an untouched queued day Task aside ("archived", so it
+ * leaves Today and can come back); today scheduled again brings a set-aside one
+ * back, or builds it when missing. A ticked or focused day Task is left alone.
+ */
+function todayTaskForFrequency(habit: Habit, todayTask: Task | undefined, todayKey: string): Task | undefined {
+  if (isHabitScheduledOn(habit, todayKey)) {
+    if (!todayTask) return buildHabitTaskRow(habit, todayKey);
+    return todayTask.status === "archived" ? { ...todayTask, status: "queued" } : todayTask;
+  }
+  if (!todayTask || todayTask.status !== "queued" || (todayTask.accumulatedSeconds || 0) > 0) return todayTask;
+  return { ...todayTask, status: "archived" };
+}
+
+/**
+ * SHARED Habit-edit rule for today's day Task: the row to write after `before`
+ * was edited into `after`, or null when nothing changes. A Frequency change
+ * applies from today (todayTaskForFrequency); an open day Task follows the new
+ * title and Quest, and the new notes unless they were edited on the day Task.
+ * The caller skips a tombstoned id when a missing day Task is built.
+ */
+export function habitTodayTaskAfterEdit(
+  before: Habit,
+  after: Habit,
+  todayTask: Task | undefined,
+  todayKey: string,
+  now: number = Date.now()
+): Task | null {
+  const frequencyChanged =
+    JSON.stringify(before.frequencyHistory ?? []) !== JSON.stringify(after.frequencyHistory ?? []);
+  const task = frequencyChanged ? todayTaskForFrequency(after, todayTask, todayKey) : todayTask;
+  if (!task) return null;
+  const next: Task = { ...task };
+  if (next.status === "queued" || next.status === "active") {
+    next.title = after.title;
+    next.questId = after.questId;
+    if ((next.notes || "") === (before.notes || "")) next.notes = after.notes;
+  }
+  if (!todayTask) return next; // built: keeps the deterministic stamps of buildHabitTaskRow
+  if (JSON.stringify(next) === JSON.stringify(todayTask)) return null;
+  return { ...next, updatedAt: nextStamp(todayTask, now) };
 }
 
 /**
@@ -239,10 +284,25 @@ export function nextStamp(
  * `task` is not modified.
  */
 export function completeTaskRow(task: Task, completedAt: number): Task {
-  return {
+  const done: Task = {
     ...task,
     status: "completed",
     completedAt,
     updatedAt: nextStamp(task, completedAt),
   };
+  // A ticked day is Met, so it is no longer set aside. Kept as an explicit
+  // undefined so a Dexie update drops the stored flag.
+  if (done.skipped) done.skipped = undefined;
+  return done;
+}
+
+/**
+ * SHARED "Skip a habit day" rule: the day Task `task` set aside on purpose
+ * (`skipped`), or back to an ordinary day, stamped by R6 at `at`. The Outcome
+ * of a Skipped day is Skipped: it leaves Today and the Day Widget and neither
+ * adds to nor breaks the Streak. Un-Skipping writes `skipped: undefined`, so a
+ * Dexie update drops the flag and the synced row carries none. Pure.
+ */
+export function skipHabitDayRow(task: Task, skipped: boolean, at: number): Task {
+  return { ...task, skipped: skipped || undefined, updatedAt: nextStamp(task, at) };
 }

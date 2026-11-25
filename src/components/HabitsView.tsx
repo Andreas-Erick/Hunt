@@ -3,7 +3,6 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
-import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import {
   Check,
@@ -14,24 +13,33 @@ import {
   Trash2,
 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { dateKeyFromOffset } from "@/lib/dateUtils";
-import type { Habit, Quest } from "@/lib/domainTypes";
-import { computeHabitStreak } from "@/lib/dateUtils";
-import { summarizeHabitDays } from "@/lib/habitDay";
 import { habitDayAmount, habitKindOf } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
+import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
+import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
+import { habitTodayTally, summarizeHabitDays } from "@/lib/habitDay";
+import {
+  habitFrequencyLabel,
+  habitFrequencyOn,
+  isHabitScheduledOn,
+  sameHabitFrequency,
+} from "@/lib/habitFrequency";
 import { useCommandStore } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
+import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
+import { HabitTodayCheck } from "./HabitCardParts";
+import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
 
 export { computeHabitStreak };
 
 const DISCARD_PROMPT = "Discard unsaved changes?";
 const HISTORY_DAYS = 7;
+const EVERY_DAY: HabitFrequency = { type: "everyDay" };
 
 function confirmDiscard(dirty: boolean): boolean {
   return !dirty || window.confirm(DISCARD_PROMPT);
@@ -86,6 +94,7 @@ export function HabitsView() {
   const editKind = Count.useHabitKindEdit();
   // The Count Habit whose exact-entry form is open (one at a time).
   const [amountHabitId, setAmountHabitId] = useState<string | null>(null);
+  const [newFrequency, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
   const [questChoice, setQuestChoice] = useState<string | null | undefined>(
     undefined
   );
@@ -96,6 +105,7 @@ export function HabitsView() {
   const [editTitle, setEditTitle] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editQuestId, setEditQuestId] = useState<string | null>(null);
+  const [editFrequency, setEditFrequency] = useState<HabitFrequency>(EVERY_DAY);
   const [savingEdit, setSavingEdit] = useState(false);
   const savingEditRef = useRef(false);
   const editToggleRef = useRef<HTMLButtonElement | null>(null);
@@ -141,26 +151,29 @@ export function HabitsView() {
     [habitTasks, todayKey, habits]
   );
 
-  const completedTodayCount = useMemo(() => {
-    if (!habits) return 0;
-    return habits.filter((h) => habitDays.summaryFor(h.id).doneToday).length;
-  }, [habits, habitDays]);
+  // Only Habits asked of today (scheduled, not Skipped) count toward "done today".
+  const todayTally = useMemo(
+    () => habitTodayTally(habits ?? [], habitDays.summaryFor, todayKey),
+    [habits, habitDays, todayKey]
+  );
 
   const editIsDirty = () =>
     editingHabit !== null &&
     (editTitle !== editingHabit.title ||
       editNotes !== (editingHabit.notes ?? "") ||
       editQuestId !== editingHabit.questId ||
-      editKind.isDirty(editingHabit));
+      editKind.isDirty(editingHabit) ||
+      !sameHabitFrequency(editFrequency, habitFrequencyOn(editingHabit, todayKey)));
 
   useDiscardGuard(editIsDirty(), confirmLeaveDirty);
 
   const handleAdd = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const title = newTitle.trim();
-    if (!title || addingRef.current || !newKind.valid) return;
+    if (!title || !isHabitFrequencyValid(newFrequency) || addingRef.current || !newKind.valid) return;
     addingRef.current = true;
     const notes = newNotes;
+    const frequency = newFrequency;
     setNewTitle("");
     setNewNotes("");
     hudAudio.playClick();
@@ -170,6 +183,7 @@ export function HabitsView() {
         title,
         notes,
         questId: selectedQuestId,
+        frequency,
         ...newKind.fields(),
       });
     } finally {
@@ -195,6 +209,7 @@ export function HabitsView() {
     setEditNotes(habit.notes ?? "");
     setEditQuestId(habit.questId);
     editKind.load(habit);
+    setEditFrequency(habitFrequencyOn(habit, todayKey));
   };
 
   const closeEdit = () => {
@@ -210,7 +225,7 @@ export function HabitsView() {
     e.preventDefault();
     if (!editingHabit || savingEditRef.current) return;
     const title = editTitle.trim();
-    if (!title) return;
+    if (!title || !isHabitFrequencyValid(editFrequency)) return;
     savingEditRef.current = true;
     setSavingEdit(true);
     hudAudio.playClick();
@@ -221,6 +236,7 @@ export function HabitsView() {
         title,
         notes: editNotes,
         questId: editQuestId,
+        frequency: editFrequency,
         ...editKind.changes(editingHabit),
       });
       if (saved) {
@@ -280,7 +296,7 @@ export function HabitsView() {
         {habits !== undefined && habits.length > 0 && (
           <div className="flex items-baseline gap-2 tabular-nums">
             <span className="text-2xl font-medium tracking-tight text-white">
-              {completedTodayCount} / {habits.length}
+              {todayTally.done} / {todayTally.asked}
             </span>
             <span className="text-sm text-hud-muted">done today</span>
           </div>
@@ -304,7 +320,7 @@ export function HabitsView() {
 
           <button
             type="submit"
-            disabled={!newTitle.trim() || !newKind.valid}
+            disabled={!newTitle.trim() || !isHabitFrequencyValid(newFrequency) || !newKind.valid}
             className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -324,6 +340,14 @@ export function HabitsView() {
         </div>
 
         {newKind.picker}
+
+        <div className="mt-3 border-t border-white/[0.06] pt-3">
+          <HabitFrequencyPicker
+            label="Frequency for new habit"
+            value={newFrequency}
+            onChange={setNewFrequency}
+          />
+        </div>
 
         <NewHabitQuestPicker
           quests={activeQuests}
@@ -365,8 +389,11 @@ export function HabitsView() {
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
             const { doneToday, outcomeOn, streak, todayTask } =
               habitDays.summaryFor(habit.id);
+            const skippedToday = outcomeOn(todayKey) === "skipped";
             const isEditing = editingHabit?.id === habit.id;
-            const isCount = habitKindOf(habit) === "count";
+            const askedToday = isHabitScheduledOn(habit, todayKey);
+            // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
+            const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
             const todayAmount = habitDayAmount(todayTask);
 
             return (
@@ -388,47 +415,13 @@ export function HabitsView() {
                       {isCount ? (
                         <Count.CountHabitPlusButton habit={habit} met={doneToday} accentBg={style.bg} onAdd={() => void handleLogAmount(habit, "+1")} onLongPress={() => setAmountHabitId(habit.id)} />
                       ) : (
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleToday(habit)}
-                        aria-label={
-                          doneToday
-                            ? `Reopen today's habit: ${habit.title}`
-                            : `Complete today's habit: ${habit.title}`
-                        }
-                        aria-pressed={doneToday}
-                        className={`relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-3 before:content-[''] transition-[transform,opacity,background-color,border-color,color] duration-150 ease-out active:scale-90 active:opacity-80 ${
-                          doneToday
-                            ? `${style.bg} border-transparent text-black`
-                            : "border-white/40 text-transparent hover:border-success hover:text-success"
-                        }`}
-                      >
-                        {doneToday ? (
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                            className="h-3 w-3"
-                          >
-                            <motion.path
-                              d="M20 6 9 17l-5-5"
-                              strokeDasharray={24}
-                              initial={{ strokeDashoffset: 24 }}
-                              animate={{ strokeDashoffset: 0 }}
-                              transition={{
-                                duration: 0.22,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                            />
-                          </svg>
-                        ) : (
-                          <Check className="h-3 w-3 stroke-[2.5]" />
-                        )}
-                      </button>
+                        <HabitTodayCheck
+                          title={habit.title}
+                          askedToday={askedToday}
+                          doneToday={doneToday}
+                          accentBg={style.bg}
+                          onToggle={() => void handleToggleToday(habit)}
+                        />
                       )}
 
                       <div className="min-w-0 flex-1">
@@ -436,6 +429,8 @@ export function HabitsView() {
                           className={`break-words [text-wrap:pretty] text-base font-medium leading-snug ${
                             doneToday
                               ? "text-hud-muted line-through"
+                              : skippedToday
+                              ? "text-hud-muted"
                               : "text-white"
                           }`}
                         >
@@ -450,7 +445,7 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {!doneToday && (
+                      {askedToday && !doneToday && !skippedToday && (
                         <button
                           type="button"
                           onClick={() => void handleFocusToday(habit)}
@@ -487,7 +482,7 @@ export function HabitsView() {
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-hud-muted">
                         <Repeat className="h-3 w-3" aria-hidden="true" />
-                        <span>Daily</span>
+                        <span>{habitFrequencyLabel(habitFrequencyOn(habit, todayKey))}</span>
                       </span>
 
                       {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => setAmountHabitId(habit.id)} />}
@@ -503,31 +498,19 @@ export function HabitsView() {
                     </div>
 
                     {/* Real 7-day completion history */}
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="flex items-center gap-1.5"
-                        aria-label={`${
-                          recentDays.filter((d) => outcomeOn(d) === "met").length
-                        } of last 7 days completed`}
-                      >
-                        {recentDays.map((dKey) => {
-                          const hit = outcomeOn(dKey) === "met";
-                          const isCurrent = dKey === todayKey;
-                          return (
-                            <span
-                              key={dKey}
-                              title={`${dKey}: ${hit ? "Completed" : "Not completed"}`}
-                              className={`h-2 w-2 rounded-full ${
-                                hit
-                                  ? style.bg
-                                  : isCurrent
-                                  ? "border border-white/30 bg-transparent"
-                                  : "bg-white/[0.09]"
-                              }`}
-                            />
-                          );
-                        })}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <HabitSkipToday
+                        habit={habit}
+                        todayKey={todayKey}
+                        outcome={outcomeOn(todayKey)}
+                        focusRunning={todayTask?.status === "active"}
+                      />
+                      <HabitRecentDays
+                        days={recentDays}
+                        todayKey={todayKey}
+                        outcomeOn={outcomeOn}
+                        metClass={style.bg}
+                      />
 
                       {streak > 0 && (
                         <span className="font-mono text-xs tabular-nums text-neutral-300">
@@ -592,6 +575,17 @@ export function HabitsView() {
 
                     {editKind.fields(habit)}
 
+                    <div>
+                      <span className="mb-1 block text-xs text-neutral-400">
+                        Frequency (applies from today)
+                      </span>
+                      <HabitFrequencyPicker
+                        label="Habit frequency"
+                        value={editFrequency}
+                        onChange={setEditFrequency}
+                      />
+                    </div>
+
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <EditHabitQuestPicker quests={activeQuests} questId={editQuestId} onSelect={setEditQuestId} />
 
@@ -605,7 +599,11 @@ export function HabitsView() {
                         </button>
                         <button
                           type="submit"
-                          disabled={savingEdit || !editTitle.trim()}
+                          disabled={
+                            savingEdit ||
+                            !editTitle.trim() ||
+                            !isHabitFrequencyValid(editFrequency)
+                          }
                           aria-busy={savingEdit}
                           className="flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-neutral-200 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-50"
                         >

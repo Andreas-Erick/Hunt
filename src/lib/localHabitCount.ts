@@ -13,11 +13,8 @@ import { buildHabitTaskRow, completeTaskRow, nextStamp } from "./taskQueue";
  * disagree on either device.
  */
 
-/** What a new habit is made from; a Count Habit also needs a positive target. */
-export interface NewHabit {
-  title: string;
-  notes?: string;
-  questId: string | null;
+/** A new habit's Kind; a Count Habit also needs a positive target. */
+export interface NewHabitKind {
   /** Habit Kind, fixed once the Habit is made; defaults to "check". */
   kind?: HabitKind;
   target?: number;
@@ -28,7 +25,7 @@ export interface NewHabit {
 const cleanUnit = (unit: string | undefined) => (unit ?? "").trim().slice(0, MAX_COUNT_UNIT_LENGTH);
 
 /** A new habit's Kind fields, or null for a Count Habit without a usable target. */
-export function newHabitKindFields(params: NewHabit): Partial<Habit> | null {
+export function newHabitKindFields(params: NewHabitKind): Partial<Habit> | null {
   const kind = habitKindOf(params);
   if (kind !== "count") return { kind };
   return isCountTarget(params.target) ? { kind, target: params.target, unit: cleanUnit(params.unit) } : null;
