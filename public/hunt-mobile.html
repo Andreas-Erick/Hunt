@@ -1122,6 +1122,30 @@
       margin: 0;
       color: var(--slate);
     }
+    .reminder-notice {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: -4px 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--slate);
+    }
+    .reminder-notice[hidden] {
+      display: none;
+    }
+    .reminder-notice-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .reminder-notice .text-action {
+      flex: 0 0 auto;
+      margin: 0;
+      min-height: var(--touch-min);
+      white-space: nowrap;
+      color: var(--cyan);
+    }
     .danger-outline-btn {
       min-height: var(--touch-min);
       padding: 0 14px;
@@ -3008,6 +3032,8 @@ var HuntCore = (() => {
   var huntCore_exports = {};
   __export(huntCore_exports, {
     MAX_CHECKLIST_TEXT_LENGTH: () => MAX_CHECKLIST_TEXT_LENGTH,
+    REMINDER_PLAN_AHEAD_MS: () => REMINDER_PLAN_AHEAD_MS,
+    REMINDER_PLAN_MAX: () => REMINDER_PLAN_MAX,
     SYNCED_ENTITY_KEYS: () => SYNCED_ENTITY_KEYS,
     TOMBSTONE_KEY: () => TOMBSTONE_KEY,
     WIDGET_SNAPSHOT_VERSION: () => WIDGET_SNAPSHOT_VERSION,
@@ -3039,6 +3065,7 @@ var HuntCore = (() => {
     newChecklistItemId: () => newChecklistItemId,
     nextStamp: () => nextStamp,
     pickNextFocusTask: () => pickNextFocusTask,
+    reminderPlan: () => reminderPlan,
     sameContent: () => sameContent,
     sessionLogId: () => sessionLogId,
     summarizeHabitDays: () => summarizeHabitDays,
@@ -3881,6 +3908,18 @@ var HuntCore = (() => {
     }
     return { state: tasks === state.tasks ? state : { ...state, tasks }, skipped };
   }
+
+  // src/lib/reminderAlarm.ts
+  var REMINDER_LATE_LIMIT_MS = 10 * 6e4;
+  var MAX_WAIT_MS = 60 * 6e4;
+
+  // src/lib/reminderPlan.ts
+  var REMINDER_PLAN_AHEAD_MS = 7 * 24 * 60 * 6e4;
+  var REMINDER_PLAN_MAX = 64;
+  function reminderPlan(sources, now) {
+    const due = dueReminders(sources, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
+    return { version: 1, reminders: due.slice(0, REMINDER_PLAN_MAX) };
+  }
   return __toCommonJS(huntCore_exports);
 })();
   </script>
@@ -4609,8 +4648,86 @@ var HuntCore = (() => {
         localStorage.setItem(STORAGE_KEY, text);
       } catch (e) {}
       publishWidgetSnapshot();
+      publishReminderPlan();
       return true;
     }
+
+    // Reminders (ADR-0007): after every save (a sync's merge is saved too), at boot and at the start of
+    // the day, hand the shell the Reminder Plan HuntCore built. The shell arms the exact alarms and
+    // posts the notifications; it decides nothing. Only the APK notifies; an unchanged plan is not resent.
+    let lastReminderPlanJson = "";
+    function publishReminderPlan() {
+      if (!isApkShell()) return;
+      try {
+        const text = JSON.stringify(HuntCore.reminderPlan(state, Date.now()));
+        if (text === lastReminderPlanJson) return;
+        lastReminderPlanJson = text;
+        bridgeCall("saveReminderPlan", text);
+      } catch (e) {
+        // A plan bug must never break saving: the state is stored, the alarms keep the previous plan.
+        recordMobileBreadcrumb("WARN", "reminders", "plan_failed", { message: e && e.message });
+      }
+    }
+
+    // Why reminders may not arrive, from the shell's two grants (notifications, exact alarms); "" when
+    // they are fine, in the browser copy (no notifications) and on an older shell that cannot say.
+    function reminderPermissionProblem() {
+      if (!isApkShell()) return "";
+      let grants = null;
+      try {
+        grants = JSON.parse(bridgeCall("getReminderPermissions"));
+      } catch (e) {
+        return ""; // an older shell without the method: nothing it could tell us
+      }
+      if (!grants || typeof grants !== "object") return "";
+      if (grants.notifications === false) return "Notifications are off for Hunt, so reminders won't arrive.";
+      if (grants.exactAlarms === false) return "Hunt isn't allowed to set exact alarms, so reminders may arrive late.";
+      return "";
+    }
+
+    // The shell takes the next step: Android's notification dialog, or the settings screen that allows it.
+    function allowReminders() {
+      bridgeCall("requestReminderPermissions");
+    }
+
+    // The first reminder set on this phone asks for what reminders need, once; after that the
+    // Reminder field explains what is missing and offers Allow.
+    const REMINDER_ASKED_KEY = "hunt-reminder-permission-asked-v1";
+    function askForReminderPermissionsOnce() {
+      if (!reminderPermissionProblem()) return;
+      let asked = false;
+      try {
+        asked = localStorage.getItem(REMINDER_ASKED_KEY) === "1";
+        localStorage.setItem(REMINDER_ASKED_KEY, "1");
+      } catch (e) {
+        // Storage unavailable: Hunt may ask again on the next reminder, which is harmless.
+      }
+      if (!asked) allowReminders();
+    }
+
+    // Keeps the open Task Options' permission notice current (a reminder set or cleared, back from settings).
+    function refreshReminderNotice() {
+      const notice = document.getElementById("taskReminderNotice");
+      if (!notice) return;
+      const clear = document.getElementById("taskReminderClear");
+      const problem = clear && !clear.hidden ? reminderPermissionProblem() : "";
+      notice.hidden = !problem;
+      const text = notice.querySelector(".reminder-notice-text");
+      if (text) text.textContent = problem;
+    }
+
+    // A reminder notification was tapped (ADR-0007): open the item. A Task that is gone (deleted, or
+    // synced away) just leaves Hunt open where it was.
+    window.__huntOpenReminder = function (target) {
+      if (!target || typeof target !== "object" || target.kind !== "task") return;
+      const t = state.tasks.find((x) => x.id === target.itemId);
+      if (!t) return;
+      try {
+        openTaskInspectorSheet(t.id);
+      } catch (e) {
+        recordMobileBreadcrumb("WARN", "reminders", "open_failed", { message: e && e.message });
+      }
+    };
 
     // Day Widget (ADR-0006): after every save, the start of the day and a look change, hand the shell
     // the ready-to-draw Widget Snapshot. Only the APK has widgets; an unchanged snapshot is not resent.
@@ -4814,6 +4931,8 @@ var HuntCore = (() => {
       const input = clear && clear.parentElement.querySelector("input");
       if (input && !value) input.value = "";
       commitLocalChange({ render: false });
+      if (value) askForReminderPermissionsOnce();
+      refreshReminderNotice();
     }
 
     // ----- Merge (phone side) -----
@@ -5643,6 +5762,7 @@ var HuntCore = (() => {
       syncRun.retryAt = 0;
       const ticked = drainPendingTicks(); // widget ticks whose signal reached no page (see __huntPendingTicksArrived)
       if (wasHidden || ticked) renderAppSafely(); // time-dependent views (timers, date rollover)
+      refreshReminderNotice(); // back from the notification or exact-alarm settings
       kickSync();
     }
 
@@ -7188,6 +7308,7 @@ var HuntCore = (() => {
       const tomorrowKey = dayKeyOffset(1);
       const dayKey = task.scheduledDate || todayKey;
       const otherDay = dayKey !== todayKey && dayKey !== tomorrowKey;
+      const reminderProblem = task.scheduledDate && !task.habitId && isReminderTime(task.reminderTime) ? reminderPermissionProblem() : "";
 
       showSheet("task:" + task.id, `
           ${sheetHeaderHtml("Task Options")}
@@ -7232,6 +7353,10 @@ var HuntCore = (() => {
           <div class="reminder-row">
             <input type="time" class="sheet-input" aria-label="Reminder time" value="${escapeHtml(isReminderTime(task.reminderTime) ? task.reminderTime : "")}" onchange="setTaskReminder(${jsArg(task.id)}, this.value)" />
             <button id="taskReminderClear" class="text-action" aria-label="Clear reminder" ${isReminderTime(task.reminderTime) ? "" : "hidden"} onclick="setTaskReminder(${jsArg(task.id)}, '')">✕ Clear</button>
+          </div>
+          <div id="taskReminderNotice" class="reminder-notice" role="status" ${reminderProblem ? "" : "hidden"}>
+            <span class="reminder-notice-text">${escapeHtml(reminderProblem)}</span>
+            <button class="text-action" onclick="allowReminders()">Allow</button>
           </div>` : ""}
 
           <div class="sheet-footer-row">
@@ -10456,6 +10581,7 @@ var HuntCore = (() => {
       if (lastRenderedDateKey && toLocalDateKey() !== lastRenderedDateKey) {
         materializeDailyHabits(toLocalDateKey());
         publishWidgetSnapshot(); // the new day, even when no habit row had to be saved
+        publishReminderPlan();
         renderAppSafely();
       }
       if (document.body && document.body.classList.contains("keyboard-open")) updateKeyboardClass(); // backstop
@@ -10560,6 +10686,7 @@ var HuntCore = (() => {
     }
     drainPendingTicks(); // widget ticks made while Hunt was closed, applied before the first paint
     publishWidgetSnapshot(); // opening Hunt refreshes the widget even when nothing needed saving
+    publishReminderPlan(); // and re-arms the reminder alarms
     try {
       renderApp();
       recordMobileBreadcrumb("INFO", "boot", "render_ok", { view: activeView });

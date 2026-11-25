@@ -40,4 +40,7 @@
     <string name="stats_widget_no_quests">Set up a Quest in Hunt</string>
     <string name="stats_widget_more">+%1$d more</string>
     <string name="stats_widget_open">Hunt stats, %1$s of Quest focus today. Open Hunt</string>
+    <string name="reminder_channel_name">Reminders</string>
+    <string name="reminder_channel_description">Task reminders at the time you set</string>
+    <string name="reminder_task_text">Task reminder</string>
 </resources>

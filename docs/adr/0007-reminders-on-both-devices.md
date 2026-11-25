@@ -46,9 +46,21 @@ Each device re-plans after every save and every sync.
   turns into a Windows notification. The notification tag
   is the reminder key, so two windows replace each other's
   toast instead of stacking.
-- **Phone.** The Android shell schedules exact alarms for
-  the next due reminders and posts notifications, with
-  Hunt open or closed.
+- **Phone.** After every save (a sync's merge is saved
+  too), at boot and at the start of each day, the page
+  hands the shell a Reminder Plan: HuntCore's
+  `reminderPlan(sources, now)` in `src/lib/reminderPlan.ts`,
+  the rule's answer from 10 minutes ago to 7 days ahead,
+  at most 64 entries. The shell writes it to its own file
+  and arms one alarm for the next entry, exact when
+  Android allows it, with Hunt open or closed. When the
+  alarm rings it posts each due entry once (it remembers
+  when it last posted), drops one missed by more than 10
+  minutes, and arms the next. A reboot, a clock or time
+  zone change, an update or an exact-alarm grant re-arms
+  it. The notification tag is the reminder key. A tap
+  opens Hunt on the item; an item gone since just opens
+  Hunt. The shell decides nothing about what is due.
 
 ## Consequences
 
@@ -73,7 +85,17 @@ Each device re-plans after every save and every sync.
   set. When it was refused, the reminder field says how to
   allow it again. The phone needs the notification and
   exact-alarm permissions, asked for the first time a
-  reminder is set.
+  reminder is set, plus the boot permission to re-arm
+  after a restart. When one is missing, the reminder
+  field says so (notifications off: reminders won't
+  arrive; no exact alarms: they may arrive late) and
+  offers Allow, which opens Android's dialog or the
+  setting. Without the exact-alarm grant the shell arms
+  an inexact alarm instead.
+- A phone left closed for more than 7 days stops
+  reminding until Hunt is opened again; the plan is
+  rebuilt on every open. Its fire times are computed in
+  the time zone the page last ran in.
 - A reminder time is validated as `HH:MM` by the sync
   validator and the phone's boundary guard. It merges with
   its row under row-level last-write-wins (ADR-0001), so
