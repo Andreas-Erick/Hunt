@@ -15,7 +15,9 @@ import {
   type ReminderActionDeps,
   type ReminderNotificationData,
 } from "./desktopReminderActions";
-import { reminderAction } from "./reminderActions";
+import type { Habit } from "./domainTypes";
+import { requestOpenTask, revealWhenDrawn } from "./openItemRequest";
+import { isSlipCheckIn, reminderAction, SLIP_CHECK_IN_TEXT } from "./reminderActions";
 import { startReminderAlarm } from "./reminderAlarm";
 import type { DueReminder, ReminderSources } from "./reminders";
 
@@ -69,25 +71,30 @@ async function readReminderSources(): Promise<ReminderSources> {
   return { tasks: [...tasks.values()], habits, snoozes: readDesktopSnoozes() };
 }
 
-/** How long a click keeps looking for the Habit's card while the Habits view renders. */
-const REVEAL_TRIES = 20;
-const REVEAL_STEP_MS = 100;
-
-/** Scrolls the Habit's card into view once the Habits view has drawn it. */
-function revealHabitCard(habitId: string, triesLeft = REVEAL_TRIES): void {
-  const card = Array.from(document.querySelectorAll<HTMLElement>("[data-habit-id]")).find(
-    (el) => el.dataset.habitId === habitId
-  );
-  if (card) card.scrollIntoView?.({ block: "center" });
-  else if (triesLeft > 0) setTimeout(() => revealHabitCard(habitId, triesLeft - 1), REVEAL_STEP_MS);
-}
-
-/** A click opens Hunt on the item: a Habit opens Habits at its card; a Task just focuses Hunt. */
+/**
+ * A click opens Hunt on the item: a Habit opens Habits at its card (where an
+ * Avoid Habit's Slip is logged); a Task opens Today with its row's drawer open.
+ */
 function openReminder(reminder: DueReminder): void {
   window.focus();
-  if (reminder.kind !== "habit") return;
-  useCommandStore.getState().setActiveView("habits");
-  revealHabitCard(reminder.itemId);
+  const { setActiveView } = useCommandStore.getState();
+  if (reminder.kind === "habit") {
+    setActiveView("habits");
+    revealWhenDrawn("habitId", reminder.itemId);
+    return;
+  }
+  setActiveView("command");
+  requestOpenTask(reminder.itemId);
+}
+
+/** A notification's text: the Task or Habit reminder and its time, or an Avoid Habit's Slip check-in. */
+function reminderBody(reminder: DueReminder, habits: readonly Habit[]): string {
+  const text = isSlipCheckIn(reminder, habits)
+    ? SLIP_CHECK_IN_TEXT
+    : reminder.kind === "habit"
+    ? "Habit reminder"
+    : "Reminder";
+  return `${text} · ${reminder.time}`;
 }
 
 /**
@@ -97,14 +104,14 @@ function openReminder(reminder: DueReminder): void {
  */
 async function showReminder(reminder: DueReminder, worker: ServiceWorkerRegistration | null, withActions: boolean): Promise<void> {
   if (notificationAccess() !== "granted") return;
+  const habits = reminder.kind === "task" ? [] : await reads.habits();
   const options = {
-    body: `${reminder.kind === "habit" ? "Habit reminder" : "Reminder"} · ${reminder.time}`,
+    body: reminderBody(reminder, habits),
     // The same key in two windows replaces one toast instead of stacking two.
     tag: reminder.key,
     icon: "/icon.svg",
   };
   if (worker) {
-    const habits = reminder.kind === "task" ? [] : await reads.habits();
     const action = withActions ? reminderAction(reminder, habits) : null;
     const data: ReminderNotificationData = { reminder, action };
     const actions = withActions ? reminderNotificationActions(action) : [];

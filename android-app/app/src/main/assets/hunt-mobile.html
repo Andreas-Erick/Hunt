@@ -4930,6 +4930,11 @@ var HuntCore = (() => {
     if (kind === "count") return { tick: "+1", taskId };
     return null;
   }
+  function isSlipCheckIn(reminder, habits) {
+    if (reminder.kind !== "habit") return false;
+    const habit = (habits != null ? habits : []).find((h) => h.id === reminder.itemId);
+    return habit !== void 0 && habitKindOf(habit) === "avoid";
+  }
 
   // src/lib/reminderPlan.ts
   var REMINDER_PLAN_AHEAD_MS = 7 * 24 * 60 * 6e4;
@@ -4940,7 +4945,9 @@ var HuntCore = (() => {
     const due = dueReminders({ ...sources, snoozes }, { from: now - REMINDER_LATE_LIMIT_MS, to: now + REMINDER_PLAN_AHEAD_MS });
     const reminders = due.slice(0, REMINDER_PLAN_MAX).map((r) => {
       const action = reminderAction(r, sources.habits);
-      return action ? { ...r, action } : r;
+      const planned = action ? { ...r, action } : { ...r };
+      if (isSlipCheckIn(r, sources.habits)) planned.checkIn = true;
+      return planned;
     });
     return { version: 1, reminders, snoozes };
   }

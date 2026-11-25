@@ -45,6 +45,20 @@ export function reminderAction(reminder: ReminderTarget, habits: readonly Habit[
   return null;
 }
 
+/**
+ * Whether a reminder is an Avoid Habit's check-in (US 64): its text asks
+ * whether there was a Slip instead of reminding to do something, and it offers
+ * only Snooze; a tap opens the Habit, where a Slip is logged.
+ */
+export function isSlipCheckIn(reminder: ReminderTarget, habits: readonly Habit[] | undefined): boolean {
+  if (reminder.kind !== "habit") return false;
+  const habit = (habits ?? []).find((h) => h.id === reminder.itemId);
+  return habit !== undefined && habitKindOf(habit) === "avoid";
+}
+
+/** An Avoid Habit check-in's notification text, on the desktop (Android has it in strings.xml). */
+export const SLIP_CHECK_IN_TEXT = "Check-in: did you slip? Log a Slip in Hunt";
+
 /** The Pending Tick `action` writes when tapped at `tickedAt` on a reminder for `dateKey`. */
 export function reminderActionTick(action: ReminderAction, dateKey: string, tickedAt: number): PendingTick {
   const tick: PendingTick = { taskId: action.taskId, dateKey, tickedAt };
