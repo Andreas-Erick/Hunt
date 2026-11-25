@@ -553,6 +553,13 @@ async function ensureHabitTaskForDay(habitId: string, dateKey: string): Promise<
   return db.tasks.get(id);
 }
 
+/** Sets a habit day Skipped or back, materializing it first: the row skipHabitDayRow builds. */
+async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boolean): Promise<boolean> {
+  const day = await ensureHabitTaskForDay(habitId, dateKey);
+  if (!day || Boolean(day.skipped) === skipped) return false;
+  return changed(await writeTask(day.id, { skipped: skipped || undefined }));
+}
+
 // ── Time logs ────────────────────────────────────────────────────────────
 
 /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -584,5 +591,6 @@ export const localStore = {
   deleteHabit,
   materializeHabits,
   ensureHabitTaskForDay,
+  setHabitDaySkipped,
   deleteTimeLog,
 };

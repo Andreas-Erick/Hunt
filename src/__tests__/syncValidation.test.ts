@@ -443,6 +443,13 @@ describe("enums and dates", () => {
     expect(sanitizeOne("task", taskRow({ scheduledDate: "2024-02-29" }))?.get("scheduledDate")).toBe("2024-02-29");
   });
 
+  it("keeps a Skipped habit day's skipped: true and drops any other skipped value", () => {
+    expect(sanitizeOne("task", taskRow({ skipped: true }))?.get("skipped")).toBe(true);
+    for (const skipped of [false, "yes", "true", 1, {}, null]) {
+      expect(sanitizeOne("task", taskRow({ skipped }))?.has("skipped"), JSON.stringify(skipped)).toBe(false);
+    }
+  });
+
   it("recomputes an invalid log dateKey from endTime, else from startTime", () => {
     const end = 1_763_420_000_000;
     expect(sanitizeOne("log", logRow({ dateKey: "<b>", endTime: end }))?.get("dateKey")).toBe(localDateKey(end));

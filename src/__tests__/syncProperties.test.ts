@@ -96,6 +96,8 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
     };
     if (chance(0.3)) task.completedAt = updatedAt;
     if (chance(0.5)) task.scheduledDate = pick(["2026-11-18", "2026-11-19"]);
+    // A Skipped habit day: the flag rides on the row, merged with it under R1.
+    if (chance(0.25)) task.skipped = true;
     tasks.push(task);
   });
 

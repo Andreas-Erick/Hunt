@@ -7,6 +7,16 @@ import type {
   TaskStatus,
   TimeLog,
 } from "./domainTypes";
+import {
+  clamp,
+  clampText,
+  finiteOr,
+  isDateKey,
+  isRecord,
+  isStamp,
+  isTableKey,
+  type UnknownRecord,
+} from "./syncValues";
 
 export type { ActiveFocusState } from "./domainTypes";
 
@@ -299,7 +309,6 @@ const MAX_EXTRA_TEXT_LENGTH = 10_000; // string values of fields not listed belo
 const MAX_COUNTER_SECONDS = 1e9;
 const MAX_WEEKLY_HOURS = 168;
 const DEFAULT_WEEKLY_HOURS = 10;
-const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 /** 9999-12-31T00:00Z: the local date stays 4-digit-year in every time zone up to here. */
 const MAX_DATE_KEY_MS = 253_402_214_400_000;
 const FORBIDDEN_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
@@ -328,7 +337,7 @@ const QUEST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const TASK_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "habitId", "status", "rank", "accumulatedSeconds",
-  "scheduledDate", "createdAt", "updatedAt", "completedAt",
+  "scheduledDate", "skipped", "createdAt", "updatedAt", "completedAt",
 ]);
 const HABIT_FIELDS: ReadonlySet<string> = new Set([
   "id", "title", "notes", "questId", "rank", "createdAt", "updatedAt",
@@ -368,41 +377,6 @@ type LogRow = Omit<TimeLog, "taskTitleSnapshot" | "endTime" | "questCodeSnapshot
   taskTitleSnapshot?: string;
   endTime?: number;
 };
-
-type UnknownRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Own-key lookup, so "constructor" or "__proto__" never match a table entry. */
-function isTableKey<K extends string>(table: Record<K, true>, value: unknown): value is K {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(table, value);
-}
-
-/** A millisecond timestamp: a finite number in [0, MAX_SAFE_INTEGER]. */
-function isStamp(value: unknown): value is number {
-  return typeof value === "number" && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-}
-
-function isDateKey(value: unknown): value is string {
-  return typeof value === "string" && DATE_KEY_RE.test(value);
-}
-
-function finiteOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-/** Cuts `text` to at most `max` UTF-16 units without splitting a surrogate pair. */
-function clampText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const last = text.charCodeAt(max - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
-}
 
 function entityIdOrNull(value: unknown): string | null {
   return isSafeSyncId(value) ? value : null;
@@ -492,6 +466,8 @@ export function sanitizeTask(raw: unknown): Task | null {
   if (typeof rank === "number" && Number.isFinite(rank)) task.rank = rank;
   if (scheduledDate === null || isDateKey(scheduledDate)) task.scheduledDate = scheduledDate;
   if (isSafeSyncId(raw.habitId)) task.habitId = raw.habitId;
+  // A Skipped habit day carries `skipped: true`; not Skipped is no flag at all.
+  if (raw.skipped === true) task.skipped = true;
   if (isStamp(raw.createdAt)) task.createdAt = raw.createdAt;
   if (isStamp(raw.updatedAt)) task.updatedAt = raw.updatedAt;
   if (completedAt === null || isStamp(completedAt)) task.completedAt = completedAt;

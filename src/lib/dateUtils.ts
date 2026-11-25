@@ -32,14 +32,15 @@ export function habitTaskId(habitId: string, dateKey: string): string {
 /**
  * Whether an open task belongs in today's Home queue / Focus picker.
  * Regular tasks carry over if overdue (<= todayKey) or unscheduled; daily
- * habit instances show ONLY on their own day so missed habits never pile up.
+ * habit instances show ONLY on their own day so missed habits never pile up,
+ * and not at all once Skipped (a day set aside is not asked of the user).
  */
 export function isTaskVisibleToday(
-  task: Pick<Task, "scheduledDate" | "habitId">,
+  task: Pick<Task, "scheduledDate" | "habitId" | "skipped">,
   todayKey: string
 ): boolean {
   if (task.habitId) {
-    return task.scheduledDate === todayKey;
+    return task.scheduledDate === todayKey && !task.skipped;
   }
   return !task.scheduledDate || task.scheduledDate <= todayKey;
 }
@@ -65,14 +66,16 @@ export function isMissedHabitTask(
 
 /**
  * SHARED open-task rule for every list, count and picker of open work on
- * `todayKey`: queued or active, minus missed daily habit days.
+ * `todayKey`: queued or active, minus missed and Skipped habit days (a Skipped
+ * day is not asked of the user, so it leaves Today and the Day Widget).
  */
 export function isOpenTask(
-  task: Pick<Task, "status" | "scheduledDate" | "habitId">,
+  task: Pick<Task, "status" | "scheduledDate" | "habitId" | "skipped">,
   todayKey: string
 ): boolean {
   return (
     (task.status === "queued" || task.status === "active") &&
+    !(task.habitId && task.skipped) &&
     !isMissedHabitTask(task, todayKey)
   );
 }

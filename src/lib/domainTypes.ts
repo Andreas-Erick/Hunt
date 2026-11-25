@@ -50,6 +50,8 @@ export interface Task {
   accumulatedSeconds: number;
   scheduledDate?: string; // YYYY-MM-DD local date for "Plan the week"
   habitId?: string; // Source Habit.id when materialized from a daily habit
+  /** A habit day set aside on purpose: its Outcome is Skipped (GLOSSARY). Habit day Tasks only. */
+  skipped?: boolean;
   createdAt: number;
   updatedAt?: number;
   completedAt?: number;
