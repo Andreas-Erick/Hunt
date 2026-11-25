@@ -170,6 +170,8 @@ step.
 | [0005](docs/adr/0005-two-looks.md) | Two looks, one token set | Looks aren't synced |
 | [0006](docs/adr/0006-widget-pending-ticks.md) | Widget ticks are queued | Applied when Hunt runs |
 | [0007](docs/adr/0007-reminders-on-both-devices.md) | Reminders fire on both devices | Duplicates until sync |
+| [0008](docs/adr/0008-habit-days-are-task-rows.md) | Habit days are Task rows | Id format is frozen |
+| [0009](docs/adr/0009-desktop-window-control-route.md) | Window control via a local route | Window buttons Windows-only |
 
 ## Quickstart
 
