@@ -2,7 +2,7 @@
 // Avoid Habits on the phone (GLOSSARY: Avoid Habit, Slip), through the same shared rules as the
 // desktop: Avoid is chosen when the Habit is made; its rows read "Kept so far" until a Slip is
 // logged from a labelled button, and a Slip can be undone.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { click, loadMobile, pageErrors, readState, type MobileWindow } from "./helpers/loadMobile";
 
 type Page = MobileWindow & {
@@ -23,10 +23,18 @@ const DRY = {
   kind: "avoid",
 };
 
+// Monday 11 May 2026, 10:00 local: far from midnight, so boot and every assertion share one day key.
+const NOW = new Date(2026, 4, 11, 10).getTime();
+
 let w: Page | null = null;
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+});
 afterEach(() => {
   w?.close();
   w = null;
+  vi.useRealTimers();
 });
 
 function boot(habits: unknown[] = [DRY]): Page {

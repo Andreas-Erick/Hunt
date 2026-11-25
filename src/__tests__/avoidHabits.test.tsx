@@ -1,7 +1,7 @@
 // Avoid Habits on the desktop (GLOSSARY: Avoid Habit, Slip): chosen as a Habit Kind when the Habit
 // is made; its card reads "Kept so far" until a Slip is logged, and a Slip can be undone.
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { db } from "@/lib/db";
 import { habitTaskId, toLocalDateKey } from "@/lib/dateUtils";
@@ -30,10 +30,18 @@ const DRY: Habit = {
   kind: "avoid",
 };
 
+// A fixed local mid-morning "today" (Mon 11 May 2026, 10:00): the test and the app read the same day key.
+const TODAY = new Date(2026, 4, 11, 10).getTime();
+
 const todayRow = () => db.tasks.get(habitTaskId(DRY.id, toLocalDateKey()));
 
 describe("Avoid Habits — desktop", () => {
-  beforeEach(resetAll);
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(TODAY);
+    await resetAll();
+  });
+  afterEach(() => vi.useRealTimers());
 
   it("offers Avoid as a Habit Kind when the Habit is made", async () => {
     render(<HabitsView />);

@@ -134,8 +134,13 @@ describe("Daily Habits — pure rules & boundary matrix", () => {
 });
 
 describe("Daily Habits — store lifecycle & daily materialization", () => {
+  // A fixed local mid-morning "today" (Mon 11 May 2026, 10:00): the test and the app read the same day key.
+  const TODAY = new Date(2026, 4, 11, 10).getTime();
+
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(TODAY);
     await resetAll();
   });
 
@@ -280,6 +285,21 @@ describe("Daily Habits — store lifecycle & daily materialization", () => {
     expect((await db.tasks.get(habitTaskId("hab-done", todayKey)))?.status).toBe(
       "completed"
     );
+  });
+
+  it("deleting a habit keeps today's queued row once Focus time is logged on it", async () => {
+    const todayKey = toLocalDateKey();
+    await db.habits.put(makeHabit("hab-logged", "Deep work"));
+    await useCommandStore.getState().materializeDailyHabits(todayKey);
+    await db.tasks.update(habitTaskId("hab-logged", todayKey), { accumulatedSeconds: 900 });
+
+    await useCommandStore.getState().deleteHabit("hab-logged");
+
+    expect(await db.habits.get("hab-logged")).toBeUndefined();
+    expect(await db.tasks.get(habitTaskId("hab-logged", todayKey))).toMatchObject({
+      status: "queued",
+      accumulatedSeconds: 900,
+    });
   });
 });
 
@@ -574,5 +594,8 @@ describe("Daily Habits — Mobile Parity (hunt-mobile.html)", () => {
     };
     expect(s3.habits).toHaveLength(0);
     expect(s3.deletedHabitIds).toContain(s1.habits[0].id);
+    // Today's completed row stays as history; only an untouched open one would go.
+    expect(s3.tasks.find((t) => t.id === s2.tasks[0].id)?.status).toBe("completed");
+    expect(s3.deletedTaskIds ?? []).not.toContain(s2.tasks[0].id);
   });
 });

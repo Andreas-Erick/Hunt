@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "@/lib/db";
-import type { List, Quest, Task, TimeLog } from "@/lib/domainTypes";
+import type { Habit, List, Quest, Task, TimeLog } from "@/lib/domainTypes";
 import {
   canonicalString,
   compareRank,
@@ -16,6 +16,7 @@ import {
 import {
   applyMergedPayloadToLocalDB,
   buildLocalSyncPayload,
+  recordDeletedHabitTombstone,
   recordDeletedTaskTombstone,
 } from "@/lib/syncEngine";
 
@@ -73,6 +74,19 @@ function log(id: string, taskId: string, overrides: Partial<TimeLog> = {}): Time
   };
 }
 
+function habit(id: string, overrides: Partial<Habit> = {}): Habit {
+  return {
+    id,
+    title: `Habit ${id}`,
+    notes: "",
+    questId: null,
+    rank: 1000,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
 function payload(overrides: Partial<SyncPayload> = {}): SyncPayload {
   return { ...createEmptySyncPayload(), ...overrides };
 }
@@ -89,6 +103,7 @@ describe("applyMergedPayloadToLocalDB (diff-apply against current local rows)", 
     await db.tasks.clear();
     await db.timeLogs.clear();
     await db.lists.clear();
+    await db.habits.clear();
     window.localStorage.clear();
   });
 
@@ -240,6 +255,27 @@ describe("applyMergedPayloadToLocalDB (diff-apply against current local rows)", 
     const next = await buildLocalSyncPayload(NO_FOCUS);
     expect(next.deletedTaskIds).toContain("deleted-after-snapshot");
     expect(next.tasks.map((t) => t.id)).toEqual(["keep"]);
+  });
+
+  it("Habits: a tombstone deletes the local habit, and one recorded after the snapshot is not resurrected", async () => {
+    await db.habits.bulkPut([habit("hab-gone"), habit("hab-late"), habit("hab-keep")]);
+    const snapshot = await buildLocalSyncPayload(NO_FOCUS);
+    recordDeletedHabitTombstone("hab-late");
+    await db.habits.delete("hab-late");
+
+    // The server merged the pre-deletion snapshot, so it still holds hab-late.
+    const response = mergeSyncPayloads(payload({ deletedHabitIds: ["hab-gone"] }), snapshot);
+    expect(response.habits?.map((h) => h.id)).toContain("hab-late");
+
+    expect(await applyMergedPayloadToLocalDB(response)).toBe(true);
+
+    expect(await db.habits.get("hab-gone")).toBeUndefined();
+    expect(await db.habits.get("hab-late")).toBeUndefined();
+    expect(await db.habits.get("hab-keep")).toBeDefined();
+    expect((await buildLocalSyncPayload(NO_FOCUS)).deletedHabitIds?.slice().sort()).toEqual([
+      "hab-gone",
+      "hab-late",
+    ]);
   });
 
   it("Lists: a newer remote List replaces ours, an older one does not, a tombstone deletes it; the snapshot carries them", async () => {

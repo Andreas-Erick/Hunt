@@ -1,7 +1,7 @@
 // Skip a habit day (#18): the shared row rule both apps write, and the desktop Habits card's
 // Skip / Undo skip control. A Skipped day leaves Today, keeps the Streak, and is un-Skipped in place.
 import React from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { completeTaskRow, pickNextFocusTask, skipHabitDayRow } from "@/mobile/huntCore";
 import { db } from "@/lib/db";
@@ -80,11 +80,17 @@ describe("Skipped state syncs under row-level last-write-wins", () => {
 });
 
 describe("desktop Habits card: Skip today and Undo skip", () => {
+  // A fixed local mid-morning "today" (Mon 11 May 2026, 10:00): the test and the app read the same day key.
+  const TODAY = new Date(2026, 4, 11, 10).getTime();
+
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(TODAY);
     await Promise.all([db.quests.clear(), db.tasks.clear(), db.timeLogs.clear(), db.habits.clear()]);
     window.localStorage.clear();
     useCommandStore.setState({ activeView: "command", activeTaskId: null, actionError: null });
   });
+  afterEach(() => vi.useRealTimers());
 
   it("writes the same row as the shared rule, so phone and desktop Skips sync alike", async () => {
     const before = dayTask({ updatedAt: 1 });

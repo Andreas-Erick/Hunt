@@ -23,6 +23,8 @@ import { PlanWeekView } from "@/components/PlanWeekView";
  */
 
 const T0 = 1_700_000_000_000;
+// A fixed local mid-morning "today" (Mon 11 May 2026, 10:00): the test and the app read the same day key.
+const TODAY = new Date(2026, 4, 11, 10).getTime();
 const HABIT_TITLE = "Read 20 pages";
 
 const realActions = (() => {
@@ -96,6 +98,8 @@ function regularTask(id: string, title: string, extra: Partial<Task> = {}): Task
 }
 
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(TODAY);
   await Promise.all([
     db.quests.clear(),
     db.tasks.clear(),
@@ -117,6 +121,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   useCommandStore.setState({
     ...realActions,
