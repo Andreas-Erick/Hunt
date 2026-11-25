@@ -4,6 +4,8 @@ import { habitFrequencyOn, isHabitScheduledOn, isPerWeekFrequency } from "./habi
 import { habitSuccessRate } from "./habitInsight";
 import { habitKindOf } from "./habitKind";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
+import { habitDayAmount } from "./habitKind";
+import { habitScore } from "./habitStats";
 import { frequencyUnitStart, habitWeekOf, habitWeekStreakOn, weekOutcomesBackFrom, type HabitWeek } from "./habitWeek";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,6 +66,8 @@ export interface HabitDaySummary {
   week: HabitWeek | null;
   /** The Outcome of the Habit Week holding `dayKey`, or null when it was not N per week. */
   weekOutcomeOn: (dayKey: string) => HabitOutcome | null;
+  /** The Habit Week holding `dayKey` (habitWeekOf), or null when it was not N per week. */
+  weekOn: (dayKey: string) => HabitWeek | null;
   /** Whether today is Met (a Check Habit ticked, a Count Habit at its target). */
   doneToday: boolean;
   /** The Habit's Outcome on `dayKey` (habitDayOutcome), or null for a day after today. */
@@ -74,6 +78,13 @@ export interface HabitDaySummary {
    * Missed. Worked out on first call only.
    */
   successRate: () => number | null;
+  /**
+   * The Habit Score (habitScore) over the same units as the Success Rate, or
+   * null before any was Met or Missed. Worked out on first call only.
+   */
+  score: () => number | null;
+  /** A Count Habit's total on `dayKey` (habitDayAmount): 0 when none was logged. */
+  amountOn: (dayKey: string) => number;
 }
 
 const EMPTY_DATES: ReadonlySet<string> = new Set<string>();
@@ -170,6 +181,10 @@ export function summarizeHabitDays(
         const weekOutcomeOn = (dayKey: string) => weekOn(dayKey)?.outcome ?? null;
         const weekly = isPerWeekFrequency(habitFrequencyOn(habit, todayKey));
         let rate: number | null | undefined;
+        let score: number | null | undefined;
+        // The units the Success Rate and Habit Score judge, newest first: days, or Habit Weeks.
+        const units = () =>
+          weekly ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn) : outcomesBackFrom(todayKey, firstDay, outcomeOn);
         const week = weekly ? weekOn(todayKey) : null;
         const doneToday = outcomeOn(todayKey) === "met";
         const unitStart = frequencyUnitStart(habit, todayKey);
@@ -194,15 +209,11 @@ export function summarizeHabitDays(
             : "open",
           week,
           weekOutcomeOn,
+          weekOn,
           outcomeOn,
-          successRate: () =>
-            rate === undefined
-              ? (rate = habitSuccessRate(
-                  weekly
-                    ? weekOutcomesBackFrom(todayKey, firstDay, weekOutcomeOn)
-                    : outcomesBackFrom(todayKey, firstDay, outcomeOn)
-                ))
-              : rate,
+          successRate: () => (rate === undefined ? (rate = habitSuccessRate(units())) : rate),
+          score: () => (score === undefined ? (score = habitScore(units())) : score),
+          amountOn: (dayKey) => habitDayAmount(dayTaskOn(dayKey)),
         };
         cache.set(habitId, summary);
       }

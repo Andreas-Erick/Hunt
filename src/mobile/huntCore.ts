@@ -92,4 +92,19 @@ export { applyPendingTicks } from "../lib/pendingTicks";
 export { dueReminders, isReminderTime } from "../lib/reminders";
 export { MAX_HABIT_REMINDER_TIMES, sanitizeHabitReminderTimes } from "../lib/reminderTime";
 export { REMINDER_PLAN_AHEAD_MS, REMINDER_PLAN_MAX, reminderPlan } from "../lib/reminderPlan";
-export { correctHabitDayRow, habitMonth, habitStartKey, shiftMonthKey } from "../lib/habitCalendar";
+export {
+  correctHabitDayRow,
+  habitDayActions,
+  habitMonth,
+  habitStartKey,
+  habitWeekSkipMark,
+  shiftMonthKey,
+} from "../lib/habitCalendar";
+export {
+  formatCountTotal,
+  HABIT_SCORE_EXPLANATION,
+  HABIT_SCORE_WEIGHT,
+  habitMonthAmounts,
+  habitScore,
+  habitYearTotals,
+} from "../lib/habitStats";

@@ -112,6 +112,59 @@ describe("desktop Habit detail: Calendar tab", () => {
     expect(within(dialog).getByRole("button", { name: "16 November: Missed" })).toBeInTheDocument();
   });
 
+  it("on a Count Habit, Tick sets the day's total to the target, Untick clears it, and the day takes an exact total", async () => {
+    await db.habits.update("h1", { kind: "count", target: 3, unit: "sets" });
+    await db.tasks.put(dayTask("2026-11-12", { amount: 1 }));
+    const dialog = await openDetail();
+    const tid = habitTaskId("h1", "2026-11-12");
+    fireEvent.click(within(dialog).getByRole("button", { name: "12 November: Missed" }));
+    expect(within(dialog).getByText("1 / 3 sets")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tick 12 November" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 3, status: "completed" }));
+
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Untick 12 November" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 0, status: "queued" }));
+
+    const field = await within(dialog).findByRole("textbox", { name: "Total for 12 November" });
+    fireEvent.change(field, { target: { value: "4.5" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set total" }));
+    await waitFor(async () => expect(await db.tasks.get(tid)).toMatchObject({ amount: 4.5, status: "completed" }));
+    expect(await within(dialog).findByRole("button", { name: "12 November: Met" })).toBeInTheDocument();
+  });
+
+  it("on an N per week Habit, Skip sets the whole Habit Week aside and Undo skip on another day of it brings it back", async () => {
+    await db.habits.update("h1", {
+      frequencyHistory: [{ effectiveFrom: "2026-10-20", frequency: { type: "perWeek", times: 3 } }],
+    });
+    const dialog = await openDetail();
+    // Week of Mon 9 - Sun 15 November 2026.
+    fireEvent.click(within(dialog).getByRole("button", { name: /^10 November: / }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Skip 10 November" }));
+    await waitFor(async () => expect((await db.tasks.get(habitTaskId("h1", "2026-11-10")))?.skipped).toBe(true));
+    expect(await within(dialog).findByRole("button", { name: "13 November: Skipped" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "9 November: Skipped" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Habit Week: Skipped")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "13 November: Skipped" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Undo skip 13 November" }));
+    await waitFor(async () => expect((await db.tasks.get(habitTaskId("h1", "2026-11-10")))?.skipped).toBeUndefined());
+    expect(await within(dialog).findByRole("button", { name: /^10 November: (?!Skipped)/ })).toBeInTheDocument();
+  });
+
+  it("on an Avoid Habit, a past day offers Log a Slip and Undo Slip instead of Tick / Untick", async () => {
+    await db.habits.update("h1", { kind: "avoid" });
+    const dialog = await openDetail();
+    const tid = habitTaskId("h1", "2026-11-12");
+    fireEvent.click(within(dialog).getByRole("button", { name: "12 November: Met" }));
+    expect(within(dialog).queryByRole("button", { name: /^(Tick|Untick) / })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Log a Slip 12 November" }));
+    await waitFor(async () => expect((await db.tasks.get(tid))?.slips).toBe(1));
+    expect(await within(dialog).findByRole("button", { name: "12 November: Missed" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Undo Slip 12 November" }));
+    await waitFor(async () => expect((await db.tasks.get(tid))?.slips).toBeUndefined());
+    expect(await within(dialog).findByRole("button", { name: "12 November: Met" })).toBeInTheDocument();
+  });
+
   it("closes on Escape", async () => {
     const dialog = await openDetail();
     fireEvent.keyDown(dialog, { key: "Escape" });

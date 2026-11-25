@@ -608,7 +608,7 @@ export function HabitsView() {
                   </form>
                 </HeightReveal>
                 {detailHabitId === habit.id && (
-                  <HabitDetail habit={habit} todayKey={todayKey} outcomeOn={summary.outcomeOn} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
+                  <HabitDetail habit={habit} todayKey={todayKey} summary={summary} metClass={style.bg} onClose={() => setDetailHabitId(null)} />
                 )}
               </div>
             );

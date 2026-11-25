@@ -58,9 +58,10 @@ export async function correctHabitDay(habitId: string, dateKey: string, mark: Ha
   const day = await ensureHabitTaskForDay(habitId, dateKey);
   if (!day) return false;
   const at = Date.now();
-  const wrote = await db.transaction("rw", db.tasks, async () => {
+  const wrote = await db.transaction("rw", db.tasks, db.habits, async () => {
     const row = await db.tasks.get(day.id);
-    const next = row && correctHabitDayRow(row, mark, at);
+    // A Count Habit's day is corrected through the Count rule (its total follows the mark).
+    const next = row && correctHabitDayRow(row, mark, at, await db.habits.get(habitId));
     if (!row || !next || next === row) return false;
     await db.tasks.update(row.id, { ...next, updatedAt: nextStamp(row) });
     return true;
