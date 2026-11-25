@@ -445,6 +445,13 @@ describe("enums and dates", () => {
     expect(sanitizeOne("task", taskRow({ scheduledDate: "2024-02-29" }))?.get("scheduledDate")).toBe("2024-02-29");
   });
 
+  it("keeps a Skipped habit day's skipped: true and drops any other skipped value", () => {
+    expect(sanitizeOne("task", taskRow({ skipped: true }))?.get("skipped")).toBe(true);
+    for (const skipped of [false, "yes", "true", 1, {}, null]) {
+      expect(sanitizeOne("task", taskRow({ skipped }))?.has("skipped"), JSON.stringify(skipped)).toBe(false);
+    }
+  });
+
   it("keeps a reminderTime only when it is a local 24-hour HH:MM", () => {
     for (const reminderTime of ["9:30", "24:00", "09:30:00", "noon", 930, null, {}]) {
       expect(sanitizeOne("task", taskRow({ reminderTime }))?.has("reminderTime"), String(reminderTime)).toBe(false);

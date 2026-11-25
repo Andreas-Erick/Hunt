@@ -11,7 +11,6 @@ import {
   type ActiveFocusState,
   type FocusSession,
   type QuestAccent,
-  type Task,
 } from "@/lib/domainTypes";
 import {
   logDiagnostic,
@@ -43,6 +42,7 @@ import {
 } from "@/lib/syncScheduler";
 import { compareRank, type SyncPayload } from "@/lib/syncTypes";
 import { pickNextFocusTask } from "@/lib/taskQueue";
+import { habitDayActions, type HabitDayActions } from "./habitDayActions";
 import { mergePersistedFocus } from "./persistedFocus";
 
 export {
@@ -69,7 +69,7 @@ export interface CompletedDirectiveFeedback {
 
 export type { HabitChanges, QuestChanges, TaskChanges } from "@/lib/localStore";
 
-interface CommandStoreState {
+interface CommandStoreState extends HabitDayActions {
   activeView: HudView;
   activeTaskId: string | null;
   isRunning: boolean;
@@ -199,12 +199,6 @@ interface CommandStoreState {
    * Returns the number of newly created tasks.
    */
   materializeDailyHabits: (dateKey?: string) => Promise<number>;
-  /**
-   * Today's (or `dateKey`'s) daily instance of one habit, materializing it first
-   * when missing. Undefined when the habit is gone, the instance is tombstoned,
-   * or the local write failed (actionError is then set).
-   */
-  ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
 
   // Time Log Operations
   /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -783,13 +777,7 @@ export const useCommandStore = create<CommandStoreState>()(
           return added;
         },
 
-        ensureHabitTaskForDay: async (habitId, dateKey) => {
-          let task: Task | undefined;
-          await runAction(set, "ensureHabitTaskForDay", async () => {
-            task = await localStore.ensureHabitTaskForDay(habitId, dateKey);
-          });
-          return task;
-        },
+        ...habitDayActions((name, action) => runAction(set, name, action)),
 
         deleteTimeLog: async (logId) => {
           await runAction(set, "deleteTimeLog", () => localStore.deleteTimeLog(logId));

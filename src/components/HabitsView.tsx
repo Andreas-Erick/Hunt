@@ -24,6 +24,7 @@ import { ConfirmDeleteButton } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useDiscardGuard } from "./useDiscardGuard";
 import { HeightReveal } from "./HeightReveal";
+import { HabitRecentDays, HabitSkipToday } from "./HabitDayStrip";
 
 export { computeHabitStreak };
 
@@ -138,6 +139,11 @@ export function HabitsView() {
     if (!habits) return 0;
     return habits.filter((h) => habitDays.summaryFor(h.id).doneToday).length;
   }, [habits, habitDays]);
+
+  // A Habit Skipped today is not asked of the user, so it leaves the day's total.
+  const askedTodayCount = (habits ?? []).filter(
+    (h) => habitDays.summaryFor(h.id).outcomeOn(todayKey) !== "skipped"
+  ).length;
 
   const editIsDirty = () =>
     editingHabit !== null &&
@@ -266,7 +272,7 @@ export function HabitsView() {
         {habits !== undefined && habits.length > 0 && (
           <div className="flex items-baseline gap-2 tabular-nums">
             <span className="text-2xl font-medium tracking-tight text-white">
-              {completedTodayCount} / {habits.length}
+              {completedTodayCount} / {askedTodayCount}
             </span>
             <span className="text-sm text-hud-muted">done today</span>
           </div>
@@ -389,8 +395,9 @@ export function HabitsView() {
               : undefined;
             const style = accentStyle(linkedQuest?.accentColor ?? "slate");
             const questLabel = linkedQuest ? linkedQuest.title : "Other work";
-            const { doneToday, outcomeOn, streak } =
+            const { doneToday, outcomeOn, streak, todayTask } =
               habitDays.summaryFor(habit.id);
+            const skippedToday = outcomeOn(todayKey) === "skipped";
             const isEditing = editingHabit?.id === habit.id;
 
             return (
@@ -456,6 +463,8 @@ export function HabitsView() {
                           className={`break-words [text-wrap:pretty] text-base font-medium leading-snug ${
                             doneToday
                               ? "text-hud-muted line-through"
+                              : skippedToday
+                              ? "text-hud-muted"
                               : "text-white"
                           }`}
                         >
@@ -470,7 +479,7 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {!doneToday && (
+                      {!doneToday && !skippedToday && (
                         <button
                           type="button"
                           onClick={() => void handleFocusToday(habit)}
@@ -521,31 +530,19 @@ export function HabitsView() {
                     </div>
 
                     {/* Real 7-day completion history */}
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="flex items-center gap-1.5"
-                        aria-label={`${
-                          recentDays.filter((d) => outcomeOn(d) === "met").length
-                        } of last 7 days completed`}
-                      >
-                        {recentDays.map((dKey) => {
-                          const hit = outcomeOn(dKey) === "met";
-                          const isCurrent = dKey === todayKey;
-                          return (
-                            <span
-                              key={dKey}
-                              title={`${dKey}: ${hit ? "Completed" : "Not completed"}`}
-                              className={`h-2 w-2 rounded-full ${
-                                hit
-                                  ? style.bg
-                                  : isCurrent
-                                  ? "border border-white/30 bg-transparent"
-                                  : "bg-white/[0.09]"
-                              }`}
-                            />
-                          );
-                        })}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <HabitSkipToday
+                        habit={habit}
+                        todayKey={todayKey}
+                        outcome={outcomeOn(todayKey)}
+                        focusRunning={todayTask?.status === "active"}
+                      />
+                      <HabitRecentDays
+                        days={recentDays}
+                        todayKey={todayKey}
+                        outcomeOn={outcomeOn}
+                        metClass={style.bg}
+                      />
 
                       {streak > 0 && (
                         <span className="font-mono text-xs tabular-nums text-neutral-300">

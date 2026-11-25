@@ -1,4 +1,5 @@
 import { db, loadSortedQuests } from "./db";
+import { changed, emitChange, type LocalWriteOptions } from "./localChange";
 import { applyChecklistEdit, type ChecklistEdit } from "./checklist";
 import { clampLength, clampTitle } from "./textLimits";
 import { habitTaskId, isOpenTask, toLocalDateKey } from "./dateUtils";
@@ -32,6 +33,7 @@ import {
 } from "./taskQueue";
 
 export { nextStamp };
+export { onLocalChange, type LocalWriteOptions } from "./localChange";
 
 /**
  * The Local Store: every write this device makes to its own IndexedDB data.
@@ -49,43 +51,6 @@ export { nextStamp };
  * Operations reject on a storage failure; the command store reports it.
  * Rows written by the sync engine (remote payloads) do not go through here.
  */
-
-/** Options for operations that the sync path also runs. */
-export interface LocalWriteOptions {
-  /**
-   * Emit the local-change signal (default true). The sync path passes false:
-   * its own rerun pushes what it wrote, so a debounced extra sync is not needed.
-   */
-  notify?: boolean;
-}
-
-type LocalChangeListener = () => void;
-const listeners = new Set<LocalChangeListener>();
-
-/** Subscribes to local writes; returns the unsubscribe function. */
-export function onLocalChange(listener: LocalChangeListener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function emitChange(options?: LocalWriteOptions): void {
-  if (options?.notify === false) return;
-  for (const listener of Array.from(listeners)) {
-    try {
-      listener();
-    } catch {
-      // A listener must not turn a successful write into a failed action.
-    }
-  }
-}
-
-/** Emits the signal when `wrote` is truthy; returns `wrote`. */
-function changed<T>(wrote: T, options?: LocalWriteOptions): T {
-  if (wrote) emitChange(options);
-  return wrote;
-}
 
 function newId(prefix: string, now: number): string {
   return `${prefix}-${now}-${Math.random().toString(36).slice(2, 6)}`;
@@ -559,6 +524,13 @@ async function ensureHabitTaskForDay(habitId: string, dateKey: string): Promise<
   return db.tasks.get(id);
 }
 
+/** Sets a habit day Skipped or back, materializing it first: the row skipHabitDayRow builds. */
+async function setHabitDaySkipped(habitId: string, dateKey: string, skipped: boolean): Promise<boolean> {
+  const day = await ensureHabitTaskForDay(habitId, dateKey);
+  if (!day || Boolean(day.skipped) === skipped) return false;
+  return changed(await writeTask(day.id, { skipped: skipped || undefined }));
+}
+
 // ── Time logs ────────────────────────────────────────────────────────────
 
 /** Deletes a logged session here and, through its tombstone, on every synced device. */
@@ -591,5 +563,6 @@ export const localStore = {
   deleteHabit,
   materializeHabits,
   ensureHabitTaskForDay,
+  setHabitDaySkipped,
   deleteTimeLog,
 };

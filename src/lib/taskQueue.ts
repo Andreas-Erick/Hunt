@@ -239,10 +239,25 @@ export function nextStamp(
  * `task` is not modified.
  */
 export function completeTaskRow(task: Task, completedAt: number): Task {
-  return {
+  const done: Task = {
     ...task,
     status: "completed",
     completedAt,
     updatedAt: nextStamp(task, completedAt),
   };
+  // A ticked day is Met, so it is no longer set aside. Kept as an explicit
+  // undefined so a Dexie update drops the stored flag.
+  if (done.skipped) done.skipped = undefined;
+  return done;
+}
+
+/**
+ * SHARED "Skip a habit day" rule: the day Task `task` set aside on purpose
+ * (`skipped`), or back to an ordinary day, stamped by R6 at `at`. The Outcome
+ * of a Skipped day is Skipped: it leaves Today and the Day Widget and neither
+ * adds to nor breaks the Streak. Un-Skipping writes `skipped: undefined`, so a
+ * Dexie update drops the flag and the synced row carries none. Pure.
+ */
+export function skipHabitDayRow(task: Task, skipped: boolean, at: number): Task {
+  return { ...task, skipped: skipped || undefined, updatedAt: nextStamp(task, at) };
 }

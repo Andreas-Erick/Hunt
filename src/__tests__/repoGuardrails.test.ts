@@ -150,15 +150,15 @@ describe("module size ratchet", () => {
   // does. A file that must grow past its number gets split instead.
   const FROZEN: Record<string, number> = {
     "src/components/GuideLabSection.tsx": 767,
-    "src/components/HabitsView.tsx": 678,
+    "src/components/HabitsView.tsx": 675,
     "src/components/MobileSyncModal.tsx": 772,
     "src/components/PlanWeekView.tsx": 817,
     "src/components/QuestMatrixPanel.tsx": 1169,
     "src/components/TelemetryDashboardView.tsx": 929,
     "src/lib/questScience.ts": 618,
     "src/lib/reviewAnalytics.ts": 1012,
-    "src/lib/syncTypes.ts": 819,
-    "src/store/useCommandStore.ts": 847,
+    "src/lib/syncTypes.ts": 776,
+    "src/store/useCommandStore.ts": 803,
   };
 
   it(`keeps production modules within ${NEW_FILE_BUDGET} lines, or within their frozen size`, () => {
