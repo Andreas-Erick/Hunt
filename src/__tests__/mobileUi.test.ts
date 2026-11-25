@@ -557,7 +557,7 @@ describe("touch targets", () => {
     atLeast48(p.document.querySelector(".toast-action"), ".toast-action");
 
     p.openTaskInspectorSheet("tsk-1");
-    for (const label of ["▶ Start Focus", "↑ Move to #1"]) atLeast48(sheetButton(p, label), label);
+    for (const label of ["▶ Start focus", "↑ Move to #1"]) atLeast48(sheetButton(p, label), label);
     atLeast48(p.document.querySelector("#sheetContainer .text-action"), "Mark Completed");
     atLeast48(p.document.querySelector("#sheetContainer .danger-outline-btn"), "Delete Task");
     p.openNewTaskSheet();
@@ -887,7 +887,7 @@ describe("mobile Home scheduled-day filter & non-auto-start Focus completion", (
     expect(p.document.body.getAttribute("data-view")).toBe("focus");
     const mainText = p.document.getElementById("mainContainer")?.textContent ?? "";
     expect(mainText).toContain("Ship build");
-    expect(mainText).toContain("Start Focus Session");
+    expect(mainText).toContain("Start focus");
     expect(mainText).toContain("Back to Today");
   });
 });
@@ -1624,7 +1624,7 @@ describe("mobile Review analytics: multi-horizon, Quest X filter, Tasks metric &
       (b) => b.textContent?.includes("Deep Engine")
     );
     click(p, enginePill ?? null);
-    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Deep Engine · Hours");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Deep Engine · hours");
     expect(p.document.getElementById("mainContainer")?.textContent).toContain("3.0h");
     expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("2");
     expect(p.document.querySelector('[data-review-stat="tasks"]')?.textContent).toContain("1 steps · 1 habits");
@@ -1656,7 +1656,7 @@ describe("mobile Review analytics: multi-horizon, Quest X filter, Tasks metric &
       (b) => b.textContent?.trim() === "Tasks"
     );
     click(p, tasksMetricBtn ?? null);
-    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Completed Tasks · Per Month");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Completed tasks per month");
 
     // Tap twoDaysAgo cell in 16-week Heatmap -> inspector updates to 1.0h · 1 task
     const hmCells = Array.from(p.document.querySelectorAll('[data-review-heatmap="true"] .heatmap-cell'));

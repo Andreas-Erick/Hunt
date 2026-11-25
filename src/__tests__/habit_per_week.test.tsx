@@ -72,7 +72,7 @@ describe("desktop store: N times per week", () => {
 describe("desktop Habits view: N times per week", () => {
   it("adds a Habit asked 3 times a week", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "Gym" } });
     const picker = screen.getByRole("group", { name: "Frequency for new habit" });
     fireEvent.click(within(picker).getByRole("button", { name: "Times a week" }));

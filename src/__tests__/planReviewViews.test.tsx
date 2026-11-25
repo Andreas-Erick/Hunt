@@ -363,7 +363,7 @@ describe("DST-safe day columns (Europe/Berlin)", () => {
       cleanup();
 
       render(<TelemetryDashboardView />);
-      await screen.findByText(/View Session Log \(0 sessions this week\)/);
+      await screen.findByText(/Session log \(0 sessions this week\)/);
       expectConsecutiveDays(reviewKeys(), 7, today, `Review ${when}`);
       const next = screen.getByRole("button", { name: "Next week" });
       expect(next).toBeDisabled();
@@ -722,7 +722,7 @@ describe("guarded deletes", () => {
     render(<TelemetryDashboardView />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /View Session Log \(2 sessions/ })
+      await screen.findByRole("button", { name: /Session log \(2 sessions/ })
     );
     const del = within(sessionRow("log-1")).getByRole("button", {
       name: "Delete session",
@@ -760,7 +760,7 @@ describe("guarded deletes", () => {
     await seed({ logs: [makeLog("log-1", "2026-03-30", null, 600)] });
     render(<TelemetryDashboardView />);
     fireEvent.click(
-      await screen.findByRole("button", { name: /View Session Log \(1 sessions/ })
+      await screen.findByRole("button", { name: /Session log \(1 sessions/ })
     );
     fakeTimeoutsAt(monday());
 
@@ -931,20 +931,20 @@ describe("empty and loading states", () => {
   it("Review: '–' while loading, then the empty copies for no quests and an empty week", async () => {
     render(<TelemetryDashboardView />);
     // Synchronously after the first render nothing has loaded yet.
-    expect(within(kpiCard("Quest Hours")).getByText("–")).toBeInTheDocument();
-    expect(within(kpiCard("Daily Average")).getByText("–")).toBeInTheDocument();
-    expect(within(kpiCard("Quest Work vs Other")).getByText("–")).toBeInTheDocument();
+    expect(within(kpiCard("Quest hours")).getByText("–")).toBeInTheDocument();
+    expect(within(kpiCard("Daily average")).getByText("–")).toBeInTheDocument();
+    expect(within(kpiCard("Quest work vs Other")).getByText("–")).toBeInTheDocument();
     expect(screen.queryByText("0.0h")).toBeNull();
     expect(screen.queryByText("No quests yet. Create one in Quests.")).toBeNull();
 
     expect(
       await screen.findByText("No quests yet. Create one in Quests.")
     ).toHaveClass("text-hud-muted");
-    expect(within(kpiCard("Quest Hours")).getByText("0.0h")).toBeInTheDocument();
-    expect(within(kpiCard("Quest Work vs Other")).getByText("0")).toBeInTheDocument();
+    expect(within(kpiCard("Quest hours")).getByText("0.0h")).toBeInTheDocument();
+    expect(within(kpiCard("Quest work vs Other")).getByText("0")).toBeInTheDocument();
 
     const toggle = screen.getByRole("button", {
-      name: "View Session Log (0 sessions this week) ↓",
+      name: "Session log (0 sessions this week)",
     });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(toggle);
@@ -964,7 +964,7 @@ describe("empty and loading states", () => {
     render(<TelemetryDashboardView />);
     expect(await screen.findByText("Launch")).toBeInTheDocument();
     expect(screen.queryByText("No quests yet. Create one in Quests.")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /View Session Log \(0 sessions/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Session log \(0 sessions/ }));
     expect(screen.getByText("No sessions logged this week.")).toBeInTheDocument();
   });
 
@@ -1026,11 +1026,11 @@ describe("Review reads only the shown week", () => {
     };
     render(<TelemetryDashboardView />);
 
-    expect(await within(kpiCard("Quest Hours")).findByText("1.5h")).toBeInTheDocument();
-    expect(within(kpiCard("Daily Average")).getByText("0.8h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("1.5h")).toBeInTheDocument();
+    expect(within(kpiCard("Daily average")).getByText("0.8h")).toBeInTheDocument();
     expect(screen.getByText("15% of target")).toHaveClass("text-hud-muted");
     fireEvent.click(
-      screen.getByRole("button", { name: "View Session Log (3 sessions this week) ↓" })
+      screen.getByRole("button", { name: "Session log (3 sessions this week)" })
     );
     expect(screen.getAllByTestId("session-row").map((r) => r.dataset.logId)).toEqual([
       "log-today-other",
@@ -1041,7 +1041,7 @@ describe("Review reads only the shown week", () => {
 
     // The week before: 03-17 … 03-23 holds the two 2-hour logs.
     fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("4.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("4.0h")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getAllByTestId("session-row").map((r) => r.dataset.logId)).toEqual([
         "log-7d",
@@ -1069,28 +1069,28 @@ describe("Review reads only the shown week", () => {
       ],
     });
     render(<TelemetryDashboardView />);
-    expect(await within(kpiCard("Quest Hours")).findByText("1.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("1.0h")).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: "View Session Log (1 sessions this week) ↓" })
+      screen.getByRole("button", { name: "Session log (1 sessions this week)" })
     );
 
     // The live query still holds this week's rows while the previous week is
     // being read; they must not be shown as an empty previous week.
     fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
-    expect(within(kpiCard("Quest Hours")).getByText("–")).toBeInTheDocument();
+    expect(within(kpiCard("Quest hours")).getByText("–")).toBeInTheDocument();
     expect(screen.queryByText("0.0h")).toBeNull();
     expect(screen.queryByText("No sessions logged this week.")).toBeNull();
     expect(screen.queryAllByTestId("session-row")).toEqual([]);
 
-    expect(await within(kpiCard("Quest Hours")).findByText("2.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("2.0h")).toBeInTheDocument();
     expect(screen.getAllByTestId("session-row").map((r) => r.dataset.logId)).toEqual([
       "log-7d",
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: "This week" }));
-    expect(within(kpiCard("Quest Hours")).getByText("–")).toBeInTheDocument();
+    expect(within(kpiCard("Quest hours")).getByText("–")).toBeInTheDocument();
     expect(screen.queryByText("No sessions logged this week.")).toBeNull();
-    expect(await within(kpiCard("Quest Hours")).findByText("1.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("1.0h")).toBeInTheDocument();
   });
 });
 
@@ -1128,7 +1128,7 @@ describe("corrupted accents", () => {
     render(<TelemetryDashboardView />);
     expect(await screen.findByText("Violet quest")).toBeInTheDocument();
     fireEvent.click(
-      await screen.findByRole("button", { name: /View Session Log \(2 sessions/ })
+      await screen.findByRole("button", { name: /Session log \(2 sessions/ })
     );
     expect(sessionRow("log-violet").querySelector("span")).toHaveClass("bg-slate-500");
     expect(sessionRow("log-bare").querySelector("span")).toHaveClass("bg-slate-500");
@@ -1173,10 +1173,10 @@ describe("accessibility and interaction states", () => {
   it("Review: every button has an accessible name with the session log open", async () => {
     render(<TelemetryDashboardView />);
     const toggle = await screen.findByRole("button", {
-      name: "View Session Log (1 sessions this week) ↓",
+      name: "Session log (1 sessions this week)",
     });
     fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: "Hide Session Log ↑" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Hide session log" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
@@ -1273,7 +1273,7 @@ describe("accessibility and interaction states", () => {
 
   it("Review: muted token instead of neutral-500/600 text", async () => {
     const { container } = render(<TelemetryDashboardView />);
-    fireEvent.click(await screen.findByRole("button", { name: /View Session Log \(1 sessions/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Session log \(1 sessions/ }));
     for (const el of Array.from(container.querySelectorAll("[class]"))) {
       const cls = el.getAttribute("class") ?? "";
       expect(cls, cls).not.toMatch(/(^|\s)(placeholder:)?text-neutral-(500|600)(\s|$)/);
@@ -1331,7 +1331,7 @@ describe("long unbroken text", () => {
     expect(questLabel.parentElement).toHaveClass("min-w-0");
 
     fireEvent.click(
-      await screen.findByRole("button", { name: /View Session Log \(1 sessions/ })
+      await screen.findByRole("button", { name: /Session log \(1 sessions/ })
     );
     const sessionTitle = within(sessionRow("log-long")).getByText(longTask);
     expect(sessionTitle).toHaveClass("truncate");
@@ -1412,36 +1412,36 @@ describe("Review multi-horizon analytics, Quest X drill-down, and Activity Heatm
     ];
 
     render(<TelemetryDashboardView />);
-    expect(await within(kpiCard("Quest Hours")).findByText("3.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("3.0h")).toBeInTheDocument();
     await waitFor(() =>
       expect(within(screen.getByTestId("stat-tasks-completed")).getByText("2")).toBeInTheDocument()
     );
 
     // Drill into Quest "Compiler" via its row in Hours & Tasks by Quest
     fireEvent.click(screen.getByRole("button", { name: "Inspect quest Compiler" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("2.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("2.0h")).toBeInTheDocument();
     expect(within(screen.getByTestId("stat-tasks-completed")).getByText("1")).toBeInTheDocument();
 
     // Switch across Month -> Quarter -> Year -> Day and verify Compiler's hours & completed tasks
     fireEvent.click(screen.getByRole("button", { name: "Month" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("5.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("5.0h")).toBeInTheDocument();
     expect(within(screen.getByTestId("stat-tasks-completed")).getByText("2")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Quarter" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("9.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("9.0h")).toBeInTheDocument();
     expect(within(screen.getByTestId("stat-tasks-completed")).getByText("3")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Year" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("9.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("9.0h")).toBeInTheDocument();
     expect(within(screen.getByTestId("stat-tasks-completed")).getByText("3")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Day" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("2.0h")).toBeInTheDocument();
+    expect(await within(kpiCard("Quest hours")).findByText("2.0h")).toBeInTheDocument();
     expect(within(screen.getByTestId("stat-tasks-completed")).getByText("1")).toBeInTheDocument();
 
     // Toggle bar chart to Tasks metric
     fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
-    expect(screen.getByText(/Completed Tasks · By Time Block/)).toBeInTheDocument();
+    expect(screen.getByText(/Completed tasks by time block/)).toBeInTheDocument();
 
     // Inspect March 10 cell on the 26-week Activity Heatmap
     const mar10Cell = screen
@@ -1453,8 +1453,8 @@ describe("Review multi-horizon analytics, Quest X drill-down, and Activity Heatm
     expect(screen.getByTestId("heatmap-inspector").textContent).toContain("1 task done");
 
     // Reset quest filter back to All Quests
-    fireEvent.click(screen.getByRole("button", { name: "Clear quest filter" }));
-    expect(await within(kpiCard("Quest Hours")).findByText("3.0h")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(await within(kpiCard("Quest hours")).findByText("3.0h")).toBeInTheDocument();
 
     // Never performed a whole-table scan on db.timeLogs
     expect(wholeTableSpies.reduce((n, s) => n + s.mock.calls.length, 0)).toBe(0);

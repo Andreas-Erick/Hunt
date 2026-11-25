@@ -341,8 +341,8 @@ const QuestCard = memo(function QuestCard({
         {/* Weekly Quest Hours Progress */}
         <div className="mt-6 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
           <div className="flex items-baseline justify-between">
-            <span className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
-              Quest Hours (7d)
+            <span className="text-sm font-medium text-hud-muted">
+              Last 7 days
             </span>
             <span className="text-sm text-neutral-400 tabular-nums">
               <strong className="text-lg font-medium text-white">
@@ -373,8 +373,8 @@ const QuestCard = memo(function QuestCard({
           }}
           className="relative mt-6 space-y-2.5"
         >
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-hud-muted">
-            Next Steps
+          <div className="text-xs font-medium text-hud-muted">
+            Next steps
             {tasksLoaded ? ` (${questTasks.length})` : ""}
           </div>
 
@@ -388,7 +388,7 @@ const QuestCard = memo(function QuestCard({
                 <RowTick
                   task={t}
                   onComplete={() => onCompleteStep(t.id, quest.id, quest.accentColor)}
-                  className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 before:content-[''] hover:border-success hover:text-success transition-colors duration-150 ease-out active:opacity-80"
+                  className="relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-white/25 text-transparent before:absolute before:-inset-2.5 coarse:before:-inset-3.5 before:content-[''] hover:border-success hover:text-success transition-colors duration-150 ease-out active:opacity-80"
                 />
                 <span
                   data-task-title="true"
@@ -418,7 +418,7 @@ const QuestCard = memo(function QuestCard({
       </div>
 
       {/* Quick Add Task to this Quest */}
-      <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-2.5 transition-colors focus-within:border-white/40">
+      <div className="mt-6 rounded-xl border border-dashed border-white/[0.12] bg-black/20 px-3.5 py-1 transition-colors focus-within:border-white/40">
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -432,7 +432,7 @@ const QuestCard = memo(function QuestCard({
             }}
             placeholder={`Add task to ${quest.title}...`}
             aria-label={`Add quest work to ${quest.title}`}
-            className="min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
+            className="min-h-8 coarse:min-h-11 min-w-0 flex-1 bg-transparent text-xs text-white placeholder:text-hud-muted focus:outline-none"
           />
           <button
             type="button"
@@ -456,7 +456,7 @@ const QuestCard = memo(function QuestCard({
             }}
             placeholder="Description (optional)..."
             aria-label={`Task description for ${quest.title} (optional)`}
-            className="w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+            className="min-h-8 coarse:min-h-11 w-full bg-transparent text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
           />
         </div>
       </div>
@@ -832,7 +832,7 @@ export function QuestMatrixPanel() {
       <AccentPills compact value={editAccent} onChange={setEditAccent} />
 
       <div className="flex items-center gap-2 pt-1 text-xs text-neutral-400">
-        <span>Weekly Goal:</span>
+        <span>Weekly target:</span>
         <WeeklyTargetInput value={editTarget} onChange={setEditTarget} />
         <span>h/wk</span>
       </div>
@@ -987,7 +987,7 @@ export function QuestMatrixPanel() {
               <AccentPills value={newAccent} onChange={setNewAccent} />
 
               <div className="flex items-center gap-2 text-xs text-neutral-400">
-                <span>Weekly Target:</span>
+                <span>Weekly target:</span>
                 <WeeklyTargetInput value={newTarget} onChange={setNewTarget} />
                 <span>h/wk</span>
               </div>
@@ -1070,7 +1070,7 @@ export function QuestMatrixPanel() {
           className="mt-14 space-y-5"
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted tabular-nums">
+            <h2 className="text-sm font-semibold text-hud-muted tabular-nums">
               Completed Quests ({completedQuests.length})
             </h2>
           </div>
@@ -1131,7 +1131,7 @@ export function QuestMatrixPanel() {
                     </ConfirmDeleteButton>
 
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-hud-muted tabular-nums">
+                      <span className="text-hud-muted tabular-nums">
                         {completedQuestLogs === undefined
                           ? "–"
                           : `${formatTelemetryDuration(totalSec, {

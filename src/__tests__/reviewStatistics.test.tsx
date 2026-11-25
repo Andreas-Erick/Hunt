@@ -170,7 +170,7 @@ describe("Statistics accuracy & visual rendering across small and large datasets
 
     render(<TelemetryDashboardView />);
 
-    const openLogsBtn = await screen.findByRole("button", { name: /View Session Log \(135 sessions/i });
+    const openLogsBtn = await screen.findByRole("button", { name: /Session log \(135 sessions/i });
     fireEvent.click(openLogsBtn);
 
     const showMoreBtn = await screen.findByTestId("review-logs-show-more");

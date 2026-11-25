@@ -57,7 +57,7 @@ describe("Avoid Habits never ask N times a week", () => {
 
   it("choosing Avoid in the new-habit form hides Times a week and falls back to every day", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     const picker = screen.getByRole("group", { name: "Frequency for new habit" });
     fireEvent.click(within(picker).getByRole("button", { name: "Times a week" }));
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Habit Kind" })).getByRole("radio", { name: "Avoid" }));

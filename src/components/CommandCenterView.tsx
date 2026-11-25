@@ -241,7 +241,7 @@ export function CommandCenterView() {
     return playTwoBeatTaskCompletion(taskFlowRef.current, scene);
   }, [completedTasks]);
 
-  const { dragOverTaskId, rowHandlers } = useQueueReorder(allTasks, questQueue);
+  const { dragOverTaskId, rowHandlers, moveBy } = useQueueReorder(allTasks, questQueue);
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
@@ -326,8 +326,8 @@ export function CommandCenterView() {
         <div className="min-w-0 lg:col-span-7 space-y-6">
           {/* Section Header + Quest Filter */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
-              Quest Work
+            <span className="text-sm font-semibold text-hud-muted">
+              Quest work
             </span>
 
             <div
@@ -359,7 +359,7 @@ export function CommandCenterView() {
                     }
                     aria-label={q.title}
                     aria-pressed={active}
-                    className={`flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
+                    className={`flex min-h-8 coarse:min-h-11 coarse:min-w-11 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors duration-150 ease-out active:opacity-80 ${
                       active
                         ? "bg-white/10 text-white"
                         : "text-hud-muted hover:text-neutral-300"
@@ -367,7 +367,7 @@ export function CommandCenterView() {
                   >
                     <span className={`h-2 w-2 shrink-0 rounded-full ${st.bg}`} />
                     <span
-                      className="hidden sm:inline max-w-[110px] truncate"
+                      className="hidden sm:inline max-w-[10rem] truncate"
                       title={q.title}
                     >
                       {q.title}
@@ -456,6 +456,8 @@ export function CommandCenterView() {
                     activeQuests={activeQuests}
                     expandedToggleRef={expandedToggleRef}
                     reorderHandlers={rowHandlers(task.id)}
+                    onMoveUp={moveBy(task.id, -1)}
+                    onMoveDown={moveBy(task.id, 1)}
                     onComplete={handleCompleteTask}
                     onToggleExpanded={() =>
                       setExpandedTaskId(isExpanded ? null : task.id)
@@ -471,7 +473,7 @@ export function CommandCenterView() {
             {questQueue.length > 1 && (
               <div
                 data-flow-key="reorder-hint"
-                className="text-center text-xs text-hud-muted"
+                className="text-center text-xs text-hud-muted hoverless:hidden"
               >
                 Alt+↑/↓ to reorder
               </div>
@@ -485,9 +487,9 @@ export function CommandCenterView() {
             <div className="pt-6 space-y-3">
               <div
                 data-flow-key="other-header"
-                className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted"
+                className="text-sm font-semibold text-hud-muted"
               >
-                Other Work
+                Other work
               </div>
 
               {maintenanceQueue.map((task) => (
@@ -512,7 +514,7 @@ export function CommandCenterView() {
             >
               <div
                 data-flow-key="completed-header"
-                className="text-xs font-semibold uppercase tracking-[0.16em] text-hud-muted"
+                className="text-sm font-semibold text-hud-muted"
               >
                 Completed
               </div>

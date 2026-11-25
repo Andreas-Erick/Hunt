@@ -174,12 +174,12 @@ describe("view switch discard guard", () => {
     await renderShellOn("habits");
     const [editToggle] = await screen.findAllByRole("button", { name: "Edit habit Stretch 10m" });
     fireEvent.click(editToggle);
-    fireEvent.change(screen.getByLabelText("Habit Title"), { target: { value: "Stretch 20m" } });
+    fireEvent.change(screen.getByLabelText("Habit title"), { target: { value: "Stretch 20m" } });
 
     fireEvent.click(navTab("Quests"));
     expect(confirm).toHaveBeenCalledWith(DISCARD_PROMPT);
     expect(view()).toBe("habits");
-    expect(screen.getByLabelText("Habit Title")).toHaveValue("Stretch 20m");
+    expect(screen.getByLabelText("Habit title")).toHaveValue("Stretch 20m");
 
     confirm.mockReturnValue(true);
     fireEvent.click(navTab("Quests"));
@@ -217,10 +217,10 @@ describe("view switch discard guard", () => {
     // Saved habit edit: written, and leaving afterwards does not prompt.
     const [editToggle] = await screen.findAllByRole("button", { name: "Edit habit Stretch 10m" });
     fireEvent.click(editToggle);
-    fireEvent.change(screen.getByLabelText("Habit Title"), { target: { value: "Stretch 20m" } });
+    fireEvent.change(screen.getByLabelText("Habit title"), { target: { value: "Stretch 20m" } });
     expect(useCommandStore.getState().discardGuard).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Habit title")).toBeNull());
     expect((await db.habits.get("habit-0"))?.title).toBe("Stretch 20m");
     expect(useCommandStore.getState().discardGuard).toBeNull();
     fireEvent.click(navTab("Plan"));

@@ -74,6 +74,20 @@ export function HabitsView() {
   const newKind = Count.useNewHabitKind();
   // The Count Habit whose exact-entry form is open (one at a time).
   const [amountHabitId, setAmountHabitId] = useState<string | null>(null);
+  // The control that opened exact entry gets focus back when the form closes
+  // (its focused input unmounts, which would otherwise drop focus to <body>).
+  const amountOpenerRef = useRef<HTMLElement | null>(null);
+  const openAmount = (habitId: string) => {
+    const active = document.activeElement;
+    amountOpenerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
+    setAmountHabitId(habitId);
+  };
+  const closeAmount = () => {
+    setAmountHabitId(null);
+    const opener = amountOpenerRef.current;
+    amountOpenerRef.current = null;
+    if (opener?.isConnected) opener.focus();
+  };
   const [newFrequencyChoice, setNewFrequency] = useState<HabitFrequency>(EVERY_DAY);
   // An Avoid Habit never asks N times a week: the form falls back to every day for it.
   const newFrequency = isFrequencyAllowedFor(newKind, newFrequencyChoice) ? newFrequencyChoice : EVERY_DAY;
@@ -215,7 +229,7 @@ export function HabitsView() {
           </p>
         </div>
 
-        {habits !== undefined && habits.length > 0 && (
+        {habits !== undefined && current.length > 0 && (
           <div className="flex items-baseline gap-2 tabular-nums">
             <span className="text-2xl font-medium tracking-tight text-white">
               {todayTally.done} / {todayTally.asked}
@@ -237,7 +251,7 @@ export function HabitsView() {
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Add a daily habit..."
             aria-label="Add a daily habit"
-            className="flex-1 bg-transparent px-1 py-1 text-base text-white placeholder:text-hud-muted focus:outline-none"
+            className="min-h-8 coarse:min-h-11 flex-1 bg-transparent px-1 py-1 text-base text-white placeholder:text-hud-muted focus:outline-none"
           />
 
           <button
@@ -257,7 +271,7 @@ export function HabitsView() {
             onChange={(e) => setNewNotes(e.target.value)}
             placeholder="Add description (optional)..."
             aria-label="Habit description (optional)"
-            className="w-full bg-transparent px-1 py-1 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+            className="min-h-8 coarse:min-h-11 w-full bg-transparent px-1 py-1 text-xs text-neutral-200 placeholder:text-hud-muted focus:outline-none"
           />
         </div>
 
@@ -297,10 +311,11 @@ export function HabitsView() {
             </div>
           ))}
         </div>
-      ) : habits.length === 0 ? (
+      ) : current.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/[0.08] py-16 text-center text-sm text-hud-muted">
-          No daily habits yet. Add one above and it will appear in today&apos;s
-          queue every day.
+          {habits.length === 0
+            ? "No habits yet. Add one above and it joins your Home queue on the days it asks for."
+            : "No current habits. Restart one from Ended below, or add one above."}
         </div>
       ) : (
         <div className="space-y-3.5">
@@ -338,7 +353,7 @@ export function HabitsView() {
                       {isAvoid ? (
                         <Avoid.AvoidDayMark slipped={habitDaySlips(todayTask) > 0} accentText={style.text} />
                       ) : isCount ? (
-                        <Count.CountHabitPlusButton habit={habit} met={doneToday} accentBg={style.bg} onAdd={() => void handleLogAmount(habit, "+1")} onLongPress={() => setAmountHabitId(habit.id)} />
+                        <Count.CountHabitPlusButton habit={habit} met={doneToday} accentBg={style.bg} onAdd={() => void handleLogAmount(habit, "+1")} onLongPress={() => openAmount(habit.id)} />
                       ) : (
                         <HabitTodayCheck
                           title={habit.title}
@@ -415,7 +430,7 @@ export function HabitsView() {
                       </span>
                       <HabitReminderBadge times={habit.reminderTimes} />
 
-                      {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => setAmountHabitId(habit.id)} />}
+                      {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => openAmount(habit.id)} />}
                       {isAvoid && <Avoid.AvoidSlipControls habit={habit} slips={habitDaySlips(todayTask)} onLog={() => handleEditSlip(habit, "log")} onUndo={() => handleEditSlip(habit, "undo")} />}
 
                       <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300">
@@ -446,8 +461,8 @@ export function HabitsView() {
                   </div>
 
                   <HeightReveal show={isCount && amountHabitId === habit.id}>
-                    <Count.CountAmountForm habit={habit} amount={todayAmount} onClose={() => setAmountHabitId(null)}
-                      onSave={(amount) => { setAmountHabitId(null); void handleLogAmount(habit, amount); }} />
+                    <Count.CountAmountForm habit={habit} amount={todayAmount} onClose={closeAmount}
+                      onSave={(amount) => { closeAmount(); void handleLogAmount(habit, amount); }} />
                   </HeightReveal>
                 </div>
 

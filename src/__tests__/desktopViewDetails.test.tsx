@@ -541,26 +541,26 @@ describe("Daily habits (HabitsView)", () => {
     // A pristine drawer closes without a prompt.
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Habit title")).toBeNull());
     expect(confirm).not.toHaveBeenCalled();
 
     fireEvent.click(toggle);
-    fireEvent.change(screen.getByLabelText("Habit Title"), {
+    fireEvent.change(screen.getByLabelText("Habit title"), {
       target: { value: "Stretch 10m" },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(confirm).toHaveBeenCalledWith(DISCARD_PROMPT);
-    expect(screen.getByLabelText("Habit Title")).toHaveValue("Stretch 10m");
+    expect(screen.getByLabelText("Habit title")).toHaveValue("Stretch 10m");
 
-    fireEvent.keyDown(screen.getByLabelText("Habit Title"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByLabelText("Habit title"), { key: "Escape" });
     fireEvent.click(toggle);
     expect(confirm).toHaveBeenCalledTimes(3);
-    expect(screen.getByLabelText("Habit Title")).toHaveValue("Stretch 10m");
+    expect(screen.getByLabelText("Habit title")).toHaveValue("Stretch 10m");
 
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByLabelText("Habit Title")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("Habit title")).toBeNull());
     expect(toggle).toHaveFocus();
     expect((await db.habits.get("hab-1"))?.title).toBe("Stretch");
   });

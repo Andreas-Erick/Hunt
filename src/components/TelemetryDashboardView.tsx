@@ -5,15 +5,11 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
 import {
   Calendar,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Filter,
-  Flame,
   Trash2,
-  TrendingUp,
   X,
 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
@@ -376,11 +372,10 @@ export function TelemetryDashboardView() {
             <button
               type="button"
               onClick={() => handleScopeChange("ALL")}
-              aria-label="Clear quest filter"
               className={`flex coarse:min-h-11 items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-2 text-xs text-neutral-300 hover:border-white/30 hover:text-white ${PRESSABLE}`}
             >
-              <X className="h-3.5 w-3.5" />
-              <span>Reset</span>
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Clear filter</span>
             </button>
           )}
 
@@ -453,8 +448,8 @@ export function TelemetryDashboardView() {
       <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4 sm:gap-6">
         {/* Card 1: QUEST HOURS */}
         <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
-          <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-            {effectiveScope === "OTHER" ? "Other Work Hours" : "Quest Hours"}
+          <div className="text-sm font-medium text-neutral-400">
+            {effectiveScope === "OTHER" ? "Other work hours" : "Quest hours"}
           </div>
           <div className="mt-4 flex flex-wrap items-baseline gap-2 tabular-nums">
             <span className={`text-4xl font-medium tracking-tight sm:text-5xl ${primaryTextClass}`}>
@@ -475,8 +470,8 @@ export function TelemetryDashboardView() {
 
         {/* Card 2: DAILY AVERAGE */}
         <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
-          <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-            Daily Average
+          <div className="text-sm font-medium text-neutral-400">
+            Daily average
           </div>
           <div className="mt-4 text-4xl font-medium tracking-tight text-white tabular-nums sm:text-5xl">
             {durationText(report.dailyAverageSeconds)}
@@ -492,8 +487,8 @@ export function TelemetryDashboardView() {
 
         {/* Card 3: QUEST WORK VS OTHER (or Share of Total Focus when scoped) */}
         <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
-          <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-            {effectiveScope === "ALL" ? "Quest Work vs Other" : "Share of Total Focus"}
+          <div className="text-sm font-medium text-neutral-400">
+            {effectiveScope === "ALL" ? "Quest work vs Other" : "Share of all focus"}
           </div>
           <div className="mt-4 flex items-baseline gap-1 tabular-nums">
             <span className="text-4xl font-medium tracking-tight text-white sm:text-5xl">
@@ -514,14 +509,13 @@ export function TelemetryDashboardView() {
       {/* ================================================================= */}
       {/* EXTENDED TELEMETRY STRIP: Tasks Completed, Bouts, Streak, Peak    */}
       {/* ================================================================= */}
-      <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))] gap-4">
+      <div className="mb-6 grid grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))] gap-px overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
         <div
           data-testid="stat-tasks-completed"
-          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
+          className="min-w-0 p-5 ring-1 ring-white/[0.06]"
         >
-          <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-            <span>Tasks Completed</span>
-            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+          <div className="text-sm font-medium text-neutral-400">
+            <span>Tasks completed</span>
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {completedTasks === undefined ? "–" : report.completedTasksCount}
@@ -539,11 +533,10 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-focus-bouts"
-          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
+          className="min-w-0 p-5 ring-1 ring-white/[0.06]"
         >
-          <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-            <span>Focus Sessions</span>
-            <Clock className="h-3.5 w-3.5 text-accent" />
+          <div className="text-sm font-medium text-neutral-400">
+            <span>Focus sessions</span>
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {loading ? "–" : report.sessionsCount}
@@ -559,11 +552,10 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-focus-streak"
-          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
+          className="min-w-0 p-5 ring-1 ring-white/[0.06]"
         >
-          <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-            <span>Active Streak</span>
-            <Flame className="h-3.5 w-3.5 text-now" />
+          <div className="text-sm font-medium text-neutral-400">
+            <span>Active streak</span>
           </div>
           <div className="mt-3 text-2xl font-medium text-white tabular-nums sm:text-3xl">
             {heatmapLogs === undefined ? "–" : `${heatmap.currentStreak}d`}
@@ -577,13 +569,15 @@ export function TelemetryDashboardView() {
 
         <div
           data-testid="stat-peak-bucket"
-          className="rounded-2xl border border-white/[0.08] bg-surface p-5"
+          className="min-w-0 p-5 ring-1 ring-white/[0.06]"
         >
-          <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-400">
-            <span>Peak Window</span>
-            <TrendingUp className="h-3.5 w-3.5 text-now" />
+          <div className="text-sm font-medium text-neutral-400">
+            <span>Peak window</span>
           </div>
-          <div className="mt-3 truncate text-2xl font-medium text-white tabular-nums sm:text-3xl">
+          <div
+            className="mt-3 truncate text-2xl font-medium text-white tabular-nums sm:text-3xl"
+            title={report.peakBucket?.detailLabel}
+          >
             {loading ? "–" : report.peakBucket ? report.peakBucket.detailLabel : "—"}
           </div>
           <div className="mt-1.5 text-xs text-hud-muted tabular-nums">
@@ -605,15 +599,15 @@ export function TelemetryDashboardView() {
         {/* Left (7 cols): Adaptive Horizon Bar Chart (Hours or Tasks) */}
         <div className="cq-card min-w-0 lg:col-span-7 flex flex-col justify-between rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-              {chartMetric === "hours" ? "Quest Hours" : "Completed Tasks"} ·{" "}
+            <div className="text-sm font-medium text-neutral-400">
+              {chartMetric === "hours" ? "Quest hours" : "Completed tasks"}{" "}
               {horizon === "day"
-                ? "By Time Block"
+                ? "by time block"
                 : horizon === "week"
-                ? "Per Day"
+                ? "per day"
                 : horizon === "month"
-                ? "By Week"
-                : "Per Month"}
+                ? "by week"
+                : "per month"}
             </div>
 
             <div
@@ -648,8 +642,9 @@ export function TelemetryDashboardView() {
             </div>
           </div>
 
-          <div className={horizon === "year" ? "scroll-shadow-x mt-8 overflow-x-auto pb-1" : "mt-8"}>
-            <div className={`grid ${horizon === "year" ? "min-w-[21rem] " : ""}${chartGridColsClass}`}>
+          <div className={horizon === "year" ? "scroll-shadow-x mt-8 flex flex-1 flex-col overflow-x-auto pb-1" : "mt-8 flex flex-1 flex-col"}>
+            {/* Bars grow with the card (it stretches to the right column's height), never below 14rem. */}
+            <div className={`grid flex-1 ${horizon === "year" ? "min-w-[21rem] " : ""}${chartGridColsClass}`}>
             {report.buckets.map((bucket) => {
               const rawValue =
                 chartMetric === "hours" ? bucket.seconds : bucket.completedTasks;
@@ -677,24 +672,25 @@ export function TelemetryDashboardView() {
                   data-date-key={bucket.dateKey}
                   className="flex min-w-0 flex-col items-center"
                 >
-                  <span
-                    className={`mb-4 max-w-full truncate font-mono ${
-                      horizon === "year" ? "text-[10px] sm:text-xs" : "text-xs"
-                    } tabular-nums ${
-                      bucket.isCurrent
-                        ? `font-semibold ${primaryTextClass}`
-                        : rawValue > 0
-                        ? "text-neutral-300"
-                        : "text-hud-muted"
-                    }`}
-                  >
-                    {valueLabel}
-                  </span>
-
-                  <div className="flex h-56 w-full max-w-[44px] items-end justify-center">
+                  {/* The value rides on its bar: the bar's height leaves room
+                      for the label (1rem line + 0.5rem gap) above the tallest bar. */}
+                  <div className="flex min-h-56 w-full flex-1 flex-col items-center justify-end">
+                    <span
+                      className={`mb-2 max-w-full truncate whitespace-nowrap ${
+                        horizon === "year" ? "text-[10px] sm:text-xs" : "text-xs"
+                      } tabular-nums ${
+                        bucket.isCurrent
+                          ? `font-semibold ${primaryTextClass}`
+                          : rawValue > 0
+                          ? "text-neutral-300"
+                          : "text-hud-muted"
+                      }`}
+                    >
+                      {valueLabel}
+                    </span>
                     <div
-                      style={{ height: `${barPct}%` }}
-                      className={`w-full rounded-t-md transition-[height] duration-500 ease-out ${
+                      style={{ height: `calc((100% - 1.5rem) * ${barPct / 100})` }}
+                      className={`w-full max-w-[44px] shrink-0 rounded-t-md transition-[height] duration-500 ease-out ${
                         bucket.isCurrent
                           ? primaryBarClass
                           : rawValue > 0
@@ -724,12 +720,12 @@ export function TelemetryDashboardView() {
         <div className="min-w-0 lg:col-span-5 flex flex-col gap-6">
           <div className="cq-card flex-1 rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
             <div className="mb-6 flex items-center justify-between gap-2">
-              <div className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
+              <div className="text-sm font-medium text-neutral-400">
                 Hours by Quest
               </div>
               {report.questBreakdown.length > 0 && (
                 <span className="text-[11px] text-hud-muted">
-                  Tasks &amp; hours · Click to filter
+                  Select a Quest to filter
                 </span>
               )}
             </div>
@@ -777,7 +773,7 @@ export function TelemetryDashboardView() {
                           </span>
                         )}
                       </div>
-                      <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-300">
+                      <span className="shrink-0 text-xs tabular-nums text-neutral-300">
                         <span className="text-hud-muted">
                           {qTasks} {qTasks === 1 ? "task" : "tasks"} ·{" "}
                         </span>
@@ -803,8 +799,8 @@ export function TelemetryDashboardView() {
 
           {/* Card: FOCUS SPLIT (quest work vs other) */}
           <div className="cq-card rounded-2xl border border-white/[0.08] bg-surface p-5 sm:p-7">
-            <div className="mb-5 text-xs font-medium uppercase tracking-[0.16em] text-neutral-400">
-              Focus Split
+            <div className="mb-5 text-sm font-medium text-neutral-400">
+              Focus split
             </div>
 
             <div className="flex h-11 w-full overflow-hidden rounded-lg bg-raised-2">
@@ -859,11 +855,15 @@ export function TelemetryDashboardView() {
           type="button"
           onClick={() => setShowSessionHistory(!showSessionHistory)}
           aria-expanded={showSessionHistory}
-          className={`-mx-2 coarse:min-h-11 rounded-lg px-2 py-2 text-xs font-medium uppercase tracking-[0.16em] text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
+          className={`-mx-2 flex items-center gap-1.5 coarse:min-h-11 rounded-lg px-2 py-2 text-sm font-medium text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
         >
           {showSessionHistory
-            ? "Hide Session Log ↑"
-            : `View Session Log (${loading ? "–" : report.filteredLogs.length} sessions ${windowSpec.sessionUnitLabel}) ↓`}
+            ? "Hide session log"
+            : `Session log (${loading ? "–" : report.filteredLogs.length} sessions ${windowSpec.sessionUnitLabel})`}
+          <ChevronDown
+            aria-hidden="true"
+            className={`h-4 w-4 transition-transform duration-200 ease-out ${showSessionHistory ? "rotate-180" : ""}`}
+          />
         </button>
 
         {showSessionHistory && (
@@ -884,7 +884,7 @@ export function TelemetryDashboardView() {
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${style.bg}`} />
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-hud-muted">
+                    <span className="shrink-0 text-xs tabular-nums text-hud-muted">
                       {log.dateKey}
                     </span>
                     <span className="truncate text-neutral-200" title={log.taskTitleSnapshot}>

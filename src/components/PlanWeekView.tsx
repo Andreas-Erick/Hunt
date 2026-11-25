@@ -11,14 +11,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Repeat,
   Trash2,
 } from "lucide-react";
 import { accentColor, accentStyle } from "@/lib/questAccents";
 import {
   dateFromKey,
   dateKeyFromOffset,
-  formatChronoMMSS,
   isMissedHabitTask,
   toLocalDateKey,
 } from "@/lib/dateUtils";
@@ -37,7 +35,7 @@ import {
 import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { useTodayDateKey } from "./useTodayDateKey";
 import { useTransientHighlight } from "./useTransientHighlight";
-import { RowTick } from "./RowTick";
+import { PlanTaskCard } from "./PlanTaskCard";
 
 interface DayColumn {
   dateKey: string;
@@ -315,8 +313,13 @@ export function PlanWeekView() {
     const step = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
     if (step === 0 || !e.altKey || !e.shiftKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
-    if (e.repeat || keyboardMoveRef.current) return;
+    if (e.repeat) return;
+    await moveTaskByDays(task, fromKey, step);
+  };
 
+  /** Alt+Shift+←/→ and the touch move buttons: reschedule one day earlier or later. */
+  const moveTaskByDays = async (task: Task, fromKey: string, step: -1 | 1) => {
+    if (keyboardMoveRef.current) return;
     const target = dateKeyFromOffset(fromKey, step);
     hudAudio.playClick();
     keyboardMoveRef.current = true;
@@ -359,6 +362,10 @@ export function PlanWeekView() {
             aria-label="Quest for new tasks"
             className="flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/[0.07] bg-surface p-1"
           >
+            {/* Visible, so the pills don't read as a board filter. */}
+            <span aria-hidden="true" className="pl-2.5 pr-0.5 text-xs text-hud-muted">
+              New tasks:
+            </span>
             {activeQuests.map((q) => {
               const st = accentStyle(q.accentColor);
               const isSelected = selectedQuestId === q.id;
@@ -519,7 +526,7 @@ export function PlanWeekView() {
                       }}
                       placeholder="Add a task..."
                       aria-label={`Add task for ${col.weekdayLong}`}
-                      className="min-w-0 flex-1 bg-transparent py-1.5 text-xs text-white placeholder:text-hud-muted focus:outline-none"
+                      className="min-h-8 coarse:min-h-11 min-w-0 flex-1 bg-transparent py-1.5 text-xs text-white placeholder:text-hud-muted focus:outline-none"
                     />
                     <div className="flex shrink-0 items-center gap-2">
                       <button
@@ -560,7 +567,7 @@ export function PlanWeekView() {
                       }}
                       placeholder="Description (optional)..."
                       aria-label={`Task description for ${col.weekdayLong} (optional)`}
-                      className="w-full bg-transparent py-1.5 text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
+                      className="min-h-8 coarse:min-h-11 w-full bg-transparent py-1.5 text-[11px] text-neutral-200 placeholder:text-hud-muted focus:outline-none"
                     />
                   </div>
                 </div>
@@ -573,6 +580,14 @@ export function PlanWeekView() {
                 <div className="text-xs text-hud-muted">Nothing planned</div>
               )}
 
+              {/* Loading: one card-shaped placeholder per day, as Home does. */}
+              {allTasks === undefined && (
+                <div
+                  aria-hidden="true"
+                  className="h-24 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]"
+                />
+              )}
+
               {/* Pending & Completed Tasks in this Day Column */}
               <div
                 ref={(el) => {
@@ -580,122 +595,35 @@ export function PlanWeekView() {
                 }}
                 className="relative space-y-3"
               >
-                {pendingDayTasks.map((task, idx) => {
-                  const linkedQuest = task.questId
-                    ? questMap.get(task.questId)
-                    : undefined;
-                  const style = accentStyle(linkedQuest?.accentColor);
-                  const questLabel = linkedQuest ? linkedQuest.title : "Other";
-                  const isHero = col.isToday && idx === 0;
-                  const isRunningHere = activeTaskId === task.id;
-                  const isCompleting = justCompletedId === task.id;
-
-                  return (
-                    <div
-                      key={task.id}
-                      data-testid="task-row"
-                      data-task-id={task.id}
-                      data-date-key={col.dateKey}
-                      draggable
-                      onDragStart={() => setDraggedTaskId(task.id)}
-                      onDragEnd={() => {
-                        setDraggedTaskId(null);
-                        setDragOverDateKey(null);
-                      }}
-                      onKeyDown={(e) => void handleCardKeyDown(e, task, col.dateKey)}
-                      className={`group relative overflow-hidden rounded-xl border p-4 pl-5 transition-[border-color,background-color,opacity] duration-200 cursor-grab active:cursor-grabbing ${
-                        draggedTaskId === task.id ? "opacity-40 " : ""
-                      }${
-                        isHero
-                          ? "border-now/40 bg-raised shadow-card-warning"
-                          : "border-white/[0.08] bg-surface hover:border-white/20"
-                      }`}
-                    >
-                      <div
-                        className={`absolute bottom-3 left-0 top-3 w-1 rounded-r-full ${style.bg}`}
-                      />
-
-                      <button
-                        type="button"
-                        data-card-title
-                        data-task-title="true"
-                        onClick={() => {
-                          hudAudio.playLockOn();
-                          initializeFocus(task.id);
-                        }}
-                        aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
-                        className={`block w-full cursor-pointer break-words [text-wrap:pretty] text-left text-sm font-medium leading-snug text-white hover:text-accent ${PRESSABLE}`}
-                      >
-                        {task.title}
-                      </button>
-
-                      {task.notes && (
-                        <p className="mt-1 line-clamp-2 break-words text-[11px] leading-relaxed text-hud-muted">
-                          {task.notes}
-                        </p>
-                      )}
-
-                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <RowTick
-                            task={task}
-                            onComplete={() => handleCompleteTask(task.id, col.dateKey)}
-                            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 active:opacity-80 ${
-                              isCompleting
-                                ? `${style.bg} border-transparent text-black`
-                                : "border-white/40 text-transparent hover:border-success hover:text-success"
-                            }`}
-                          />
-
-                          <span className="flex min-w-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] px-2.5 py-0.5 text-[11px] text-neutral-300">
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bg}`}
-                            />
-                            <span className="max-w-[115px] truncate" title={questLabel}>
-                              {questLabel}
-                            </span>
-                          </span>
-                          {task.habitId && (
-                            <span
-                              title="Daily habit"
-                              aria-label="Daily habit"
-                              className="inline-flex shrink-0 items-center text-hud-muted"
-                            >
-                              <Repeat className="h-3 w-3" aria-hidden="true" />
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          {task.accumulatedSeconds > 0 && (
-                            <span className="font-mono text-[11px] tabular-nums text-neutral-400">
-                              {formatChronoMMSS(task.accumulatedSeconds).formatted}
-                            </span>
-                          )}
-                          {isRunningHere && (
-                            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                          )}
-                          {/* ROW_DELETE_CLASS: revealed on row hover for mice,
-                              always visible (muted) on touch, padded target. */}
-                          <ConfirmDeleteButton
-                            label="Delete task"
-                            onConfirm={() => deleteTask(task.id)}
-                            className={`${ROW_DELETE_CLASS} whitespace-nowrap text-xs`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </ConfirmDeleteButton>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {pendingDayTasks.map((task, idx) => (
+                  <PlanTaskCard
+                    key={task.id}
+                    task={task}
+                    quest={task.questId ? questMap.get(task.questId) : undefined}
+                    dateKey={col.dateKey}
+                    isHero={col.isToday && idx === 0}
+                    isRunningHere={activeTaskId === task.id}
+                    isCompleting={justCompletedId === task.id}
+                    isDragged={draggedTaskId === task.id}
+                    onDragStart={() => setDraggedTaskId(task.id)}
+                    onDragEnd={() => {
+                      setDraggedTaskId(null);
+                      setDragOverDateKey(null);
+                    }}
+                    onKeyDown={(e) => void handleCardKeyDown(e, task, col.dateKey)}
+                    onOpen={() => initializeFocus(task.id)}
+                    onComplete={() => handleCompleteTask(task.id, col.dateKey)}
+                    onDelete={() => deleteTask(task.id)}
+                    onMove={(step) => void moveTaskByDays(task, col.dateKey, step)}
+                  />
+                ))}
 
                 {/* Completed Tasks in this Day Column. Only the accent bar and
                     the check are dimmed, so the title keeps AA contrast. */}
                 {completedDayTasks.length > 0 && (
                   <div
                     data-flow-key="completed-header"
-                    className="pt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-hud-muted"
+                    className="pt-2 text-sm font-semibold text-hud-muted"
                   >
                     Completed
                   </div>
@@ -728,13 +656,13 @@ export function PlanWeekView() {
                         {task.title}
                       </div>
                       <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
                           <button
                             type="button"
                             onClick={() => reopenTaskById(task.id)}
                             title="Reopen task"
                             aria-label="Reopen task"
-                            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 before:absolute before:-inset-2.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
+                            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${reopenDotBgClass(style)} text-black opacity-65 before:absolute before:-inset-2.5 coarse:before:-inset-3.5 before:content-[''] transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-90 hover:opacity-95 focus-visible:opacity-100 active:opacity-80`}
                           >
                             {isJustCompleted ? (
                               <motion.span
@@ -776,7 +704,7 @@ export function PlanWeekView() {
                             <span
                               className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.bg}`}
                             />
-                            <span className="max-w-[115px] truncate" title={questLabel}>
+                            <span className="min-w-0 truncate" title={questLabel}>
                               {questLabel}
                             </span>
                           </span>
@@ -800,7 +728,7 @@ export function PlanWeekView() {
       </div>
 
       {hasVisiblePendingTasks && (
-        <p className="mt-4 text-center text-xs text-hud-muted">
+        <p className="mt-4 text-center text-xs text-hud-muted hoverless:hidden">
           Alt+Shift+←/→ moves a task to the previous or next day
         </p>
       )}

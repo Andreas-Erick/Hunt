@@ -157,7 +157,7 @@ export function HabitKindPicker({
   ];
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
-      <div role="radiogroup" aria-label="Habit Kind" className="flex items-center gap-1 rounded-full border border-white/[0.07] p-0.5">
+      <div role="radiogroup" aria-label="Habit Kind" className="flex items-center gap-2 rounded-full border border-white/[0.07] p-0.5">
         {options.map((o) => (
           <label
             key={o.value}
@@ -270,7 +270,7 @@ export function CountHabitPlusButton({
       {...press}
       aria-label={`Add 1 to ${habit.title}`}
       title="Add 1 (hold to type a total)"
-      className={`relative mt-0.5 flex h-5 min-w-5 shrink-0 select-none items-center justify-center rounded-full border px-0.5 font-mono text-[10px] font-semibold leading-none tabular-nums before:absolute before:-inset-3 before:content-[''] transition-[transform,opacity,background-color,border-color,color] duration-150 ease-out [-webkit-touch-callout:none] active:scale-90 active:opacity-80 ${
+      className={`relative mt-0.5 flex h-5 min-w-5 shrink-0 select-none items-center justify-center rounded-full border px-0.5 text-[10px] font-semibold leading-none tabular-nums before:absolute before:-inset-3 before:content-[''] transition-[transform,opacity,background-color,border-color,color] duration-150 ease-out [-webkit-touch-callout:none] active:scale-90 active:opacity-80 ${
         met ? `${accentBg} border-transparent text-black` : "border-white/40 text-neutral-300 hover:border-success hover:text-success"
       }`}
     >
@@ -295,7 +295,7 @@ export function CountProgressButton({
       onClick={onOpen}
       aria-label={`Set today's total for ${habit.title}`}
       title="Type today's total"
-      className="-my-1 min-h-8 coarse:min-h-11 min-w-0 max-w-full break-words rounded-full px-2 py-1 text-left font-mono text-xs tabular-nums text-neutral-300 transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
+      className="-my-1 min-h-8 coarse:min-h-11 min-w-0 max-w-full break-words rounded-full px-2 py-1 text-left text-xs tabular-nums text-neutral-300 transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
     >
       {countProgressLabel(habit, amount)}
     </button>

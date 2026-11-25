@@ -89,6 +89,18 @@ describe("UI guardrails (source scan)", () => {
     expect(buttons.length).toBeGreaterThan(100);
   });
 
+  it("never sets text in the greys that fail AA on surfaces", () => {
+    // neutral-500/600 and slate-500 measure 3.2-4.3:1 on surface and raised in both looks.
+    const offenders = sourceFiles().flatMap((file) =>
+      readFileSync(path.join(ROOT, file), "utf8")
+        .split("\n")
+        .flatMap((line, i) =>
+          /(?:^|[\s"'`:])text-(?:neutral-(?:500|600)|slate-500)\b/.test(line) ? [`${file}:${i + 1}`] : []
+        )
+    );
+    expect(offenders, "use text-hud-muted (>= 5:1) for secondary text").toEqual([]);
+  });
+
   it("never uses transition-all: name the animated properties", () => {
     const offenders = sourceFiles().flatMap((file) =>
       readFileSync(path.join(ROOT, file), "utf8")

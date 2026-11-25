@@ -87,7 +87,7 @@ describe("desktop store: Frequency", () => {
 describe("desktop Habits view: Frequency", () => {
   it("adds a Habit for chosen weekdays and shows its Frequency and that today is not scheduled", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "Gym" } });
 
     const picker = screen.getByRole("group", { name: "Frequency for new habit" });

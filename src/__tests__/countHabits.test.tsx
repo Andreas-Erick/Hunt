@@ -51,7 +51,7 @@ describe("Count Habits — desktop", () => {
 
   it("chooses the Habit Kind when the Habit is made: Check by default, or Count with a target and unit", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     const kinds = screen.getByRole("radiogroup", { name: "Habit Kind" });
     expect(within(kinds).getByRole("radio", { name: "Check" })).toBeChecked();
 
@@ -69,7 +69,7 @@ describe("Count Habits — desktop", () => {
 
   it("will not make a Count Habit without a positive target", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     fireEvent.click(screen.getByRole("radio", { name: "Count" }));
     fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "Jog" } });
     fireEvent.change(screen.getByLabelText("Daily target"), { target: { value: "0" } });
@@ -78,7 +78,7 @@ describe("Count Habits — desktop", () => {
 
   it("stores a new Check Habit as Check", async () => {
     render(<HabitsView />);
-    await screen.findByText(/No daily habits yet/);
+    await screen.findByText(/No habits yet/);
     fireEvent.change(screen.getByLabelText("Add a daily habit"), { target: { value: "Stretch" } });
     fireEvent.click(screen.getByRole("button", { name: "Add Habit" }));
     await screen.findByTestId("habit-row");

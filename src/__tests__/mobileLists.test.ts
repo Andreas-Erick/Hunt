@@ -117,8 +117,13 @@ describe("the phone's Lists section", () => {
     expect(card(p, "Groceries").querySelector("button[aria-label='Clear ticked']")?.hasAttribute("disabled")).toBe(true);
 
     click(p, card(p, "Groceries").querySelector("[role='checkbox'][aria-label='Eggs']"));
+    const beforeClear = listsOf(p)[0].items.map((i) => [i.text, i.done]);
     click(p, card(p, "Groceries").querySelector("button[aria-label='Clear ticked']"));
     expect(listsOf(p)[0].items.map((i) => i.text)).toEqual(["Milk", "Bread"]);
+
+    // A delete with no confirm step offers Undo, which restores the List exactly as it was.
+    click(p, p.document.querySelector(".toast-action"));
+    expect(listsOf(p)[0].items.map((i) => [i.text, i.done])).toEqual(beforeClear);
   });
 
   it("renames a List, keeping the old name for a blank one", () => {

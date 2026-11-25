@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
-import { AlignLeft, Check, Pause, Play, Repeat, Trash2 } from "lucide-react";
+import { AlignLeft, ArrowDown, ArrowUp, Check, Pause, Play, Repeat, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
 import { formatChronoMMSS } from "@/lib/dateUtils";
 import type { Quest, Task } from "@/lib/domainTypes";
@@ -43,6 +43,9 @@ interface QueueTaskRowProps {
   /** Bound to the notes toggle while the drawer is open (Escape returns focus). */
   expandedToggleRef: React.RefObject<HTMLButtonElement | null>;
   reorderHandlers: QueueRowReorderHandlers;
+  /** Touch reorder in the drawer (no drag or Alt+↑/↓ there); undefined at the list ends. */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onComplete: (taskId: string) => void;
   onToggleExpanded: () => void;
   /** Escape inside the drawer. */
@@ -202,7 +205,7 @@ function MaintenanceTaskRow({
             type="button"
             onClick={startFocus}
             aria-label={`Start focus: ${task.title}`}
-            className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs tabular-nums text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+            className="-my-1 flex min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 items-center justify-center gap-1.5 rounded-full px-2 py-1 font-mono text-xs tabular-nums text-hud-muted hover:text-white transition-colors duration-150 ease-out active:opacity-80"
           >
             {taskTotalSec > 0 && (
               <span>{formatChronoMMSS(taskTotalSec).formatted}</span>
@@ -229,6 +232,8 @@ function QueueTaskRow({
   activeQuests,
   expandedToggleRef,
   reorderHandlers,
+  onMoveUp,
+  onMoveDown,
   onComplete,
   onToggleExpanded,
   onCloseDrawer,
@@ -329,7 +334,7 @@ function QueueTaskRow({
                   suspendTimer();
                 }}
                 aria-label={`Pause focus: ${task.title}`}
-                className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-success hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
+                className="-my-1 flex min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 items-center justify-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-success hover:bg-white/[0.05] transition-colors duration-150 ease-out active:opacity-80"
               >
                 <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
                 <span>{formatChronoMMSS(taskTotalSec).formatted}</span>
@@ -340,7 +345,7 @@ function QueueTaskRow({
                 type="button"
                 onClick={startFocus}
                 aria-label={`Start focus: ${task.title}`}
-                className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
+                className="-my-1 flex min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 items-center justify-center gap-2 rounded-full px-2.5 py-1 font-mono text-xs tabular-nums text-neutral-400 hover:bg-white/[0.06] hover:text-white transition-colors duration-150 ease-out active:opacity-80"
               >
                 {taskTotalSec > 0 && (
                   <span>{formatChronoMMSS(taskTotalSec).formatted}</span>
@@ -394,6 +399,29 @@ function QueueTaskRow({
           />
 
           <TaskChecklistEditor task={task} />
+          {/* Touch screens can't drag rows or press Alt+↑/↓. */}
+          {(onMoveUp || onMoveDown) && (
+            <div className="hidden items-center gap-2 text-xs hoverless:flex">
+              <button
+                type="button"
+                onClick={onMoveUp}
+                disabled={!onMoveUp}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-neutral-300 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-40"
+              >
+                <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                Move up
+              </button>
+              <button
+                type="button"
+                onClick={onMoveDown}
+                disabled={!onMoveDown}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-neutral-300 transition-colors duration-150 ease-out active:opacity-80 disabled:opacity-40"
+              >
+                <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                Move down
+              </button>
+            </div>
+          )}
           {hasReminderSlot(task) && (
             <TaskReminderField taskId={task.id} taskTitle={task.title} reminderTime={task.reminderTime} />
           )}

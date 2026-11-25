@@ -21,6 +21,7 @@ import { hudAudio } from "@/lib/hudAudio";
 import { toLocalDateKey } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
 import { formatAgo, usePhoneLink, useServerLink } from "./SyncStatus";
+import { useDocumentScrollLock } from "./useDocumentScrollLock";
 
 interface MobileSyncModalProps {
   isOpen: boolean;
@@ -171,9 +172,8 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // Focus moves into the dialog, background siblings are marked `inert`, and
-  // focus returns to the opener (the Phone button) on close. A layout effect
-  // restores `inert` and focus before the dialog's nodes are removed.
+  // Scroll locked; focus moves in, siblings go `inert`, and both are undone (layout effect) before the nodes go.
+  useDocumentScrollLock();
   useLayoutEffect(() => {
     const active = document.activeElement;
     const opener =
@@ -454,9 +454,9 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
         pressOnBackdropRef.current = false;
         if (onBackdrop) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/75 p-3 sm:p-4 backdrop-blur-sm outline-none sm:items-center"
     >
-      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
+      <div className="relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl border border-white/[0.1] bg-surface p-4 sm:p-8 shadow-2xl">
         {/* Top Modal Header */}
         <div className="flex items-start justify-between gap-3 sm:gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -542,14 +542,14 @@ function MobileSyncModalContent({ onClose }: { onClose: () => void }) {
             )}
 
             {lanUrls.length > 1 && (
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <div className="mt-3 flex w-full flex-wrap justify-center gap-2">
                 {lanUrls.map((u) => (
                   <button
                     key={u}
                     type="button"
                     onClick={() => setSelectedUrl(u)}
                     title={u}
-                    className={`inline-flex min-h-8 coarse:min-h-11 items-center rounded px-2.5 py-1 font-mono text-[10px] transition-colors duration-150 ease-out active:opacity-80 ${
+                    className={`inline-flex min-h-8 min-w-0 max-w-full coarse:min-h-11 items-center rounded px-2.5 py-1 text-left font-mono text-[10px] [overflow-wrap:anywhere] transition-colors duration-150 ease-out active:opacity-80 ${
                       u === activeUrl
                         ? "bg-accent/20 text-accent"
                         : "text-hud-muted hover:text-neutral-300"

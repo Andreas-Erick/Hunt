@@ -60,7 +60,6 @@ export function ListsView() {
         <button
           type="submit"
           disabled={!newTitle.trim()}
-          aria-label="Create List"
           className="flex min-h-8 coarse:min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-black transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -108,7 +107,7 @@ function ListCard({ list }: { list: List }) {
         <ListTitleField key={list.title} list={list} onRename={(title) => void renameList(list.id, title)} />
         <span
           aria-label={`${progress.done} of ${progress.total} ticked`}
-          className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums text-hud-muted"
+          className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-hud-muted"
         >
           <span aria-hidden="true">
             {progress.done}/{progress.total}
@@ -126,16 +125,8 @@ function ListCard({ list }: { list: List }) {
 
       <ChecklistItemsEditor items={listItemsOf(list)} onEdit={edit} newItemLabel="New item" addLabel="Add item" />
 
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => edit({ kind: "clearTicked" })}
-          disabled={progress.done === 0}
-          className={ACTION_BUTTON}
-        >
-          <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
-          Clear ticked
-        </button>
+      {/* Untick all keeps items; Clear ticked deletes them, so it sits on the opposite edge. */}
+      <div className="flex flex-wrap justify-between gap-2 pt-1">
         <button
           type="button"
           onClick={() => edit({ kind: "untickAll" })}
@@ -145,6 +136,16 @@ function ListCard({ list }: { list: List }) {
           <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
           Untick all
         </button>
+        <ConfirmDeleteButton
+          label="Clear ticked"
+          confirmLabel={`Delete ${progress.done} ticked?`}
+          onConfirm={() => edit({ kind: "clearTicked" })}
+          disabled={progress.done === 0}
+          className={`${ACTION_BUTTON} enabled:hover:text-danger`}
+        >
+          <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
+          Clear ticked
+        </ConfirmDeleteButton>
       </div>
     </section>
   );

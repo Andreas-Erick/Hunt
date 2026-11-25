@@ -80,7 +80,7 @@ export default function RootLayout({
         {/* Static string from lookPreference.ts: applies the saved look before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: LOOK_BOOT_SCRIPT }} />
       </head>
-      <body className="min-h-screen min-h-[100dvh] bg-base text-slate-100 antialiased selection:bg-accent/20 selection:text-accent">
+      <body className="min-h-screen min-h-[100dvh] bg-base text-slate-100 antialiased">
         {children}
       </body>
     </html>

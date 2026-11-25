@@ -44,6 +44,8 @@ export interface ConfirmDeleteButtonProps {
   armedClassName?: string;
   /** Disarms on its own after this long without a confirming activation. */
   disarmAfterMs?: number;
+  /** Nothing to delete right now (e.g. no ticked items); never arms while set. */
+  disabled?: boolean;
 }
 
 /**
@@ -60,6 +62,7 @@ export function ConfirmDeleteButton({
   className = "",
   armedClassName = "text-hud-crimson font-medium",
   disarmAfterMs = CONFIRM_DELETE_DISARM_MS,
+  disabled = false,
 }: ConfirmDeleteButtonProps) {
   const [armed, setArmed] = useState(false);
   // Refs, not state, decide what an activation does: several events can arrive
@@ -152,6 +155,7 @@ export function ConfirmDeleteButton({
       aria-label={armed ? confirmLabel : label}
       title={armed ? undefined : label}
       data-state={armed ? "armed" : "idle"}
+      disabled={disabled}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       onBlur={handleBlur}

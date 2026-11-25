@@ -186,7 +186,7 @@ describe("missed daily habit: desktop views and actions", () => {
 
     render(<QuestMatrixPanel />);
     const card = await screen.findByTestId("quest-card");
-    await waitFor(() => expect(within(card).getByText("Next Steps (1)")).toBeInTheDocument());
+    await waitFor(() => expect(within(card).getByText("Next steps (1)")).toBeInTheDocument());
     const rows = card.querySelectorAll("[data-task-id]");
     expect(Array.from(rows, (r) => r.getAttribute("data-task-id"))).toEqual([
       habitTaskId(habit.id, todayKey),
@@ -210,7 +210,7 @@ describe("missed daily habit: desktop views and actions", () => {
 
     render(<QuestMatrixPanel />);
     const card = await screen.findByTestId("quest-card");
-    await waitFor(() => expect(within(card).getByText("Next Steps (2)")).toBeInTheDocument());
+    await waitFor(() => expect(within(card).getByText("Next steps (2)")).toBeInTheDocument());
   });
 
   it("Home shows the habit once after a missed day", async () => {

@@ -69,9 +69,9 @@ export function DayTimeline({
 
   return (
     <div className="min-w-0 lg:col-span-5">
-      <div className="mb-6 flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
-          Today&apos;s Timeline
+      <div className="mb-6 flex min-h-8 coarse:min-h-11 items-center justify-between">
+        <span className="text-sm font-semibold text-hud-muted">
+          Today&apos;s timeline
         </span>
         <span className="text-xs tabular-nums text-hud-muted">
           {weekLogs === undefined

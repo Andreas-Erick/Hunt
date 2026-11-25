@@ -423,7 +423,7 @@ describe("HomePage shell", () => {
       "aria-current",
       "page"
     );
-    expect(await screen.findByText("Quest Work")).toBeInTheDocument();
+    expect(await screen.findByText("Quest work")).toBeInTheDocument();
 
     // Rapid view switches mount Quests immediately without AnimatePresence wedging
     fireEvent.click(nav.getByRole("button", { name: "Quests" }));
@@ -585,6 +585,20 @@ describe("TopTelemetryBar", () => {
 
 describe("globals.css", () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "app", "globals.css"), "utf8");
+
+  it("compiles text-base as a font size only, never the page-ground colour", async () => {
+    const result = await postcss([
+      tailwindcss({
+        ...tailwindConfig,
+        content: [{ raw: '<span class="text-base bg-base text-neutral-400"></span>', extension: "html" }],
+        corePlugins: { preflight: false },
+      }),
+    ]).process(css, { from: undefined });
+    const rules = result.css.match(/\.text-base\s*\{[^}]*\}/g) ?? [];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) expect(rule, rule).not.toMatch(/\bcolor\s*:/);
+    expect(result.css).toContain(".bg-base {");
+  });
 
   it("defines .no-scrollbar and compiles every class the shell uses (no xs: screen)", async () => {
     const sources = [

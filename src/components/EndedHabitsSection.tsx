@@ -101,12 +101,12 @@ function EndedHabitCard({
       <div className={`absolute bottom-3.5 left-0 top-3.5 w-1 rounded-r-full opacity-45 ${style.bg}`} />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="break-words text-base font-medium leading-snug text-neutral-300">{title}</div>
-          <div className="mt-1 text-xs text-hud-muted">
+          <div className="break-words [overflow-wrap:anywhere] text-base font-medium leading-snug text-neutral-300">{title}</div>
+          <div className="mt-1 break-words [overflow-wrap:anywhere] text-xs text-hud-muted">
             Ended {habitEndDateLabel(endDate, todayKey)} · {quest ? quest.title : "Other work"}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={() => setEndDate(null)}
@@ -119,7 +119,7 @@ function EndedHabitCard({
             label={`Delete habit ${title}`}
             confirmLabel="Delete habit?"
             onConfirm={() => deleteHabit(habit.id)}
-            className="flex h-9 min-w-9 coarse:h-11 coarse:min-w-11 items-center justify-center rounded-lg px-2 text-hud-muted hover:bg-white/[0.05] hover:text-danger data-[state=armed]:opacity-100"
+            className="ml-1 flex h-9 min-w-9 coarse:h-11 coarse:min-w-11 items-center justify-center rounded-lg px-2 text-hud-muted hover:bg-white/[0.05] hover:text-danger data-[state=armed]:opacity-100"
           >
             <Trash2 className="h-4 w-4" />
           </ConfirmDeleteButton>
