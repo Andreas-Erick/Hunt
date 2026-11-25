@@ -464,6 +464,18 @@ describe("Habit Kind and Count fields", () => {
     expect(sanitizeOne("task", taskRow({ amount: 1e12 }))?.get("amount")).toBe(1_000_000);
     expect(sanitizeOne("task", taskRow({ countTickedAt: -5 }))?.has("countTickedAt")).toBe(false);
   });
+
+  it("keeps an Avoid Habit's Kind", () => {
+    expect(habitOut(habitRow({ kind: "avoid" })).get("kind")).toBe("avoid");
+  });
+
+  it("keeps a day Task's Slips as a whole number, removing invalid ones and capping a huge one", () => {
+    expect(sanitizeOne("task", taskRow({ slips: 2 }))?.get("slips")).toBe(2);
+    for (const slips of [0, -1, 1.5, "1", Number.NaN, null]) {
+      expect(sanitizeOne("task", taskRow({ slips }))?.has("slips"), String(slips)).toBe(false);
+    }
+    expect(sanitizeOne("task", taskRow({ slips: 1e9 }))?.get("slips")).toBe(1000);
+  });
 });
 
 // Enums and dates

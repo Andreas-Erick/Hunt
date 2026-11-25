@@ -102,7 +102,8 @@ public class DayWidgetService extends RemoteViewsService {
             // Rows are recycled: set both looks of the card and tag every time.
             views.setInt(R.id.widget_row, "setBackgroundResource", focus ? look.focusRowBackground : look.rowBackground);
 
-            // A Count Habit row's tag shows its progress, "2 / 3 miles", from the snapshot.
+            // A Count Habit row's tag shows its progress, "2 / 3 miles", an Avoid row's "Kept so far",
+            // both from the snapshot.
             String progress = day.progressOf(row);
             int tag = focus ? R.string.day_widget_focus_tag
                     : row.optBoolean("habit", false) ? R.string.day_widget_habit_tag : 0;
@@ -122,6 +123,8 @@ public class DayWidgetService extends RemoteViewsService {
                 views.setOnClickFillInIntent(R.id.widget_row_tick, rowTap(DayWidgetTaps.ROW_TICK, row));
                 views.setContentDescription(R.id.widget_row_tick, SelectedDay.isCountRow(row)
                         ? ctx.getString(R.string.day_widget_row_plus_one, title, progress)
+                        : SelectedDay.isAvoidRow(row)
+                        ? ctx.getString(R.string.day_widget_row_slip, title, progress)
                         : ctx.getString(R.string.day_widget_row_tick, title));
             }
             return views;
@@ -135,11 +138,13 @@ public class DayWidgetService extends RemoteViewsService {
             RemoteViews views = new RemoteViews(ctx.getPackageName(), day.snapshot.look.dayUndoRowLayout);
             String title = row.optString("title", "");
             boolean plus = SelectedDay.isCountRow(row);
-            // Rows are recycled: set the mark's text every time ("Done", or "+1" on a Count row).
-            views.setTextViewText(R.id.widget_row_done, ctx.getString(plus ? R.string.day_widget_plus_one : R.string.day_widget_done));
+            boolean slip = SelectedDay.isAvoidRow(row);
+            // Rows are recycled: set the mark's text every time ("Done", "+1" on a Count row, "Slip" on an Avoid row).
+            views.setTextViewText(R.id.widget_row_done, ctx.getString(
+                    plus ? R.string.day_widget_plus_one : slip ? R.string.day_widget_slip : R.string.day_widget_done));
             views.setTextViewText(R.id.widget_row_done_title, ctx.getString(R.string.day_widget_done_title, title));
-            views.setContentDescription(R.id.widget_row_undo,
-                    ctx.getString(plus ? R.string.day_widget_row_undo_plus_one : R.string.day_widget_row_undo, title));
+            views.setContentDescription(R.id.widget_row_undo, ctx.getString(plus ? R.string.day_widget_row_undo_plus_one
+                    : slip ? R.string.day_widget_row_undo_slip : R.string.day_widget_row_undo, title));
             views.setOnClickFillInIntent(R.id.widget_row_undo, rowTap(DayWidgetTaps.ROW_UNDO, row));
             return views;
         }

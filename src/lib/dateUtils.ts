@@ -1,4 +1,5 @@
 import type { Quest, Task } from "./domainTypes";
+import { habitDaySlips } from "./habitKind";
 import { habitDayOutcome, habitStreakOf, type HabitOutcome } from "./habitOutcome";
 
 /**
@@ -66,16 +67,17 @@ export function isMissedHabitTask(
 
 /**
  * SHARED open-task rule for every list, count and picker of open work on
- * `todayKey`: queued or active, minus missed and Skipped habit days (a Skipped
- * day is not asked of the user, so it leaves Today and the Day Widget).
+ * `todayKey`: queued or active, minus missed, Skipped and slipped habit days (a
+ * Skipped day is not asked of the user, and an Avoid Habit's day with a Slip is
+ * already Missed, so both leave Today and the Day Widget).
  */
 export function isOpenTask(
-  task: Pick<Task, "status" | "scheduledDate" | "habitId" | "skipped">,
+  task: Pick<Task, "status" | "scheduledDate" | "habitId" | "skipped" | "slips">,
   todayKey: string
 ): boolean {
   return (
     (task.status === "queued" || task.status === "active") &&
-    !(task.habitId && task.skipped) &&
+    !(task.habitId && (task.skipped || habitDaySlips(task) > 0)) &&
     !isMissedHabitTask(task, todayKey)
   );
 }

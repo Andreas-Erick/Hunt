@@ -131,6 +131,16 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       target: 12.5,
       unit: "glasses of sparkling mineral water",
     },
+    // An Avoid Habit: its mark, "Kept so far" and the "Log a Slip" button must fit beside a long title.
+    {
+      id: "habit-avoid",
+      title: LONG_TASK_TITLE,
+      notes: "",
+      questId: null,
+      rank: 3000,
+      createdAt: now - 3 * DAY_MS,
+      kind: "avoid",
+    },
   ];
 
   // A standalone List with an unbreakable name and long items, one of them ticked.

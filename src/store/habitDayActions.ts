@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/domainTypes";
+import type { SlipEdit } from "@/lib/localHabitAvoid";
 import { localStore } from "@/lib/localStore";
 
 /** Runs a Local Store write as a named store action; false when it failed (actionError is set). */
@@ -14,6 +15,8 @@ export interface HabitDayActions {
   ensureHabitTaskForDay: (habitId: string, dateKey: string) => Promise<Task | undefined>;
   /** Marks one habit day Skipped, or un-Skips it (the shared skipHabitDayRow row). */
   setHabitDaySkipped: (habitId: string, dateKey: string, skipped: boolean) => Promise<void>;
+  /** Logs a Slip on an Avoid Habit's day, or undoes the newest one (the shared Slip rule). */
+  editHabitSlip: (habitId: string, dateKey: string, edit: SlipEdit) => Promise<void>;
 }
 
 export function habitDayActions(run: RunAction): HabitDayActions {
@@ -28,6 +31,10 @@ export function habitDayActions(run: RunAction): HabitDayActions {
 
     setHabitDaySkipped: async (habitId, dateKey, skipped) => {
       await run("setHabitDaySkipped", () => localStore.setHabitDaySkipped(habitId, dateKey, skipped));
+    },
+
+    editHabitSlip: async (habitId, dateKey, edit) => {
+      await run("editHabitSlip", () => localStore.editHabitSlip(habitId, dateKey, edit));
     },
   };
 }

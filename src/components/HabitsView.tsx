@@ -13,8 +13,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { habitDayAmount, habitKindOf } from "@/lib/habitKind";
+import { habitDayAmount, habitDaySlips, habitKindOf } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
+import * as Avoid from "./AvoidHabitControls";
 import { EditHabitQuestPicker, NewHabitQuestPicker } from "./HabitQuestPicker";
 import { computeHabitStreak, dateKeyFromOffset } from "@/lib/dateUtils";
 import type { Habit, HabitFrequency, Quest } from "@/lib/domainTypes";
@@ -264,6 +265,7 @@ export function HabitsView() {
   };
 
   const handleLogAmount = Count.useLogHabitAmount(todayKey, habitDays.summaryFor);
+  const handleEditSlip = Avoid.useEditHabitSlip(todayKey);
 
   const handleFocusToday = async (habit: Habit) => {
     const todayTask =
@@ -395,6 +397,8 @@ export function HabitsView() {
             // A Count Habit logs +1 / an exact total on a day it is asked for (and not Skipped).
             const isCount = habitKindOf(habit) === "count" && askedToday && !skippedToday;
             const todayAmount = habitDayAmount(todayTask);
+            // An Avoid Habit reads "Kept so far" and logs a Slip from its own button, never from a tick.
+            const isAvoid = habitKindOf(habit) === "avoid" && askedToday && !skippedToday;
 
             return (
               <div
@@ -412,7 +416,9 @@ export function HabitsView() {
                 <div className="p-4 sm:p-5 pl-5 sm:pl-6">
                   <div className="flex items-start justify-between gap-3 sm:gap-4">
                     <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-3.5">
-                      {isCount ? (
+                      {isAvoid ? (
+                        <Avoid.AvoidDayMark slipped={habitDaySlips(todayTask) > 0} accentText={style.text} />
+                      ) : isCount ? (
                         <Count.CountHabitPlusButton habit={habit} met={doneToday} accentBg={style.bg} onAdd={() => void handleLogAmount(habit, "+1")} onLongPress={() => setAmountHabitId(habit.id)} />
                       ) : (
                         <HabitTodayCheck
@@ -445,7 +451,7 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      {askedToday && !doneToday && !skippedToday && (
+                      {askedToday && !doneToday && !skippedToday && habitKindOf(habit) !== "avoid" && (
                         <button
                           type="button"
                           onClick={() => void handleFocusToday(habit)}
@@ -486,6 +492,7 @@ export function HabitsView() {
                       </span>
 
                       {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => setAmountHabitId(habit.id)} />}
+                      {isAvoid && <Avoid.AvoidSlipControls habit={habit} slips={habitDaySlips(todayTask)} onLog={() => handleEditSlip(habit, "log")} onUndo={() => handleEditSlip(habit, "undo")} />}
 
                       <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300">
                         <span

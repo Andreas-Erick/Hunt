@@ -32,7 +32,7 @@ export interface Quest {
  * How a Habit's day succeeds (GLOSSARY: Habit Kind). Chosen when the Habit is
  * made and never changed. A row without one is a Check Habit.
  */
-export type HabitKind = "check" | "count";
+export type HabitKind = "check" | "count" | "avoid";
 
 /** A day of the week as Date#getDay counts it: 0 = Sunday … 6 = Saturday. */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -118,6 +118,8 @@ export interface Task {
    * same queued tick read again is never counted twice.
    */
   countTickedAt?: number;
+  /** An Avoid Habit's day Task: how many Slips were logged that day; any at all makes it Missed. */
+  slips?: number;
 }
 
 export interface TimeLog {

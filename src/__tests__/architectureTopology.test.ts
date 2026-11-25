@@ -177,6 +177,7 @@ describe("Macro Architecture & State Topology Invariants", () => {
         "lib/habitDay.ts",
         "lib/habitKind.ts",
         "lib/habitCount.ts",
+        "lib/habitAvoid.ts",
         "lib/questProgress.ts",
         "lib/focusSession.ts",
         "lib/taskQueue.ts",

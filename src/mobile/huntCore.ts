@@ -30,6 +30,8 @@ export {
   parseCountAmount,
 } from "../lib/habitKind";
 export { addHabitDayCount, setHabitDayAmount } from "../lib/habitCount";
+export { avoidDayLabel, habitDaySlips } from "../lib/habitKind";
+export { logHabitSlip, undoHabitSlip } from "../lib/habitAvoid";
 export {
   applyChecklistEdit,
   canHoldChecklist,

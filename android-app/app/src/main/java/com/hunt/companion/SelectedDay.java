@@ -111,12 +111,23 @@ final class SelectedDay {
         return row != null && "count".equals(row.optString("habitKind"));
     }
 
+    /** An Avoid Habit row (snapshot habitKind "avoid"): its tick logs a Slip. */
+    static boolean isAvoidRow(JSONObject row) {
+        return row != null && "avoid".equals(row.optString("habitKind"));
+    }
+
+    /** The kind of tick a tap on `row` queues, from the snapshot's Habit Kind: "+1", "slip" or "" (done). */
+    static String tickKindOf(JSONObject row) {
+        return isCountRow(row) ? TickKeys.PLUS_ONE : isAvoidRow(row) ? TickKeys.SLIP : "";
+    }
+
     /**
      * A Count row's progress as the snapshot drew it ("2 / 3 miles"), with the +1s on their way
-     * after it ("2 / 3 miles +1"); "" for any other row. Java adds no Hunt rule: the count of
+     * after it ("2 / 3 miles +1"); an Avoid row's state ("Kept so far"); "" for any other row. Java adds no Hunt rule: the count of
      * waiting +1s is shown as it is, and Hunt folds them into the total when it applies them.
      */
     String progressOf(JSONObject row) {
+        if (isAvoidRow(row)) return row.optString("progress", ""); // "Kept so far", as the snapshot drew it
         if (!isCountRow(row)) return "";
         String progress = row.optString("progress", "");
         Integer waiting = pendingPlus.get(row.optString("id"));

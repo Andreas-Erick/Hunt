@@ -34,6 +34,9 @@
     <string name="day_widget_row_plus_one">Add 1 to %1$s, %2$s</string>
     <string name="day_widget_plus_one">+1</string>
     <string name="day_widget_row_undo_plus_one">Added 1 to %1$s. Undo</string>
+    <string name="day_widget_row_slip">Log a Slip on %1$s, %2$s</string>
+    <string name="day_widget_slip">Slip</string>
+    <string name="day_widget_row_undo_slip">Slip logged on %1$s. Undo</string>
     <string name="day_widget_tap_failed">Hunt couldn\'t save that tick. Try again, or tick it in Hunt.</string>
     <string name="day_widget_undo_failed">Hunt couldn\'t save that Undo. If the Task shows as done in Hunt, untick it there.</string>
     <string name="stats_widget_description">Quest hours this week, today\'s focus time and Habit streaks</string>

@@ -1,6 +1,7 @@
 import { habitStreakOn, habitTaskId, toLocalDateKey } from "./dateUtils";
 import type { Habit, Task } from "./domainTypes";
 import { isHabitScheduledOn } from "./habitFrequency";
+import { habitKindOf } from "./habitKind";
 import { habitDayOutcome, type HabitOutcome } from "./habitOutcome";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -151,7 +152,8 @@ export function summarizeHabitDays(
 
 /**
  * SHARED "done today" tally: the Habits asked of `todayKey` (scheduled by
- * their Frequency and not Skipped) and how many of them are done.
+ * their Frequency, not Skipped, and not Avoid Habits) and how many of them
+ * are done.
  */
 export function habitTodayTally(
   habits: readonly Habit[],
@@ -161,7 +163,8 @@ export function habitTodayTally(
   let done = 0;
   let asked = 0;
   for (const habit of habits) {
-    if (!isHabitScheduledOn(habit, todayKey)) continue;
+    // An Avoid Habit asks nothing to be done: it is kept unless a Slip is logged.
+    if (!isHabitScheduledOn(habit, todayKey) || habitKindOf(habit) === "avoid") continue;
     const summary = summaryFor(habit.id);
     if (summary.outcomeOn(todayKey) === "skipped") continue;
     asked += 1;

@@ -7,6 +7,7 @@ import { isReminderTime } from "./reminders";
 import type { FocusEffect } from "./focusSession";
 import type { Habit, HabitFrequency, Quest, QuestAccent, Task } from "./domainTypes";
 import { EVERY_DAY, isHabitScheduledOn, parseHabitFrequency, withHabitFrequency } from "./habitFrequency";
+import { writeHabitSlip, type SlipEdit } from "./localHabitAvoid";
 import { completedRow, countFieldChanges, newHabitKindFields, reopenTaskRow, writeHabitAmount, type NewHabitKind } from "./localHabitCount";
 import {
   hasLocalLogTombstone,
@@ -574,6 +575,8 @@ export const localStore = {
   ensureHabitTaskForDay,
   /** A Count Habit's total for a day: "+1" adds one, a number sets it (writeHabitAmount). */
   logHabitAmount: async (habitId: string, dateKey: string, amount: number | "+1") => changed(await writeHabitAmount(habitId, dateKey, amount)),
+  /** An Avoid Habit's day: logs a Slip, or undoes the newest one (writeHabitSlip). */
+  editHabitSlip: async (habitId: string, dateKey: string, edit: SlipEdit) => changed(await writeHabitSlip(habitId, dateKey, edit)),
   setHabitDaySkipped,
   deleteTimeLog,
 };
