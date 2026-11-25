@@ -131,6 +131,16 @@ export function buildFixtures(now: number = Date.now()): GeometryFixtures {
       target: 12.5,
       unit: "glasses of sparkling mineral water",
     },
+    {
+      // An Ended Habit (ended three days ago): the collapsed Ended section on both apps.
+      id: "habit-ended",
+      title: `${LONG_QUEST_TITLE}${LONG_QUEST_TITLE}`,
+      notes: "",
+      questId: "quest-slot-0",
+      rank: 3000,
+      createdAt: now - 20 * DAY_MS,
+      endDate: dateKey(now - 3 * DAY_MS),
+    },
   ];
 
   // A standalone List with an unbreakable name and long items, one of them ticked.

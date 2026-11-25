@@ -1,4 +1,5 @@
 import type { Habit, HabitFrequency, HabitFrequencyChange, Weekday } from "./domainTypes";
+import { isHabitEndedOn } from "./habitEnd";
 
 /**
  * SHARED Frequency rules (GLOSSARY: Frequency). A Habit stores its Frequency
@@ -19,6 +20,7 @@ const WEEK_ORDER: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0];
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 type FrequencySource = Readonly<Pick<Partial<Habit>, "frequencyHistory">>;
+type ScheduleSource = Readonly<Pick<Partial<Habit>, "frequencyHistory" | "endDate" | "endedSpans">>;
 
 /** The weekday (0 = Sunday) of a local YYYY-MM-DD key. */
 export function weekdayOfKey(dateKey: string): Weekday {
@@ -39,9 +41,12 @@ export function habitFrequencyOn(habit: FrequencySource, dayKey: string): HabitF
 /**
  * Whether the Habit's Frequency in force on `dayKey` may ask for that day. An N
  * per week Habit may be asked any day of its Habit Week; whether it still is,
- * once N are Met, is the Habit Week rule (habitWeek.ts).
+ * once N are Met, is the Habit Week rule (habitWeek.ts). A day past its end
+ * date, or one it spent Ended before a restart, is never asked for
+ * (isHabitEndedOn).
  */
-export function isHabitScheduledOn(habit: FrequencySource, dayKey: string): boolean {
+export function isHabitScheduledOn(habit: ScheduleSource, dayKey: string): boolean {
+  if (isHabitEndedOn(habit, dayKey)) return false;
   const frequency = habitFrequencyOn(habit, dayKey);
   return frequency.type !== "weekdays" || frequency.weekdays.includes(weekdayOfKey(dayKey));
 }

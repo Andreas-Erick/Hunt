@@ -71,6 +71,19 @@ export interface Habit {
    * before the first change, and rows without the field, are every day.
    */
   frequencyHistory?: HabitFrequencyChange[];
+  /** The last day (YYYY-MM-DD) the Habit asks for; after it, it is an Ended Habit (habitEnd.ts). */
+  endDate?: string;
+  /**
+   * Earlier stretches the Habit was Ended, kept when it was restarted (its end date cleared or
+   * moved), ascending. Their days have no Outcome, so a restart never counts them against it.
+   */
+  endedSpans?: HabitEndedSpan[];
+}
+
+/** Days `from`..`to` (YYYY-MM-DD, inclusive) a restarted Habit spent Ended. */
+export interface HabitEndedSpan {
+  from: string;
+  to: string;
 }
 
 /** One item to tick inside a Task's Checklist. */

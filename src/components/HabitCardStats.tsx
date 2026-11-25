@@ -69,15 +69,18 @@ function StripDay({ day, isToday, metClass }: { day: HabitStripDay; isToday: boo
 export function HabitCardStats({
   summary,
   todayKey,
+  lastKey,
   metClass,
 }: {
   summary: Pick<HabitDaySummary, "outcomeOn" | "streak" | "successRate"> &
     Partial<Pick<HabitDaySummary, "streakUnit" | "week">>;
   todayKey: string;
+  /** The strip's last day: today, or an Ended Habit's end date. */
+  lastKey?: string;
   /** The Habit's accent background class for a Met day. */
   metClass: string;
 }) {
-  const strip = habitWeekStrip(todayKey, summary.outcomeOn);
+  const strip = habitWeekStrip(lastKey ?? todayKey, summary.outcomeOn, todayKey);
   const rate = habitSuccessRateLabel(summary.successRate());
   return (
     <>

@@ -123,14 +123,16 @@ async function expectNoHorizontalOverflow(
 /**
  * The Checklist editor (`[role=group][aria-label=Checklist]`) keeps every item control inside its
  * own box (a card with overflow hidden would clip, not scroll, so the page check cannot see it),
- * and each control is at least `minTarget` px square.
+ * and each control is at least `minTarget` px square. `what` names the box in a failure (another
+ * clipping card, such as an Ended Habit's, is checked the same way).
  */
 async function checkChecklistEditor(
   page: Page,
   editor: ReturnType<Page["locator"]>,
   minTarget: number,
   where: string,
-  failures: string[]
+  failures: string[],
+  what = "Checklist"
 ): Promise<void> {
   await expect(editor).toBeVisible();
   await settle(page);
@@ -149,7 +151,7 @@ async function checkChecklistEditor(
     }
     return out;
   }, minTarget);
-  for (const p of problems) failures.push(`${where} Checklist: ${p}`);
+  for (const p of problems) failures.push(`${where} ${what}: ${p}`);
 }
 
 /**
@@ -338,6 +340,13 @@ test.describe(`desktop app geometry (${look})`, () => {
       await page.keyboard.press("Escape");
       await expect(detail).toHaveCount(0);
 
+      // The collapsed Ended section on Habits, opened: the Ended Habit's card keeps its controls.
+      await clickDesktopNav(page, "Habits");
+      await page.getByRole("button", { name: "Ended (1)" }).click();
+      const endedCard = page.getByTestId("ended-habit-row");
+      await checkChecklistEditor(page, endedCard, 32, `${label(vp)} desktop Habits`, failures, "Ended Habit card");
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} desktop Habits Ended section`);
+
       // The Checklist editor inside the long Task's drawer (n/m progress shows on its row).
       await clickDesktopNav(page, "Home");
       const longRow = page.locator("[data-testid='task-row'][data-task-id='task-long']");
@@ -441,6 +450,13 @@ test.describe(`phone app geometry (${look})`, () => {
           await checkTabletPlanTitles(page, vp, failures);
         }
       }
+
+      // The Habits screen's Ended section, opened: the Ended Habit's card (48px Android targets).
+      await openMobileView(page, MOBILE_VIEWS.find((v) => v.bodyView === "habits")!);
+      await page.getByLabel("Ended habits (1)").click();
+      const endedCard = page.locator("[data-ended-habit]");
+      await checkChecklistEditor(page, endedCard, 48, `${label(vp)} phone-app Habits`, failures, "Ended Habit card");
+      await expectNoHorizontalOverflow(page, failures, `${label(vp)} phone-app Habits Ended section`);
 
       // The seeded List's card: item editor and actions inside the card, 48px Android targets.
       await openMobileView(page, MOBILE_VIEWS.find((v) => v.bodyView === "lists")!);

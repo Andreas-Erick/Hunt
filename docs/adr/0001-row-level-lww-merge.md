@@ -77,6 +77,11 @@ associativity and idempotence over 400 seeds.
   device for a different day while the other undoes keeps
   the week Skipped. This is accepted: Skipping is rare, and
   Undo can be repeated.
+- A Habit's end date (`endDate`) and the stretches it spent
+  Ended before a restart (`endedSpans`) ride on its row the
+  same way: the later Habit row wins with both. The
+  validator keeps only valid date keys
+  (`sanitizeHabitEnd`), at most 100 stretches.
 - A new synced collection needs a type in `SyncPayload`,
   an entry in `TOMBSTONE_KEY`, a row in the merge table, a
   validator (in its own module: `lists.ts` for Lists), a

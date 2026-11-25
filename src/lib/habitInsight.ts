@@ -51,16 +51,17 @@ export interface HabitStripDay {
 }
 
 /**
- * SHARED week strip: the HABIT_WEEK_STRIP_DAYS days ending `todayKey`, oldest
- * first, each with its Outcome (`outcomeOn`) and its name, so both apps draw
- * and label the same days.
+ * SHARED week strip: the HABIT_WEEK_STRIP_DAYS days ending `lastKey` (today, or
+ * an Ended Habit's end date), oldest first, each with its Outcome (`outcomeOn`)
+ * and its name, so both apps draw and label the same days.
  */
 export function habitWeekStrip(
-  todayKey: string,
-  outcomeOn: (dayKey: string) => HabitOutcome | null
+  lastKey: string,
+  outcomeOn: (dayKey: string) => HabitOutcome | null,
+  todayKey: string = lastKey
 ): HabitStripDay[] {
   return Array.from({ length: HABIT_WEEK_STRIP_DAYS }, (_, idx) => {
-    const day = dateFromKey(todayKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
+    const day = dateFromKey(lastKey, idx - (HABIT_WEEK_STRIP_DAYS - 1));
     const dayKey = toLocalDateKey(day.getTime());
     const outcome = outcomeOn(dayKey);
     const short = WEEKDAY_SHORT[day.getDay()];

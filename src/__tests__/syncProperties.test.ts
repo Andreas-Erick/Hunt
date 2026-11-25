@@ -196,6 +196,9 @@ function generatePayload(rand: () => number, seed: number): SyncPayload {
       habit.target = pick([1, 3, 2.5]);
       habit.unit = pick(["", "miles"]);
     }
+    // An Ended Habit, and one restarted after a stretch Ended: the end fields ride on the row.
+    if (chance(0.3)) habit.endDate = pick(["2026-11-18", "2026-11-30"]);
+    if (chance(0.2)) habit.endedSpans = [{ from: "2026-11-05", to: "2026-11-09" }];
     return habit;
   });
 
