@@ -1,19 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
-import {
-  Calendar,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { formatChronoMMSS } from "@/lib/dateUtils";
 import {
   buildHorizonWindow,
   computeActivityHeatmap,
@@ -26,13 +17,13 @@ import {
 } from "@/lib/reviewAnalytics";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
-import { ConfirmDeleteButton, ROW_DELETE_CLASS } from "./ConfirmDeleteButton";
 import { ReviewHeatmapCard } from "./ReviewHeatmapCard";
+import { describeReviewScope, ReviewScopePicker } from "./ReviewScopePicker";
+import { SessionHistoryLog } from "./SessionHistoryLog";
 import { useTodayDateKey } from "./useTodayDateKey";
 
 const PRESSABLE = "transition-colors duration-150 ease-out active:opacity-80";
 const HEATMAP_WEEKS_DESKTOP = 26;
-export const SESSION_LOG_PAGE_SIZE = 50;
 
 const HORIZON_OPTIONS: ReadonlyArray<{ id: ReviewHorizon; label: string }> = [
   { id: "day", label: "Day" },
@@ -50,45 +41,8 @@ export function TelemetryDashboardView() {
   const [periodOffset, setPeriodOffset] = useState(0);
   const [scope, setScope] = useState<ReviewScope>("ALL");
   const [chartMetric, setChartMetric] = useState<ReviewChartMetric>("hours");
-  const [showScopeMenu, setShowScopeMenu] = useState(false);
-  const [showSessionHistory, setShowSessionHistory] = useState(false);
-  const [visibleLogLimit, setVisibleLogLimit] = useState(SESSION_LOG_PAGE_SIZE);
-  const scopeMenuRef = useRef<HTMLDivElement | null>(null);
-  const scopeTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const scopeListboxRef = useRef<HTMLDivElement | null>(null);
 
   const todayKey = useTodayDateKey();
-
-  useEffect(() => {
-    if (!showScopeMenu) return;
-    const onPointerDown = (e: MouseEvent) => {
-      if (scopeMenuRef.current && !scopeMenuRef.current.contains(e.target as Node)) {
-        setShowScopeMenu(false);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setShowScopeMenu(false);
-      // The focused option unmounts with the list: hand focus back to the trigger.
-      scopeTriggerRef.current?.focus();
-    };
-    window.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [showScopeMenu]);
-
-  // Opening the list moves focus to the selected option (or the first one).
-  useEffect(() => {
-    if (!showScopeMenu) return;
-    const listbox = scopeListboxRef.current;
-    const target =
-      listbox?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]') ??
-      listbox?.querySelector<HTMLElement>('[role="option"]');
-    target?.focus();
-  }, [showScopeMenu]);
 
   const windowSpec = React.useMemo(
     () => buildHorizonWindow(horizon, periodOffset, todayKey),
@@ -158,25 +112,10 @@ export function TelemetryDashboardView() {
     [heatmapLogs, completedTasks, effectiveScope, todayKey]
   );
 
-  const scopeTitle =
-    effectiveScope === "ALL"
-      ? "All Quests"
-      : effectiveScope === "OTHER"
-      ? "Other work"
-      : selectedQuest?.title ?? "All Quests";
-
-  const scopeStyle = selectedQuest
-    ? accentStyle(selectedQuest.accentColor)
-    : effectiveScope === "OTHER"
-    ? accentStyle("slate")
-    : null;
+  const { title: scopeTitle, style: scopeStyle } = describeReviewScope(effectiveScope, selectedQuest);
 
   const primaryBarClass = scopeStyle ? scopeStyle.bg : "bg-now";
   const primaryTextClass = scopeStyle ? scopeStyle.text : "text-now";
-
-  useEffect(() => {
-    setVisibleLogLimit(SESSION_LOG_PAGE_SIZE);
-  }, [periodId, effectiveScope]);
 
   const maxBucketValue = React.useMemo(() => {
     if (chartMetric === "tasks") {
@@ -203,38 +142,6 @@ export function TelemetryDashboardView() {
   const handleScopeChange = (next: ReviewScope) => {
     hudAudio.playClick();
     setScope(next);
-    setShowScopeMenu(false);
-  };
-
-  /** Picking an option closes the list; focus returns to the trigger instead of <body>. */
-  const handleScopeOptionSelect = (next: ReviewScope) => {
-    handleScopeChange(next);
-    scopeTriggerRef.current?.focus();
-  };
-
-  /** ArrowUp / ArrowDown (wrapping), Home and End move focus between the options. */
-  const handleScopeListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
-    const options = Array.from(
-      e.currentTarget.querySelectorAll<HTMLElement>('[role="option"]')
-    );
-    if (options.length === 0) return;
-    e.preventDefault();
-    const current = options.findIndex((el) => el === document.activeElement);
-    const last = options.length - 1;
-    const next =
-      e.key === "Home"
-        ? 0
-        : e.key === "End"
-        ? last
-        : e.key === "ArrowDown"
-        ? current < 0 || current === last
-          ? 0
-          : current + 1
-        : current <= 0
-        ? last
-        : current - 1;
-    options[next].focus();
   };
 
   const handleDeleteLog = async (id: string) => {
@@ -272,101 +179,11 @@ export function TelemetryDashboardView() {
 
         <div className="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
           {/* Quest Scope Filter Dropdown */}
-          <div ref={scopeMenuRef} className="relative max-w-full">
-            <button
-              ref={scopeTriggerRef}
-              type="button"
-              onClick={() => setShowScopeMenu((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={showScopeMenu}
-              aria-label={`Filter review scope: ${scopeTitle}`}
-              className={`flex max-w-full coarse:min-h-11 items-center gap-2 rounded-full border border-white/10 bg-surface px-3.5 py-2 text-xs font-medium text-neutral-200 hover:border-white/25 ${PRESSABLE}`}
-            >
-              {scopeStyle ? (
-                <span className={`h-2 w-2 shrink-0 rounded-full ${scopeStyle.bg}`} />
-              ) : (
-                <Filter className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-              )}
-              <span className="max-w-[160px] truncate">
-                {effectiveScope === "ALL" ? "All Quests" : scopeTitle}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-hud-muted" />
-            </button>
-
-            {showScopeMenu && (
-              <div
-                ref={scopeListboxRef}
-                role="listbox"
-                aria-label="Quest filter options"
-                onKeyDown={handleScopeListKeyDown}
-                className="absolute left-0 lg:left-auto lg:right-0 z-30 mt-2 max-h-[min(22rem,70dvh)] w-[min(16rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-white/12 bg-raised p-1 shadow-2xl"
-              >
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={effectiveScope === "ALL"}
-                  tabIndex={effectiveScope === "ALL" ? 0 : -1}
-                  onClick={() => handleScopeOptionSelect("ALL")}
-                  className={`flex w-full coarse:min-h-11 items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
-                    effectiveScope === "ALL"
-                      ? "bg-white/10 font-medium text-white"
-                      : "text-neutral-300 hover:bg-white/[0.05]"
-                  } ${PRESSABLE}`}
-                >
-                  <span>All Quests</span>
-                  <span className="text-[11px] text-hud-muted">Aggregate</span>
-                </button>
-
-                {(quests ?? []).map((q) => {
-                  const st = accentStyle(q.accentColor);
-                  const active = effectiveScope === q.id;
-                  return (
-                    <button
-                      key={q.id}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => handleScopeOptionSelect(q.id)}
-                      className={`mt-0.5 flex w-full coarse:min-h-11 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs ${
-                        active
-                          ? "bg-white/10 font-medium text-white"
-                          : "text-neutral-300 hover:bg-white/[0.05]"
-                      } ${PRESSABLE}`}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className={`h-2 w-2 shrink-0 rounded-full ${st.bg}`} />
-                        <span className="truncate">{q.title}</span>
-                      </span>
-                      {q.archived && (
-                        <span className="shrink-0 text-[10px] text-hud-muted">Done</span>
-                      )}
-                    </button>
-                  );
-                })}
-
-                <div className="my-1 border-t border-white/[0.06]" />
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={effectiveScope === "OTHER"}
-                  tabIndex={effectiveScope === "OTHER" ? 0 : -1}
-                  onClick={() => handleScopeOptionSelect("OTHER")}
-                  className={`flex w-full coarse:min-h-11 items-center justify-between rounded-lg px-3 py-2 text-left text-xs ${
-                    effectiveScope === "OTHER"
-                      ? "bg-white/10 font-medium text-white"
-                      : "text-neutral-300 hover:bg-white/[0.05]"
-                  } ${PRESSABLE}`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-slate-500" />
-                    <span>Other work</span>
-                  </span>
-                  <span className="text-[11px] text-hud-muted">Unassigned</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <ReviewScopePicker
+            quests={quests ?? []}
+            value={effectiveScope}
+            onChange={handleScopeChange}
+          />
 
           {effectiveScope !== "ALL" && (
             <button
@@ -850,80 +667,13 @@ export function TelemetryDashboardView() {
       />
 
       {/* Collapsible Session History Log */}
-      <div className="mt-10">
-        <button
-          type="button"
-          onClick={() => setShowSessionHistory(!showSessionHistory)}
-          aria-expanded={showSessionHistory}
-          className={`-mx-2 flex items-center gap-1.5 coarse:min-h-11 rounded-lg px-2 py-2 text-sm font-medium text-hud-muted hover:bg-white/[0.04] hover:text-neutral-300 ${PRESSABLE}`}
-        >
-          {showSessionHistory
-            ? "Hide session log"
-            : `Session log (${loading ? "–" : report.filteredLogs.length} sessions ${windowSpec.sessionUnitLabel})`}
-          <ChevronDown
-            aria-hidden="true"
-            className={`h-4 w-4 transition-transform duration-200 ease-out ${showSessionHistory ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        {showSessionHistory && (
-          <div className="mt-4 divide-y divide-white/[0.05] rounded-2xl border border-white/[0.08] bg-surface px-4 sm:px-6 py-2">
-            {periodLogs !== undefined && report.filteredLogs.length === 0 && (
-              <p className="py-3.5 text-sm text-hud-muted">
-                No sessions logged {windowSpec.sessionUnitLabel}.
-              </p>
-            )}
-            {report.filteredLogs.slice(0, visibleLogLimit).map((log) => {
-              const style = accentStyle(log.accentColorSnapshot);
-              return (
-                <div
-                  key={log.id}
-                  data-testid="session-row"
-                  data-log-id={log.id}
-                  className="group flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4 py-3.5 text-sm"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${style.bg}`} />
-                    <span className="shrink-0 text-xs tabular-nums text-hud-muted">
-                      {log.dateKey}
-                    </span>
-                    <span className="truncate text-neutral-200" title={log.taskTitleSnapshot}>
-                      {log.taskTitleSnapshot}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-4 font-mono text-xs tabular-nums text-neutral-400">
-                    <span>
-                      {formatChronoMMSS(log.durationSeconds).formatted}
-                    </span>
-                    <ConfirmDeleteButton
-                      label="Delete session"
-                      onConfirm={() => handleDeleteLog(log.id)}
-                      className={`whitespace-nowrap font-sans ${ROW_DELETE_CLASS}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </ConfirmDeleteButton>
-                  </div>
-                </div>
-              );
-            })}
-            {report.filteredLogs.length > visibleLogLimit && (
-              <div className="py-3 text-center">
-                <button
-                  type="button"
-                  data-testid="review-logs-show-more"
-                  onClick={() =>
-                    setVisibleLogLimit((cur) => cur + SESSION_LOG_PAGE_SIZE)
-                  }
-                  className={`min-h-8 coarse:min-h-11 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-neutral-200 hover:border-white/25 hover:text-white ${PRESSABLE}`}
-                >
-                  Show more sessions ({report.filteredLogs.length - visibleLogLimit}{" "}
-                  remaining)
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <SessionHistoryLog
+        logs={report.filteredLogs}
+        loaded={!loading}
+        sessionUnitLabel={windowSpec.sessionUnitLabel}
+        resetKey={`${periodId}|${effectiveScope}`}
+        onDeleteLog={handleDeleteLog}
+      />
     </div>
   );
 }

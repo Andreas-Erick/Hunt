@@ -152,7 +152,7 @@ describe("module size ratchet", () => {
     "src/components/GuideLabSection.tsx": 767,
     "src/components/MobileSyncModal.tsx": 772,
     "src/components/PlanWeekView.tsx": 737,
-    "src/components/TelemetryDashboardView.tsx": 929,
+    "src/components/TelemetryDashboardView.tsx": 679,
     "src/lib/questScience.ts": 618,
     "src/lib/reviewAnalytics.ts": 1012,
     "src/lib/syncTypes.ts": 772,
