@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { buildFixtures, buildMobileState } from "./fixtures";
-import type { Task } from "../src/lib/domainTypes";
+import type { Habit, Task } from "../src/lib/domainTypes";
 
 /**
  * Layout stability while a task is completed, in a real browser with motion on.
@@ -120,11 +120,11 @@ function expectNoShift(result: Sampled): void {
 // Desktop Home (also what a tablet sees through the LAN link)
 // ---------------------------------------------------------------------------
 
-async function openDesktopHome(page: Page): Promise<void> {
+async function openDesktopHome(page: Page, habits: Habit[] = []): Promise<void> {
   await page.route("**/api/sync**", (route) => route.abort());
   await page.goto("/");
   await expect(page.locator("header nav")).toBeVisible({ timeout: 30_000 });
-  const data = { ...buildFixtures(NOW), tasks: TASKS, habits: [], lists: [], timeLogs: [] };
+  const data = { ...buildFixtures(NOW), tasks: TASKS, habits, lists: [], timeLogs: [] };
   await page.evaluate(async (data) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open("JourneyCommandDB");
@@ -204,9 +204,9 @@ for (const viewport of [
 // Phone app (/hunt-mobile.html)
 // ---------------------------------------------------------------------------
 
-async function openPhoneToday(page: Page): Promise<void> {
+async function openPhoneToday(page: Page, habits: Habit[] = []): Promise<void> {
   await page.route("**/api/sync**", (route) => route.abort());
-  const state = buildMobileState({ ...buildFixtures(NOW), tasks: TASKS, habits: [], lists: [], timeLogs: [] });
+  const state = buildMobileState({ ...buildFixtures(NOW), tasks: TASKS, habits, lists: [], timeLogs: [] });
   await page.addInitScript(
     ([key, value]) => window.localStorage.setItem(key, value),
     ["hunt-mobile-standalone-v1", JSON.stringify(state)] as const
@@ -253,6 +253,79 @@ for (const viewport of [
       expectNoShift(await completeAndSample(page, phoneCheck("quest-a"), PHONE_WATCH, phoneCard("quest-a")));
       await page.waitForTimeout(450); // DOUBLE_TAP_COMPLETE_MS is 400
       expectNoShift(await completeAndSample(page, phoneCheck("other-a"), PHONE_WATCH, phoneCard("other-a")));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Habits: ticking today's Habit (both apps)
+// ---------------------------------------------------------------------------
+
+/** Long enough to wrap on a phone: the title must not reflow into the play button's freed slot. */
+const HABIT_TITLE = "Read twenty pages of the book on the nightstand before going to sleep tonight";
+const HABIT: Habit = {
+  id: "habit-wrap",
+  title: HABIT_TITLE,
+  notes: "",
+  questId: null,
+  rank: 1000,
+  createdAt: NOW - 3 * 86_400_000,
+  updatedAt: 1,
+} as Habit;
+
+type Box = { width: number; height: number };
+async function boxOf(page: Page, selector: string): Promise<Box> {
+  return page.locator(selector).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { width: r.width, height: r.height };
+  });
+}
+function expectSameBox(before: Box, after: Box, what: string): void {
+  expect(Math.abs(after.width - before.width), `${what} width changed`).toBeLessThanOrEqual(TOLERANCE_PX);
+  expect(Math.abs(after.height - before.height), `${what} height changed`).toBeLessThanOrEqual(TOLERANCE_PX);
+}
+
+for (const viewport of [
+  { width: 360, height: 740 },
+  { width: 1024, height: 768 },
+]) {
+  test.describe(`${viewport.width}x${viewport.height}: ticking a Habit never reflows its title`, () => {
+    test.use({ viewport });
+
+    test("phone app: the title keeps its box when ticked and reopened", async ({ page }) => {
+      await openPhoneToday(page, [HABIT]);
+      await page.evaluate(() => (window as unknown as { switchView: (v: string) => void }).switchView("habits"));
+      const title = "#mainContainer .habits-grid .queue-item-title";
+      await expect(page.locator(title)).toHaveText(HABIT_TITLE);
+      await waitForSettledLayout(page);
+      const before = await boxOf(page, title);
+
+      await page.getByRole("button", { name: `Complete today's habit ${HABIT_TITLE}` }).click();
+      await expect(page.getByRole("button", { name: `Reopen today's habit ${HABIT_TITLE}` })).toBeVisible();
+      await expect(page.getByRole("button", { name: `Start focus on ${HABIT_TITLE}` })).toHaveCount(0);
+      expectSameBox(before, await boxOf(page, title), "the ticked Habit's title");
+
+      await page.getByRole("button", { name: `Reopen today's habit ${HABIT_TITLE}` }).click();
+      await expect(page.getByRole("button", { name: `Start focus on ${HABIT_TITLE}` })).toBeVisible();
+      expectSameBox(before, await boxOf(page, title), "the reopened Habit's title");
+    });
+
+    test("desktop: the title's column keeps its box when ticked and reopened", async ({ page }) => {
+      await openDesktopHome(page, [HABIT]);
+      await page.locator("header nav button", { hasText: /^Habits$/ }).click();
+      const titleColumn = `[data-testid="habit-row"] button[aria-label="Open habit: ${HABIT_TITLE}"] >> xpath=..`;
+      await expect(page.locator(titleColumn)).toBeVisible();
+      await waitForSettledLayout(page);
+      const before = await boxOf(page, titleColumn);
+
+      await page.getByRole("button", { name: `Complete today's habit: ${HABIT_TITLE}` }).click();
+      await expect(page.getByRole("button", { name: `Reopen today's habit: ${HABIT_TITLE}` })).toBeVisible();
+      await expect(page.getByRole("button", { name: `Start focus: ${HABIT_TITLE}` })).toHaveCount(0);
+      expectSameBox(before, await boxOf(page, titleColumn), "the ticked Habit's title column");
+
+      await page.getByRole("button", { name: `Reopen today's habit: ${HABIT_TITLE}` }).click();
+      await expect(page.getByRole("button", { name: `Start focus: ${HABIT_TITLE}` })).toBeVisible();
+      expectSameBox(before, await boxOf(page, titleColumn), "the reopened Habit's title column");
     });
   });
 }

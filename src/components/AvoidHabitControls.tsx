@@ -8,6 +8,7 @@ import { avoidDayLabel, habitKindOf } from "@/lib/habitKind";
 import { reads } from "@/lib/reads";
 import { hudAudio } from "@/lib/hudAudio";
 import { useCommandStore } from "@/store/useCommandStore";
+import { StableSlot } from "./StableSlot";
 
 /**
  * An Avoid Habit card's mark where other Kinds have their tick (GLOSSARY: Avoid
@@ -27,7 +28,9 @@ export function AvoidDayMark({ slipped, accentText }: { slipped: boolean; accent
 
 /**
  * Today's state of an Avoid Habit ("Kept so far", "1 Slip") and its one action:
- * Log a Slip while there is none, Undo Slip once there is.
+ * Log a Slip while there is none, Undo Slip once there is. Both the label and
+ * the button keep the width of their widest state, so logging a Slip moves
+ * nothing beside them.
  */
 export function AvoidSlipControls({
   habit,
@@ -43,15 +46,31 @@ export function AvoidSlipControls({
   const slipped = slips > 0;
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <span className={`text-xs ${slipped ? "text-danger" : "text-neutral-300"}`}>{avoidDayLabel(slips)}</span>
+      <StableSlot
+        active={slipped ? "slipped" : "kept"}
+        states={{
+          kept: <span className="text-xs text-neutral-300">{avoidDayLabel(0)}</span>,
+          slipped: <span className="text-xs text-danger">{avoidDayLabel(Math.max(slips, 1))}</span>,
+        }}
+      />
       <button
         type="button"
         onClick={slipped ? onUndo : onLog}
         aria-label={`${slipped ? "Undo Slip" : "Log a Slip"} on ${habit.title}`}
-        className="-my-1 flex min-h-8 coarse:min-h-11 items-center gap-1 rounded-full px-2.5 py-1 text-xs text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
+        className="-my-1 flex min-h-8 coarse:min-h-11 items-center rounded-full px-2.5 py-1 text-xs text-hud-muted transition-colors duration-150 ease-out hover:bg-white/[0.05] hover:text-white active:opacity-80"
       >
-        {slipped && <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />}
-        <span>{slipped ? "Undo Slip" : "Log a Slip"}</span>
+        <StableSlot
+          active={slipped ? "undo" : "log"}
+          states={{
+            log: <span>Log a Slip</span>,
+            undo: (
+              <span className="flex items-center gap-1">
+                <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Undo Slip</span>
+              </span>
+            ),
+          }}
+        />
       </button>
     </span>
   );

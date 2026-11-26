@@ -8,20 +8,23 @@ describe("habitRowMode (how a Habit card's row logs today, on both apps)", () =>
   const today = { askedToday: true, skipState: "open" as const, doneToday: false };
 
   it("logs by the Habit's Kind on a day it asks for: a tick, +1 / a total, or a Slip", () => {
-    expect(habitRowMode({}, today)).toEqual({ mode: "tick", focusable: true });
-    expect(habitRowMode({ kind: "count" }, today)).toEqual({ mode: "count", focusable: true });
-    expect(habitRowMode({ kind: "avoid" }, today)).toEqual({ mode: "slip", focusable: false });
+    expect(habitRowMode({}, today)).toEqual({ mode: "tick", focusable: true, holdsFocusSlot: true });
+    expect(habitRowMode({ kind: "count" }, today)).toEqual({ mode: "count", focusable: true, holdsFocusSlot: true });
+    expect(habitRowMode({ kind: "avoid" }, today)).toEqual({ mode: "slip", focusable: false, holdsFocusSlot: false });
   });
 
   it("is set aside on a Skipped day and plain on a day not asked for, whatever the Kind", () => {
     for (const kind of ["check", "count", "avoid"] as const) {
-      expect(habitRowMode({ kind }, { ...today, skipState: "skipped" })).toEqual({ mode: "skipped", focusable: false });
-      expect(habitRowMode({ kind }, { ...today, askedToday: false })).toEqual({ mode: "unasked", focusable: false });
+      // A Skip is undone in place, so a Kind that offers focus keeps the button's slot meanwhile.
+      expect(habitRowMode({ kind }, { ...today, skipState: "skipped" })).toEqual({ mode: "skipped", focusable: false, holdsFocusSlot: kind !== "avoid" });
+      expect(habitRowMode({ kind }, { ...today, askedToday: false })).toEqual({ mode: "unasked", focusable: false, holdsFocusSlot: false });
     }
   });
 
-  it("offers no focus once today is done", () => {
-    expect(habitRowMode({ kind: "count" }, { ...today, doneToday: true })).toEqual({ mode: "count", focusable: false });
+  it("offers no focus once today is done, but keeps its slot so the title does not reflow", () => {
+    for (const kind of ["check", "count"] as const) {
+      expect(habitRowMode({ kind }, { ...today, doneToday: true })).toEqual({ mode: kind === "check" ? "tick" : "count", focusable: false, holdsFocusSlot: true });
+    }
   });
 });
 
