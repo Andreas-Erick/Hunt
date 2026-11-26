@@ -34,14 +34,11 @@ export interface TaskCompletionScene {
 const BEAT1_HOLD_MS = 230;
 const FLOW_GLIDE_MS = 320;
 const FLOW_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-/** Largest drift of the fading ghost toward the task's destination. */
-const GHOST_DRIFT_MAX_PX = 12;
-/** Largest offset the Completed card enters from, on the side it came from. */
-const ARRIVAL_OFFSET_MAX_PX = 16;
-
-function clamp(value: number, max: number): number {
-  return Math.max(-max, Math.min(max, value));
-}
+/** A long trip down the list gets a little more time, up to this. */
+const FLOW_GLIDE_MAX_MS = 520;
+const GLIDE_MS_PER_PX = 0.15;
+/** The Completed section settling from its held place to its final one. */
+const SETTLE_MS = 280;
 
 function prefersReducedMotion(): boolean {
   try {
@@ -168,8 +165,11 @@ export function captureTaskCompletionScene(
  * the updated list:
  *   Beat 1 (0..230ms): In-place check pop + stroke draw + title strike while
  *                      every sibling row holds its pre-completion position.
- *   Beat 2 (230..565ms): Ghost releases softly, sibling rows glide cleanly up,
- *                        and the completed card glides into Completed.
+ *   Beat 2 (230ms..+320-520ms): sibling rows glide up while the completed card
+ *                        glides from the task's place into the Completed
+ *                        section, which holds where it was.
+ *   Settle (+280ms):     the Completed section, new card included, moves to
+ *                        its final place (skipped when it did not move).
  */
 export function playTwoBeatTaskCompletion(
   containerEl: HTMLElement | null,
@@ -186,9 +186,10 @@ export function playTwoBeatTaskCompletion(
 
   const { ghost, itemRects, taskId, sourceTop } = scene;
 
-  // The task's own Completed card, if this list shows one. Both beats move
-  // toward it (never past it); a list that drops completed tasks, like a
-  // quest's steps, gets no Completed card, so the ghost fades in place.
+  // The task's own Completed card, if this list shows one. The card glides
+  // there from where the task was, whatever lies between; a list that drops
+  // completed tasks, like a quest's steps, gets no Completed card, so the
+  // ghost fades in place.
   const taskNodes = Array.from(
     containerEl.querySelectorAll<HTMLElement>("[data-task-id]")
   );
@@ -203,21 +204,43 @@ export function playTwoBeatTaskCompletion(
       containerEl.getBoundingClientRect().top -
       sourceTop
     : 0;
-  // With no other task row between the task and its Completed card (the last
-  // open task, say), a fade out and back in reads as the task vanishing and
-  // reappearing. The card instead stays visible and glides the whole way.
-  const containerTop = containerEl.getBoundingClientRect().top;
-  const pathTop = Math.min(sourceTop, sourceTop + travel);
-  const pathBottom = Math.max(sourceTop, sourceTop + travel);
-  const glidesStraight =
-    !!arrivalEl &&
-    !taskNodes.some((el) => {
-      if (el === arrivalEl) return false;
-      const top = el.getBoundingClientRect().top - containerTop;
-      return top >= pathTop - 1 && top < pathBottom - 1;
-    });
-  const ghostDrift = glidesStraight ? 0 : clamp(travel, GHOST_DRIFT_MAX_PX);
-  const arrivalOffset = glidesStraight ? -travel : clamp(-travel, ARRIVAL_OFFSET_MAX_PX);
+  const glidesStraight = !!arrivalEl;
+  const flowNodes = Array.from(
+    containerEl.querySelectorAll<HTMLElement>("[data-flow-key]")
+  );
+  const isCompletedFlow = (el: HTMLElement) =>
+    (el.dataset.flowKey ?? "").startsWith("completed");
+
+  // Removing the task's row lifts everything below it, the Completed section
+  // included, so the section would rise to meet the task. Instead the section
+  // holds its old place (`anchorShift` above its final one) while the card
+  // glides down into it, then settles with its new card in one move.
+  const headerEl = flowNodes.find((el) => el.dataset.flowKey === "completed-header");
+  const headerFirst = itemRects.get("flow:completed-header");
+  const rawShift =
+    glidesStraight && headerEl && headerFirst
+      ? headerFirst.top - headerEl.getBoundingClientRect().top
+      : 0;
+  const anchorShift = Math.abs(rawShift) < 1.5 ? 0 : rawShift;
+  const glideMs = Math.min(
+    FLOW_GLIDE_MAX_MS,
+    FLOW_GLIDE_MS + Math.abs(travel - anchorShift) * GLIDE_MS_PER_PX
+  );
+  const settleMs = anchorShift === 0 ? 0 : SETTLE_MS;
+  const totalMs = BEAT1_HOLD_MS + glideMs + settleMs;
+  /** One timeline for the Completed section: hold, glide to the anchor, settle. */
+  const animateAnchored = (el: HTMLElement, dx: number, dy: number) => {
+    const at = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0)`;
+    const glideEnd = (BEAT1_HOLD_MS + glideMs) / totalMs;
+    const frames: Keyframe[] = [
+      { transform: at(dx, dy), offset: 0 },
+      { transform: at(dx, dy), offset: BEAT1_HOLD_MS / totalMs, easing: FLOW_EASING },
+      { transform: at(0, anchorShift), offset: glideEnd, easing: FLOW_EASING },
+    ];
+    if (glideEnd < 1) frames.push({ transform: at(0, 0), offset: 1 });
+    else frames[2].transform = at(0, 0);
+    el.animate(frames, { duration: totalMs });
+  };
 
   containerEl.appendChild(ghost);
 
@@ -266,7 +289,7 @@ export function playTwoBeatTaskCompletion(
           { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
           {
             opacity: 0,
-            transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`,
+            transform: "translate3d(0, 0, 0) scale(0.98)",
             offset: 1,
           },
         ],
@@ -286,32 +309,22 @@ export function playTwoBeatTaskCompletion(
     const completedRow = isCompletedRow(el);
 
     if (el === arrivalEl) {
-      el.animate(
-        [
-          {
-            opacity: glidesStraight ? 1 : 0,
-            transform: glidesStraight
-              ? `translate3d(0, ${arrivalOffset}px, 0)`
-              : `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)`,
-          },
-          {
-            opacity: 1,
-            transform: "translate3d(0, 0, 0) scale(1)",
-          },
-        ],
-        {
-          delay: glidesStraight ? BEAT1_HOLD_MS : BEAT1_HOLD_MS + 15,
-          duration: FLOW_GLIDE_MS,
-          easing: FLOW_EASING,
-          fill: "backwards",
-        }
-      );
+      // Starts exactly where the task was, under the ghost.
+      animateAnchored(el, 0, -travel);
       continue;
     }
 
     const first = itemRects.get((completedRow ? "done:" : "open:") + id);
-    if (!first) continue;
     const last = el.getBoundingClientRect();
+    if (completedRow && glidesStraight) {
+      // Older Completed cards step aside for the new one, then settle.
+      const dx = first ? first.left - last.left : 0;
+      const dy = first ? first.top - last.top : anchorShift;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5 && anchorShift === 0) continue;
+      animateAnchored(el, dx, dy);
+      continue;
+    }
+    if (!first) continue;
     const dx = first.left - last.left;
     const dy = first.top - last.top;
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5) continue;
@@ -331,9 +344,6 @@ export function playTwoBeatTaskCompletion(
   }
 
   // Hold & glide section headers / empty states smoothly in lockstep
-  const flowNodes = Array.from(
-    containerEl.querySelectorAll<HTMLElement>("[data-flow-key]")
-  );
   for (const el of flowNodes) {
     if (typeof el.animate !== "function") continue;
     const key = el.dataset.flowKey;
@@ -359,6 +369,10 @@ export function playTwoBeatTaskCompletion(
     const dy = first.top - last.top;
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5) continue;
 
+    if (glidesStraight && isCompletedFlow(el)) {
+      animateAnchored(el, dx, dy);
+      continue;
+    }
     el.animate(
       [
         { transform: `translate3d(${dx}px, ${dy}px, 0)` },

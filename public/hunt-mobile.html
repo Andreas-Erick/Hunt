@@ -707,6 +707,7 @@
       background: rgb(var(--p-1) / 0.5);
     }
     .queue-item-card.completed.just-completed {
+      z-index: 2; /* glides over the open cards between the task and Completed */
       opacity: 1;
       background: var(--surface);
       border-color: rgb(var(--c-success) / 0.36);
@@ -997,7 +998,7 @@
       z-index: 35;
       height: calc(68px + var(--safe-bottom));
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       background: rgb(var(--p-bar));
       border-top: 1px solid rgb(var(--c-ink) / 0.07);
       padding: 6px calc(6px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(6px + var(--safe-left));
@@ -1757,6 +1758,16 @@
       border-radius: 18px;
       padding: 32px 18px;
       text-align: center;
+      margin-bottom: 12px;
+    }
+    /* Today's empty "Completed today": a quiet slot where the first finished task lands */
+    .completed-empty-note {
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--dim);
       margin-bottom: 12px;
     }
     .empty-title {
@@ -3188,7 +3199,7 @@
         </svg>
         <span class="brand-word">Hunt</span>
       </button>
-      <span id="headerVersionBadge" class="brand-version-badge">v1.15.0</span>
+      <span id="headerVersionBadge" class="brand-version-badge">v1.16.0</span>
     </div>
 
     <div class="app-bar-actions">
@@ -3230,29 +3241,19 @@
       </div>
       <span>Plan</span>
     </button>
-    <button class="nav-tab" id="nav-focus" onclick="switchView('focus')">
-      <div class="nav-tab-pill">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
-      </div>
-      <span>Focus</span>
-    </button>
     <button class="nav-tab" id="nav-quests" onclick="switchView('quests')">
       <div class="nav-tab-pill">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
       </div>
       <span>Quests</span>
     </button>
-    <button class="nav-tab" id="nav-habits" onclick="switchView('habits')">
-      <div class="nav-tab-pill">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
-      </div>
-      <span>Habits</span>
-    </button>
-    <button class="nav-tab" id="nav-lists" onclick="switchView('lists')">
+    <!-- Habits and Lists share one tab; a Habits | Lists switch sits at the top of both views.
+         Focus has no tab: it opens from a task's Start focus and from the top bar's timer chip. -->
+    <button class="nav-tab" id="nav-track" onclick="switchView(lastTrackView)">
       <div class="nav-tab-pill">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 2 2 4-4"/><path d="m3 15 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
       </div>
-      <span>Lists</span>
+      <span>Habits &amp; Lists</span>
     </button>
   </nav>
 
@@ -5169,7 +5170,7 @@ var HuntCore = (() => {
       }
     } catch (e) { /* an old WebView without the IME hooks just keeps the default keyboard handling */ }
 
-    const APP_VERSION = "1.15.0";
+    const APP_VERSION = "1.16.0";
     const STORAGE_KEY = "hunt-mobile-standalone-v1";
     const LAPTOP_URL_KEY = "hunt-laptop-url-v1";
     // Pairing key of the browser copy (same key as the desktop page). The APK never stores it here:
@@ -5513,6 +5514,40 @@ var HuntCore = (() => {
     let reviewSessionLimit = 50;
     const REVIEW_SESSION_PAGE = 50;
     let showAllCompletedToday = false;
+    // Habits and Lists share the "Habits & Lists" tab, which reopens the one used last.
+    const TRACK_VIEWS = ["habits", "lists"];
+    let lastTrackView = "habits";
+    function trackSwitchHtml(current) {
+      return `
+        <div class="segmented-control" role="group" aria-label="Habits or Lists">
+          ${[["habits", "Habits"], ["lists", "Lists"]].map(([id, label]) => `
+            <button class="seg-option ${current === id ? "active" : ""}" aria-pressed="${current === id}" onclick="switchView(${jsArg(id)})">${label}</button>
+          `).join("")}
+        </div>`;
+    }
+    // After a completion on Today, the open sections keep their tallest height ({ px, filter, width })
+    // so "Completed today" below never shifts up. Leaving Today, changing the quest filter or the
+    // width (cards re-wrap) drops it.
+    let todayOpenHold = null;
+    function holdTodayOpenFlow() {
+      if (activeView !== "command") return;
+      const el = document.getElementById("todayOpenFlow");
+      const h = el ? el.getBoundingClientRect().height : 0;
+      if (!(h > 0)) return;
+      const keep = todayOpenHold && todayOpenHold.filter === filterQuestId && todayOpenHold.width === window.innerWidth;
+      todayOpenHold = { px: Math.max(keep ? todayOpenHold.px : 0, h), filter: filterQuestId, width: window.innerWidth };
+    }
+    function todayOpenHoldStillFits() {
+      if (todayOpenHold && (todayOpenHold.filter !== filterQuestId || todayOpenHold.width !== window.innerWidth)) {
+        todayOpenHold = null;
+      }
+      return todayOpenHold;
+    }
+    window.addEventListener("resize", () => {
+      if (!todayOpenHold || todayOpenHoldStillFits()) return;
+      const el = document.getElementById("todayOpenFlow");
+      if (el) el.style.minHeight = "";
+    });
     const QUEST_STEPS_PREVIEW = 5; // open steps shown on a quest card before "Show all"
     const expandedQuestIds = new Set(); // quest cards showing every open step (session-only UI state)
     function toggleQuestExpanded(questId) {
@@ -6977,13 +7012,16 @@ var HuntCore = (() => {
 
     function setActiveView(view) {
       if (view === "review") view = "telemetry";
+      if (view !== activeView) todayOpenHold = null; // leaving Today reclaims the held space
       activeView = view;
-      ["command", "plan", "focus", "quests", "habits", "lists"].forEach(id => {
+      if (TRACK_VIEWS.includes(view)) lastTrackView = view;
+      const tabOf = TRACK_VIEWS.includes(view) ? "track" : view;
+      ["command", "plan", "quests", "track"].forEach(id => {
         const btn = document.getElementById("nav-" + id);
         if (!btn) return;
-        const cls = id === view ? "nav-tab active" : "nav-tab";
+        const cls = id === tabOf ? "nav-tab active" : "nav-tab";
         if (btn.className !== cls) btn.className = cls;
-        if (id === view) setAttrIfChanged(btn, "aria-current", "page");
+        if (id === tabOf) setAttrIfChanged(btn, "aria-current", "page");
         else if (btn.hasAttribute("aria-current")) btn.removeAttribute("aria-current");
       });
       const reviewBtn = document.getElementById("reviewBtn");
@@ -7552,6 +7590,7 @@ var HuntCore = (() => {
       playCompleteSound();
       const af = state.activeFocus;
       if (!af || !af.activeTaskId) return;
+      holdTodayOpenFlow();
       const twoBeatScene = activeView !== "focus" ? captureTwoBeatTaskScene(af.activeTaskId) : null;
       const now = Date.now();
       const currentTask = state.tasks.find(t => t.id === af.activeTaskId);
@@ -7664,27 +7703,41 @@ var HuntCore = (() => {
       const FLOW_MS = 320;
       const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
       const ghost = scene.ghost;
-      // Both beats move toward the task's own Completed card (never past it); with none in this
-      // view, the ghost fades in place.
+      // The task's own Completed card, if this view shows one: the card glides there from where
+      // the task was, whatever lies between. With none in this view, the ghost fades in place.
       const arrivalEl = Array.from(root.querySelectorAll("[data-flip-task-id]")).find(el =>
         el.getAttribute("data-flip-task-id") === taskId && el.classList.contains("completed") &&
         el.getClientRects().length > 0);
       const travel = arrivalEl
         ? arrivalEl.getBoundingClientRect().top - root.getBoundingClientRect().top - scene.sourceTop
         : 0;
-      // With no other task card between the task and its Completed card (the last open task,
-      // say), a fade out and back in reads as the task vanishing and reappearing; the card
-      // instead stays visible and glides the whole way.
-      const rootTop = root.getBoundingClientRect().top;
-      const pathTop = Math.min(scene.sourceTop, scene.sourceTop + travel);
-      const pathBottom = Math.max(scene.sourceTop, scene.sourceTop + travel);
-      const glidesStraight = !!arrivalEl && !Array.from(root.querySelectorAll("[data-flip-task-id]")).some(el => {
-        if (el === arrivalEl || el.getClientRects().length === 0) return false;
-        const top = el.getBoundingClientRect().top - rootTop;
-        return top >= pathTop - 1 && top < pathBottom - 1;
-      });
-      const ghostDrift = glidesStraight ? 0 : Math.max(-12, Math.min(12, travel));
-      const arrivalOffset = glidesStraight ? -travel : Math.max(-16, Math.min(16, -travel));
+      const glidesStraight = !!arrivalEl;
+      const isCompletedFlow = key => key.startsWith("sec-completed") || key === "btn-showmore";
+      // Removing the task's card lifts everything below it, "Completed today" included, so the
+      // section would rise to meet the task. It holds its old place (anchorShift above its final
+      // one) while the card glides down into it, then settles with its new card in one move.
+      // (On Today the open sections also hold their height, so the shift there is 0.)
+      const headerEl = root.querySelector('[data-flip-key="sec-completed"]');
+      const headerFirst = scene.itemRects.get("flow:sec-completed");
+      const rawShift = glidesStraight && headerEl && headerFirst
+        ? headerFirst.top - headerEl.getBoundingClientRect().top
+        : 0;
+      const anchorShift = Math.abs(rawShift) < 1.5 ? 0 : rawShift;
+      const glideMs = Math.min(520, FLOW_MS + Math.abs(travel - anchorShift) * 0.15);
+      const settleMs = anchorShift === 0 ? 0 : 280;
+      const totalMs = BEAT1_MS + glideMs + settleMs;
+      const animateAnchored = (el, dx, dy) => {
+        const at = (x, y) => `translate3d(${x}px, ${y}px, 0)`;
+        const glideEnd = (BEAT1_MS + glideMs) / totalMs;
+        const frames = [
+          { transform: at(dx, dy), offset: 0 },
+          { transform: at(dx, dy), offset: BEAT1_MS / totalMs, easing: EASE },
+          { transform: at(0, anchorShift), offset: glideEnd, easing: EASE }
+        ];
+        if (glideEnd < 1) frames.push({ transform: at(0, 0), offset: 1 });
+        else frames[2].transform = at(0, 0);
+        el.animate(frames, { duration: totalMs });
+      };
       root.appendChild(ghost);
 
       let cleaned = false;
@@ -7727,7 +7780,7 @@ var HuntCore = (() => {
           [
             { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
             { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", offset: 0.48 },
-            { opacity: 0, transform: `translate3d(0, ${ghostDrift}px, 0) scale(0.98)`, offset: 1 }
+            { opacity: 0, transform: "translate3d(0, 0, 0) scale(0.98)", offset: 1 }
           ],
           { duration: 480, easing: EASE, fill: "forwards" }
         );
@@ -7756,18 +7809,20 @@ var HuntCore = (() => {
         if (!id) return;
         const isDone = el.classList.contains("completed");
         if (el === arrivalEl) {
-          el.animate(
-            [
-              glidesStraight
-                ? { opacity: 1, transform: `translate3d(0, ${arrivalOffset}px, 0)` }
-                : { opacity: 0, transform: `translate3d(0, ${arrivalOffset}px, 0) scale(0.985)` },
-              { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" }
-            ],
-            { delay: glidesStraight ? BEAT1_MS : BEAT1_MS + 15, duration: FLOW_MS, easing: EASE, fill: "backwards" }
-          );
+          // Starts exactly where the task was, under the ghost.
+          animateAnchored(el, 0, -travel);
           return;
         }
         const first = scene.itemRects.get((isDone ? "done:" : "open:") + id);
+        if (isDone && glidesStraight && el.getClientRects().length > 0) {
+          // Older completed cards step aside for the new one, then settle.
+          const lastRect = el.getBoundingClientRect();
+          const ddx = first ? first.left - lastRect.left : 0;
+          const ddy = first ? first.top - lastRect.top : anchorShift;
+          if (Math.abs(ddx) < 1 && Math.abs(ddy) < 1.5 && anchorShift === 0) return;
+          animateAnchored(el, ddx, ddy);
+          return;
+        }
         if (!first) return;
         const last = el.getBoundingClientRect();
         const dx = first.left - last.left;
@@ -7801,6 +7856,10 @@ var HuntCore = (() => {
         const dx = first.left - last.left;
         const dy = first.top - last.top;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1.5) return;
+        if (glidesStraight && isCompletedFlow(key)) {
+          animateAnchored(el, dx, dy);
+          return;
+        }
         el.animate(
           [
             { transform: `translate3d(${dx}px, ${dy}px, 0)` },
@@ -7885,6 +7944,7 @@ var HuntCore = (() => {
         return;
       }
       playCompleteSound();
+      holdTodayOpenFlow();
       const twoBeatScene = captureTwoBeatTaskScene(taskId);
       const now = Date.now();
       const t = state.tasks.find(x => x.id === taskId);
@@ -8600,6 +8660,7 @@ var HuntCore = (() => {
             <h1 class="hero-title">Lists</h1>
           </div>
         </div>
+        ${trackSwitchHtml("lists")}
         <div class="checklist-add-row list-create-row">
           <input id="listCreateNew" class="sheet-input" maxlength="${HuntCore.MAX_LIST_TITLE_LENGTH}" placeholder="Name a new List..." aria-label="New List name" onkeydown="if(isSubmitKey(event)) createListFromInput()" />
           <button class="checklist-icon-btn" aria-label="Create List" onclick="createListFromInput()">+</button>
@@ -11492,6 +11553,8 @@ var HuntCore = (() => {
               </div>
               ` : ""}
 
+              <!-- Open work (hero, Up next, Other work); holds its height after a completion -->
+              <div id="todayOpenFlow" style="display:flow-root;${todayOpenHoldStillFits() ? `min-height:${todayOpenHold.px}px;` : ""}">
               <!-- #01 Spotlight Hero Card -->
               ${heroHtml}
 
@@ -11524,16 +11587,18 @@ var HuntCore = (() => {
                 <div class="section-header-label" data-flip-key="sec-other">Other work</div>
                 ${otherQueue.map(t => renderCompactQueueCard(t)).join("")}
               ` : ""}
+              </div>
 
-              <!-- Completed Today -->
-              ${completedToday.length > 0 ? `
-                <div class="section-header-label" data-flip-key="sec-completed">Completed today (${completedToday.length})</div>
-                ${completedList.map(t => renderCompletedCard(t, true)).join("")}
-                ${completedToday.length > COMPLETED_PREVIEW ? `
-                  <button class="show-more-btn" data-flip-key="btn-showmore" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
-                    ${showAllCompletedToday ? "Show less ↑" : `Show all ${completedToday.length} ↓`}
-                  </button>
-                ` : ""}
+              <!-- Completed Today: always shown, so every completion glides into a section already there -->
+              <div class="section-header-label" data-flip-key="sec-completed">Completed today${completedToday.length ? ` (${completedToday.length})` : ""}</div>
+              ${completedToday.length === 0 ? `
+                <div class="completed-empty-note" data-flip-key="sec-completed-empty">Completed tasks land here.</div>
+              ` : ""}
+              ${completedList.map(t => renderCompletedCard(t, true)).join("")}
+              ${completedToday.length > COMPLETED_PREVIEW ? `
+                <button class="show-more-btn" data-flip-key="btn-showmore" onclick="showAllCompletedToday=!showAllCompletedToday;renderApp();">
+                  ${showAllCompletedToday ? "Show less ↑" : `Show all ${completedToday.length} ↓`}
+                </button>
               ` : ""}
             </div>
 
@@ -12562,6 +12627,7 @@ var HuntCore = (() => {
               </button>
             </div>
           </div>
+          ${trackSwitchHtml("habits")}
 
           ${habitsList.length > 0 ? `
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px;margin:0 0 14px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;">

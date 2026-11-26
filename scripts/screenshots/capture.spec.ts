@@ -154,7 +154,7 @@ test.describe("phone", () => {
     await expect(page.locator("#bottomNav")).toBeAttached();
     await expect(page.getByText("Fix offline sync for shared budgets").first()).toBeVisible();
     await shoot(page, "mobile-today");
-    await page.locator("#nav-habits").click();
+    await page.locator("#nav-track").click();
     await expect(page.locator("body")).toHaveAttribute("data-view", "habits");
     await shoot(page, "mobile-habits");
     await page.locator("#reviewBtn").click();

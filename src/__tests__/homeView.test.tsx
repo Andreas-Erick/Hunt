@@ -755,6 +755,38 @@ describe("CommandCenterView (Home)", () => {
       );
     });
 
+    it("shows the completion toast floating over the page and closes it after 5s", async () => {
+      useCommandStore.setState({
+        lastCompletedFeedback: {
+          taskTitle: "Finished thing",
+          questCode: "WRITE",
+          accent: "amber",
+          loggedSeconds: 120,
+          nextTaskTitle: null,
+          timestamp: T0,
+        },
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        render(<CommandCenterView />);
+        const status = screen.getByRole("status");
+        // Out of the layout flow: it never pushes the page down.
+        expect(status.className).toContain("fixed");
+        expect(status).toHaveTextContent("Completed Finished thing");
+
+        act(() => {
+          vi.advanceTimersByTime(4900);
+        });
+        expect(useCommandStore.getState().lastCompletedFeedback).not.toBeNull();
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(useCommandStore.getState().lastCompletedFeedback).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("task titles are native buttons that start focus", async () => {
       const initializeFocus = vi.fn(async () => undefined);
       useCommandStore.setState({ initializeFocus });
@@ -962,6 +994,51 @@ describe("CommandCenterView (Home)", () => {
       expect(screen.queryByText(/No quest tasks queued/)).toBeNull();
       expect(screen.queryByText(/No active quests/)).toBeNull();
       expect(await screen.findByText("0.0h")).toBeInTheDocument();
+    });
+
+    it("holds the open lists' height after a completion so Completed never shifts up, until the width changes", async () => {
+      await seed({
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [
+          makeTask("tsk-a", "Alpha", "quest-0", 1000),
+          makeTask("tsk-b", "Beta", "quest-0", 2000),
+        ],
+      });
+      render(<CommandCenterView />);
+      await screen.findByRole("button", { name: "Alpha" });
+      const openFlow = screen.getByTestId("open-task-flow");
+      expect(openFlow.style.minHeight).toBe("");
+      openFlow.getBoundingClientRect = () => ({ height: 240 }) as DOMRect;
+
+      fireEvent.click(within(row("tsk-a")).getByRole("button", { name: "Mark complete" }));
+      await screen.findByTestId("completed-task-row");
+      expect(openFlow.style.minHeight).toBe("240px");
+
+      const width = window.innerWidth;
+      try {
+        act(() => {
+          window.innerWidth = width + 100;
+          window.dispatchEvent(new Event("resize"));
+        });
+        expect(openFlow.style.minHeight).toBe("");
+      } finally {
+        window.innerWidth = width;
+      }
+    });
+
+    it("keeps an empty Completed section once loaded, so a completion always glides into it", async () => {
+      await seed({
+        quests: [makeQuest("quest-0", "Launch", 0)],
+        tasks: [makeTask("tsk-a", "Alpha", "quest-0", 1000)],
+      });
+      render(<CommandCenterView />);
+      expect(screen.queryByTestId("completed-tasks-section")).toBeNull();
+
+      await screen.findByRole("button", { name: "Alpha" });
+      const section = screen.getByTestId("completed-tasks-section");
+      expect(within(section).getByText("Completed")).toBeInTheDocument();
+      expect(within(section).getByText("Completed tasks land here.")).toBeInTheDocument();
+      expect(screen.queryByTestId("completed-task-row")).toBeNull();
     });
 
     // An empty database has no active quest, so the empty card points to

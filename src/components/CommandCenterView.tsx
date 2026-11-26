@@ -3,10 +3,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { reads } from "@/lib/reads";
-import { motion, AnimatePresence } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import { accentColor, accentStyle } from "@/lib/questAccents";
-import { dateFromKey, formatChronoMMSS, isTaskVisibleToday, toLocalDateKey } from "@/lib/dateUtils";
+import { dateFromKey, isTaskVisibleToday, toLocalDateKey } from "@/lib/dateUtils";
 import type { Quest } from "@/lib/domainTypes";
 import { formatTelemetryDuration } from "@/lib/reviewAnalytics";
 import { useCommandStore } from "@/store/useCommandStore";
@@ -21,6 +20,7 @@ import {
 } from "@/lib/taskCompletionMotion";
 import { DayTimeline } from "./DayTimeline";
 import { TaskComposer } from "./TaskComposer";
+import { CompletionToast } from "./CompletionToast";
 import { TaskRow } from "./TaskRow";
 import { useQueueReorder } from "./useQueueReorder";
 import { useTransientHighlight } from "./useTransientHighlight";
@@ -39,8 +39,6 @@ export function CommandCenterView() {
     sessionStartedAt,
     completeTaskById,
     materializeDailyHabits,
-    lastCompletedFeedback,
-    clearFeedback,
     setActiveView,
   } = useCommandStore(
     useShallow((s) => ({
@@ -49,8 +47,6 @@ export function CommandCenterView() {
       sessionStartedAt: s.sessionStartedAt,
       completeTaskById: s.completeTaskById,
       materializeDailyHabits: s.materializeDailyHabits,
-      lastCompletedFeedback: s.lastCompletedFeedback,
-      clearFeedback: s.clearFeedback,
       setActiveView: s.setActiveView,
     }))
   );
@@ -218,7 +214,27 @@ export function CommandCenterView() {
   const taskFlowRef = useRef<HTMLDivElement>(null);
   const pendingSceneRef = useRef<TaskCompletionScene | null>(null);
 
+  // The open lists (quest queue + Other work) keep the tallest height they had
+  // when a task was completed here, so the Completed section below never
+  // shifts up; the space is reclaimed when Home is next opened. A width change
+  // re-wraps every row, so the held height is dropped then.
+  const openFlowRef = useRef<HTMLDivElement>(null);
+  const [openFlowHoldPx, setOpenFlowHoldPx] = useState<number | null>(null);
+  useEffect(() => {
+    if (openFlowHoldPx === null) return;
+    const startWidth = window.innerWidth;
+    const onResize = () => {
+      if (window.innerWidth !== startWidth) setOpenFlowHoldPx(null);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [openFlowHoldPx]);
+
   const handleCompleteTask = (taskId: string) => {
+    const openHeight = openFlowRef.current?.getBoundingClientRect().height ?? 0;
+    if (openHeight > 0) {
+      setOpenFlowHoldPx((cur) => Math.max(cur ?? 0, openHeight));
+    }
     const task = allTasks?.find((t) => t.id === taskId);
     const quest = task?.questId ? questMap.get(task.questId) : undefined;
     const accentCss = accentColor(accentStyle(quest?.accentColor ?? "emerald"));
@@ -245,38 +261,7 @@ export function CommandCenterView() {
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12">
-      {/* Subtle Completion Banner (the live region stays mounted so the
-          message is announced when it appears) */}
-      <div role="status" aria-live="polite" className="overflow-hidden">
-        <AnimatePresence initial={false}>
-          {lastCompletedFeedback && (
-            <motion.div
-              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-              animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
-              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="flex items-center justify-between gap-3 rounded-xl border border-success/30 bg-success/10 px-5 py-3.5 text-sm text-success"
-            >
-              <span className="min-w-0 break-words">
-                Completed{" "}
-                <strong className="font-semibold text-white">
-                  {lastCompletedFeedback.taskTitle}
-                </strong>{" "}
-                · {formatChronoMMSS(lastCompletedFeedback.loggedSeconds).formatted}{" "}
-                logged
-              </span>
-              <button
-                type="button"
-                onClick={clearFeedback}
-                aria-label="Dismiss"
-                className="-my-1.5 -mr-2 min-h-8 min-w-8 coarse:min-h-11 coarse:min-w-11 shrink-0 rounded-lg px-2.5 py-1.5 text-base leading-none text-neutral-400 transition-colors duration-150 ease-out hover:bg-white/[0.06] hover:text-white active:opacity-80"
-              >
-                ×
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <CompletionToast />
 
       {/* ================================================================= */}
       {/* HEADER ROW: Big Date on Left, Today & Weekly Progress on Right    */}
@@ -386,6 +371,12 @@ export function CommandCenterView() {
           />
 
           <div ref={taskFlowRef} className="relative space-y-6">
+          <div
+            ref={openFlowRef}
+            data-testid="open-task-flow"
+            className="space-y-6"
+            style={openFlowHoldPx === null ? undefined : { minHeight: openFlowHoldPx }}
+          >
           {/* =============================================================== */}
           {/* QUEST WORK TASK CARDS                                           */}
           {/* =============================================================== */}
@@ -503,11 +494,14 @@ export function CommandCenterView() {
               ))}
             </div>
           )}
+          </div>
 
           {/* =============================================================== */}
           {/* COMPLETED TASKS (Two-Beat Glide Destination)                    */}
+          {/* Always shown once loaded, even empty, so every completion       */}
+          {/* glides into a section that is already there.                   */}
           {/* =============================================================== */}
-          {completedTasks.length > 0 && (
+          {allTasks !== undefined && (
             <div
               data-testid="completed-tasks-section"
               className="pt-6 space-y-3"
@@ -518,6 +512,15 @@ export function CommandCenterView() {
               >
                 Completed
               </div>
+
+              {completedTasks.length === 0 && (
+                <div
+                  data-flow-key="completed-empty"
+                  className="rounded-2xl border border-dashed border-white/[0.06] px-4 py-4 text-center text-xs text-hud-muted"
+                >
+                  Completed tasks land here.
+                </div>
+              )}
 
               {completedTasks.map((task) => (
                 <TaskRow

@@ -1129,18 +1129,18 @@ describe("smooth keyboard sheets and long-name aesthetics", () => {
     expect(pageErrors(p)).toEqual([]);
   });
 
-  it("keeps a clean 6-tab bottom bar and routes to Review via top-bar button and Today's hours pill", () => {
+  it("keeps a clean 4-tab bottom bar and routes to Review via top-bar button and Today's hours pill", () => {
     const p = load({ seedState: baseState() });
     const navButtons = Array.from(p.document.querySelectorAll("#bottomNav .nav-tab"));
     expect(navButtons.map((b) => b.textContent?.trim())).toEqual([
       "Today",
       "Plan",
-      "Focus",
       "Quests",
-      "Habits",
-      "Lists",
+      "Habits & Lists",
     ]);
     expect(p.document.getElementById("nav-telemetry")).toBeNull();
+    // Focus has no tab: it opens from a task's Start focus and the top bar's timer chip.
+    expect(p.document.getElementById("nav-focus")).toBeNull();
 
     // Tapping Today's hours summary pill opens Weekly Review and highlights #reviewBtn
     const statsPill = one(p, ".hero-stats-pill");

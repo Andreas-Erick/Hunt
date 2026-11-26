@@ -77,7 +77,7 @@ describe("playTwoBeatTaskCompletion direction", () => {
     expect(ghostDrift()).toBe(0);
   });
 
-  it("drifts down and enters from above when the Completed card lands below", () => {
+  it("glides the card down past other tasks from exactly where the task was", () => {
     vi.useFakeTimers();
     const container = setup([row("a", 0), row("b", 50)]);
     const scene = captureTaskCompletionScene(container, "a", "red");
@@ -87,8 +87,37 @@ describe("playTwoBeatTaskCompletion direction", () => {
 
     playTwoBeatTaskCompletion(container, scene);
 
-    expect(ghostDrift()).toBeGreaterThan(0);
-    expect(arrivalOffset("a")).toBeLessThan(0);
+    const ghost = calls.find((c) => c.el.getAttribute("aria-hidden") === "true");
+    expect(ghost?.keyframes.every((k) => (k as { opacity?: number }).opacity !== 0)).toBe(true);
+    expect(arrivalOffset("a")).toBe(-120);
+  });
+
+  it("holds the Completed section in place while the card glides down into it, then settles it", () => {
+    vi.useFakeTimers();
+    const header = document.createElement("div");
+    header.dataset.flowKey = "completed-header";
+    stubLayout(header, 100);
+    const container = setup([row("a", 0), row("b", 50), header]);
+    const scene = captureTaskCompletionScene(container, "a", "red");
+    // After the commit: "a" left the open list, so b and the header rise 50px.
+    container.removeChild(container.querySelector('[data-task-id="a"]')!);
+    stubLayout(container.querySelector('[data-task-id="b"]')!, 0);
+    stubLayout(header, 50);
+    container.appendChild(row("a", 80, true));
+
+    playTwoBeatTaskCompletion(container, scene);
+
+    const headerFrames = calls.find((c) => c.el === header)!.keyframes;
+    const arrivalFrames = calls.find(
+      (c) => (c.el as HTMLElement).dataset.completedRow === "true"
+    )!.keyframes;
+    // Header stays on screen at its old top (100 = 50 + 50) through the glide…
+    expect(headerFrames.slice(0, 3).map((k) => translateY(k.transform))).toEqual([50, 50, 50]);
+    // …the card travels down from the task's spot to the held section…
+    expect(arrivalFrames.slice(0, 3).map((k) => translateY(k.transform))).toEqual([-80, -80, 50]);
+    // …and both settle together.
+    expect(translateY(headerFrames.at(-1)?.transform)).toBe(0);
+    expect(translateY(arrivalFrames.at(-1)?.transform)).toBe(0);
   });
 
   it("never pushes past a destination that is only a few pixels away", () => {
@@ -124,7 +153,7 @@ describe("playTwoBeatTaskCompletion direction", () => {
     expect(arrivalOffset("b")).toBe(-50);
   });
 
-  it("drifts up and enters from below when the Completed card lands above", () => {
+  it("glides up from below when the Completed card lands above", () => {
     vi.useFakeTimers();
     const container = setup([row("x", 0, true), row("a", 200)]);
     const scene = captureTaskCompletionScene(container, "a", "red");
@@ -134,7 +163,6 @@ describe("playTwoBeatTaskCompletion direction", () => {
 
     playTwoBeatTaskCompletion(container, scene);
 
-    expect(ghostDrift()).toBeLessThan(0);
-    expect(arrivalOffset("a")).toBeGreaterThan(0);
+    expect(arrivalOffset("a")).toBe(200);
   });
 });
