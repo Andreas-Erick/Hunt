@@ -462,11 +462,11 @@ const MOBILE_VIEWS: Array<{ name: string; bodyView: string; open: string | null 
   { name: "Today", bodyView: "command", open: "#nav-command" },
   { name: "Plan", bodyView: "plan", open: "#nav-plan" },
   { name: "Quests", bodyView: "quests", open: "#nav-quests" },
-  { name: "Habits", bodyView: "habits", open: "#nav-habits" },
-  { name: "Lists", bodyView: "lists", open: "#nav-lists" },
+  { name: "Habits", bodyView: "habits", open: "#nav-track" },
+  { name: "Lists", bodyView: "lists", open: '[aria-label="Habits or Lists"] .seg-option:nth-child(2)' },
   { name: "Review", bodyView: "telemetry", open: "#reviewBtn" },
   { name: "Guide", bodyView: "guide", open: null },
-  { name: "Focus", bodyView: "focus", open: "#nav-focus" },
+  { name: "Focus", bodyView: "focus", open: null },
 ];
 
 async function openSeededPhoneApp(page: Page): Promise<void> {
@@ -488,7 +488,9 @@ async function openMobileView(page: Page, view: (typeof MOBILE_VIEWS)[number]): 
   const button = view.open ? page.locator(view.open) : null;
   if (button && (await button.isVisible())) {
     await button.click();
-  } else {
+  }
+  // The Habits & Lists tab reopens whichever of the two was used last.
+  if ((await page.locator("body").getAttribute("data-view")) !== view.bodyView) {
     await page.evaluate((v) => {
       (window as unknown as { switchView: (v: string) => void }).switchView(v);
     }, view.bodyView);

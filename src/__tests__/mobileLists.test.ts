@@ -58,13 +58,30 @@ function change(p: MobileWindow, input: Element | null, value: string): void {
 }
 
 describe("the phone's Lists section", () => {
-  it("is a bottom-nav tab of its own, apart from Today", () => {
+  it("shares the Habits & Lists tab with Habits, which reopens the one used last", () => {
     const p = load();
+    p.switchView("habits");
     p.switchView("command");
-    click(p, p.document.getElementById("nav-lists"));
+    const tab = p.document.getElementById("nav-track");
+    click(p, tab);
+    expect(p.document.body.getAttribute("data-view")).toBe("habits");
+
+    const switchTo = (label: string) =>
+      Array.from(p.document.querySelectorAll("[aria-label='Habits or Lists'] .seg-option")).find(
+        (b) => b.textContent?.trim() === label
+      ) ?? null;
+    click(p, switchTo("Lists"));
     expect(p.document.body.getAttribute("data-view")).toBe("lists");
-    expect(p.document.getElementById("nav-lists")?.getAttribute("aria-current")).toBe("page");
     expect(p.document.querySelector("#mainContainer h1")?.textContent).toBe("Lists");
+    expect(tab?.getAttribute("aria-current")).toBe("page");
+    expect(switchTo("Lists")?.getAttribute("aria-pressed")).toBe("true");
+
+    click(p, p.document.getElementById("nav-command"));
+    click(p, tab);
+    expect(p.document.body.getAttribute("data-view")).toBe("lists");
+
+    click(p, switchTo("Habits"));
+    expect(p.document.body.getAttribute("data-view")).toBe("habits");
     expect(pageErrors(p)).toEqual([]);
   });
 

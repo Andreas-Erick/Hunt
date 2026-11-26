@@ -132,7 +132,8 @@ describe("phone Habit reminders", () => {
     const p = (w = loadMobile({ seedState: state([habit({ reminderTimes: ["20:00"] })]) })) as Page;
     p.__huntOpenReminder({ kind: "habit", itemId: "hab-1", dateKey: TODAY });
     expect(p.document.getElementById("editHabitTitleInput")).not.toBeNull();
-    expect(p.document.getElementById("nav-habits")?.classList.contains("active")).toBe(true);
+    expect(p.document.body.getAttribute("data-view")).toBe("habits");
+    expect(p.document.getElementById("nav-track")?.classList.contains("active")).toBe(true);
     expect(() => p.__huntOpenReminder({ kind: "habit", itemId: "gone", dateKey: TODAY })).not.toThrow();
   });
 });

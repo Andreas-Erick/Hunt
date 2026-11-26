@@ -81,6 +81,43 @@ describe("a double-tap on ✓ completes only the Task under the finger", () => {
   });
 });
 
+describe("Today's Completed today section never shifts up", () => {
+  const openFlow = (p: MobileWindow) => p.document.getElementById("todayOpenFlow") as HTMLElement | null;
+  const completedHeader = (p: MobileWindow) =>
+    p.document.querySelector('[data-flip-key="sec-completed"]')?.textContent?.trim();
+
+  it("is there before anything is done, with a placeholder", () => {
+    const p = load([task("tsk-a", "First", 1000)]);
+    expect(completedHeader(p)).toBe("Completed today");
+    expect(p.document.getElementById("mainContainer")?.textContent).toContain("Completed tasks land here.");
+    p.completeTaskDirect("tsk-a");
+    expect(completedHeader(p)).toBe("Completed today (1)");
+    expect(p.document.getElementById("mainContainer")?.textContent).not.toContain("Completed tasks land here.");
+    expect(pageErrors(p)).toEqual([]);
+  });
+
+  it("holds the open sections' height after a completion, until Today is left", () => {
+    const other = { ...task("tsk-o", "Loose chore", 2000), questId: null };
+    const p = load([task("tsk-a", "First", 1000), other]);
+    const proto = p.Element.prototype;
+    const original = proto.getBoundingClientRect;
+    proto.getBoundingClientRect = function (this: Element) {
+      return this.id === "todayOpenFlow" ? ({ top: 0, left: 0, width: 360, height: 300 } as DOMRect) : original.call(this);
+    };
+    expect(openFlow(p)?.style.minHeight).toBe("");
+
+    // The only Other work task: its section disappears, the space stays.
+    p.completeTaskDirect("tsk-o");
+    expect(p.document.querySelector('[data-flip-key="sec-other"]')).toBeNull();
+    expect(openFlow(p)?.style.minHeight).toBe("300px");
+
+    p.switchView("plan");
+    p.switchView("command");
+    expect(openFlow(p)?.style.minHeight).toBe("");
+    expect(pageErrors(p)).toEqual([]);
+  });
+});
+
 describe("Undo after the Task's Quest was deleted", () => {
   it("restores the deleted Task without its deleted Quest", () => {
     const p = load([task("tsk-a", "First", 1000)]);
