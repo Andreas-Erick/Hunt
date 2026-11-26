@@ -123,3 +123,24 @@ describe("phone Habits: Frequency", () => {
     expect(pageErrors(p)).toEqual([]);
   });
 });
+
+describe("phone Habits: completing keeps the row's layout", () => {
+  it("keeps the play button in its slot, hidden and out of reach once done, and shows it again on reopen", () => {
+    const p = phone([habitRow()]);
+    p.materializeDailyHabits(MONDAY);
+    p.switchView("habits");
+    const play = () => p.document.querySelector('[aria-label="Start focus on Gym"]')!;
+    const cell = () => play().closest("[data-slot-state]")!;
+    expect(cell().hasAttribute("data-slot-off")).toBe(false);
+
+    click(p, byLabel(p, "Complete today's habit Gym"));
+    // Still there, holding its space, but hidden from sight, touch and TalkBack.
+    expect(cell().hasAttribute("data-slot-off")).toBe(true);
+    expect(cell().getAttribute("aria-hidden")).toBe("true");
+    expect(cell().hasAttribute("inert")).toBe(true);
+
+    click(p, byLabel(p, "Reopen today's habit Gym"));
+    expect(cell().hasAttribute("data-slot-off")).toBe(false);
+    expect(pageErrors(p)).toEqual([]);
+  });
+});

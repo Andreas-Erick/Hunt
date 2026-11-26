@@ -6,7 +6,7 @@ import { reads } from "@/lib/reads";
 import { useShallow } from "zustand/react/shallow";
 import { Play, Plus, Repeat, SlidersHorizontal, Trash2 } from "lucide-react";
 import { accentStyle } from "@/lib/questAccents";
-import { habitDayAmount, habitDaySlips, habitKindRules } from "@/lib/habitKind";
+import { habitDayAmount, habitDaySlips, habitKindOf, habitKindRules } from "@/lib/habitKind";
 import * as Count from "./CountHabitControls";
 import * as Avoid from "./AvoidHabitControls";
 import { NewHabitQuestPicker } from "./HabitQuestPicker";
@@ -25,6 +25,7 @@ import { HeightReveal } from "./HeightReveal";
 import { HabitFrequencyPicker, isHabitFrequencyValid } from "./HabitFrequencyPicker";
 import { HabitTodayCheck } from "./HabitCardParts";
 import { HabitSkipToday } from "./HabitDayStrip";
+import { StableSlot } from "./StableSlot";
 import { HabitCardStats } from "./HabitCardStats";
 import { HabitDetail } from "./HabitDetail";
 import { EndedHabitsSection } from "./EndedHabitsSection";
@@ -347,6 +348,10 @@ export function HabitsView() {
             const isCount = row.mode === "count";
             const todayAmount = habitDayAmount(todayTask);
             const isAvoid = row.mode === "slip";
+            // A Skip is undone in place: a skipped Count / Avoid day keeps its controls' space, hidden.
+            const kind = habitKindOf(habit);
+            const countSlot = kind === "count" && (isCount || skippedToday);
+            const avoidSlot = kind === "avoid" && (isAvoid || skippedToday);
 
             return (
               <div
@@ -403,6 +408,10 @@ export function HabitsView() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
+                      {/* Done today: an invisible stand-in keeps the slot so the title never reflows. */}
+                      {!row.focusable && row.holdsFocusSlot && (
+                        <span aria-hidden="true" data-testid="focus-slot" className="h-9 w-9 shrink-0 coarse:h-11 coarse:w-11" />
+                      )}
                       {row.focusable && (
                         <button
                           type="button"
@@ -444,8 +453,18 @@ export function HabitsView() {
                       </span>
                       <HabitReminderBadge times={habit.reminderTimes} />
 
-                      {isCount && <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => openAmount(habit.id)} />}
-                      {isAvoid && <Avoid.AvoidSlipControls habit={habit} slips={habitDaySlips(todayTask)} onLog={() => handleEditSlip(habit, "log")} onUndo={() => handleEditSlip(habit, "undo")} />}
+                      {countSlot && (
+                        <StableSlot
+                          active={isCount ? "on" : null}
+                          states={{ on: <Count.CountProgressButton habit={habit} amount={todayAmount} onOpen={() => openAmount(habit.id)} /> }}
+                        />
+                      )}
+                      {avoidSlot && (
+                        <StableSlot
+                          active={isAvoid ? "on" : null}
+                          states={{ on: <Avoid.AvoidSlipControls habit={habit} slips={habitDaySlips(todayTask)} onLog={() => handleEditSlip(habit, "log")} onUndo={() => handleEditSlip(habit, "undo")} /> }}
+                        />
+                      )}
 
                       <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-neutral-300">
                         <span

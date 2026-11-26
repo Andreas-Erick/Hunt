@@ -248,6 +248,12 @@ export interface HabitRowMode {
   mode: HabitKindRules["logs"] | "skipped" | "unasked";
   /** Whether the row offers to start focus on today: asked, not done, and a Kind that can be worked on. */
   focusable: boolean;
+  /**
+   * Whether the row keeps the focus button's slot even when it is not offered:
+   * a day's tick, total or Skip can be undone in place, so none of them may let
+   * the title reflow into the freed space (and undoing it shift it back).
+   */
+  holdsFocusSlot: boolean;
 }
 
 /** SHARED row rule of the Habit card on both apps: which control logs today, and whether focus is offered. */
@@ -255,10 +261,10 @@ export function habitRowMode(
   habit: { readonly kind?: unknown },
   summary: Pick<HabitDaySummary, "askedToday" | "skipState" | "doneToday">
 ): HabitRowMode {
-  if (summary.skipState === "skipped") return { mode: "skipped", focusable: false };
-  if (!summary.askedToday) return { mode: "unasked", focusable: false };
   const rules = habitKindRules(habit);
-  return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday };
+  if (summary.skipState === "skipped") return { mode: "skipped", focusable: false, holdsFocusSlot: rules.canFocus };
+  if (!summary.askedToday) return { mode: "unasked", focusable: false, holdsFocusSlot: false };
+  return { mode: rules.logs, focusable: rules.canFocus && !summary.doneToday, holdsFocusSlot: rules.canFocus };
 }
 
 /**

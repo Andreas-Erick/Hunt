@@ -120,9 +120,10 @@ function ListCard({ list }: { list: List }) {
         <ListChecks className="h-4 w-4 shrink-0 text-hud-muted" aria-hidden="true" />
         {/* Keyed by the stored title: a rename saved here or synced in resets the field. */}
         <ListTitleField key={list.title} list={list} onRename={(title) => void renameList(list.id, title)} />
+        {/* Monospace: ticking an item changes a digit, which must not narrow the title field beside it. */}
         <span
           aria-label={`${progress.done} of ${progress.total} ticked`}
-          className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-hud-muted"
+          className="shrink-0 whitespace-nowrap font-mono text-[11px] tabular-nums text-hud-muted"
         >
           <span aria-hidden="true">
             {progress.done}/{progress.total}

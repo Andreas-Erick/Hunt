@@ -127,3 +127,24 @@ describe("desktop Habits view: Frequency", () => {
     ]);
   });
 });
+
+describe("desktop Habits view: completing keeps the row's layout", () => {
+  it("swaps Start focus for an invisible slot of the same size, and back on reopen", async () => {
+    await useCommandStore.getState().createHabit({ title: "Read", questId: null });
+    render(<HabitsView />);
+    const row = await screen.findByTestId("habit-row");
+    expect(within(row).getByRole("button", { name: "Start focus: Read" })).toBeInTheDocument();
+    expect(within(row).queryByTestId("focus-slot")).toBeNull();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Complete today's habit: Read" }));
+    await within(row).findByRole("button", { name: "Reopen today's habit: Read" });
+    expect(within(row).queryByRole("button", { name: "Start focus: Read" })).toBeNull();
+    const slot = within(row).getByTestId("focus-slot");
+    expect(slot).toHaveAttribute("aria-hidden", "true");
+    expect(slot.className).toContain("h-9 w-9");
+
+    fireEvent.click(within(row).getByRole("button", { name: "Reopen today's habit: Read" }));
+    await within(row).findByRole("button", { name: "Start focus: Read" });
+    expect(within(row).queryByTestId("focus-slot")).toBeNull();
+  });
+});
