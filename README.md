@@ -154,6 +154,7 @@ step.
 - `public/hunt-mobile.html` — the phone app (one file)
 - `android-app/` — WebView shell and APK build script
 - `e2e/` — Playwright layout tests, 360–2560px
+- `e2e-web/` — smoke test of the browser demo
 - `installer/` — Inno Setup script for Windows
 - `docs/adr/` — design decisions
 
@@ -172,6 +173,7 @@ step.
 | [0007](docs/adr/0007-reminders-on-both-devices.md) | Reminders fire on both devices | Duplicates until sync |
 | [0008](docs/adr/0008-habit-days-are-task-rows.md) | Habit days are Task rows | Id format is frozen |
 | [0009](docs/adr/0009-desktop-window-control-route.md) | Window control via a local route | Window buttons Windows-only |
+| [0010](docs/adr/0010-static-browser-demo.md) | Static browser demo from the same app | No sync; base path is build-time |
 
 ## Quickstart
 
@@ -188,16 +190,41 @@ On Windows, `Start-Hunt.bat` opens Hunt in its own app
 window. Optional settings (`HUNT_DATA_DIR`, `LOG_LEVEL`) are
 listed in [`.env.example`](.env.example).
 
+## Run in the browser
+
+A static build of the desktop app runs in any browser as a
+live demo, with sample data and no server:
+
+```bash
+npm run build:web     # static files in out/
+npm run preview:web   # http://localhost:4173/demos/hunt/
+```
+
+It is built for `/demos/hunt/`. To serve it from another
+path, set `HUNT_WEB_BASE_PATH` (for example `/hunt`) before
+both commands. `http://localhost:4173/` embeds the demo in
+an iframe so you can check it from 360px to 1280px.
+
+Data stays in the browser (IndexedDB), and **Reset demo**
+in the banner brings back the sample data. Sync, phone
+pairing, notifications and the window buttons need the
+real app, so the demo leaves them out. Each release attaches
+the built folder as `hunt-web-demo.zip`. See
+[ADR-0010](docs/adr/0010-static-browser-demo.md).
+
 ## Checks
 
 ```bash
 npm run check          # lint, types, tests, build
 npm run test:geometry  # Playwright, 360–2560px
+npm run test:web-demo  # browser demo smoke test
 ```
 
 `check` runs the same steps as CI's `verify` job. CI also
 runs the geometry suite and builds the APK with a
-throwaway key, each as its own job. The 1,900+ Vitest
+throwaway key, each as its own job, and a separate
+workflow builds and smoke-tests the browser demo on every
+push. The 1,900+ Vitest
 tests are hermetic: virtual clocks, seeded random inputs,
 `fake-indexeddb`, and temp directories.
 
@@ -246,6 +273,7 @@ publishes:
   with a bundled Node.js runtime
 - `Hunt-Desktop-Windows-<version>.zip`: portable bundle
 - `Hunt-Mobile-<version>.apk`: signed Android app
+- `hunt-web-demo.zip`: the browser demo's static files
 - `SHA256SUMS.txt`
 
 `npm run screenshots` regenerates `docs/screenshots/` from
