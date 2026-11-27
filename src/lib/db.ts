@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { Habit, List, Quest, Task, TimeLog } from "./domainTypes";
 import { compareQuestSlot, dateKeyFromOffset, toLocalDateKey } from "./dateUtils";
+import { DEMO_DATABASE_NAME, IS_WEB_DEMO, NATIVE_DATABASE_NAME } from "./webDemo";
 
 class CommandCenterDB extends Dexie {
   quests!: EntityTable<Quest, "id">;
@@ -10,7 +11,7 @@ class CommandCenterDB extends Dexie {
   lists!: EntityTable<List, "id">;
 
   constructor() {
-    super("JourneyCommandDB");
+    super(IS_WEB_DEMO ? DEMO_DATABASE_NAME : NATIVE_DATABASE_NAME);
 
     this.version(1).stores({
       quests: "id, slotIndex, archived",

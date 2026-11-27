@@ -9,8 +9,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/__tests__/setup.ts"],
-    // Playwright suites, not vitest tests: e2e/ (npm run test:geometry) and scripts/screenshots/ (npm run screenshots).
-    exclude: [...configDefaults.exclude, "e2e/**", "scripts/screenshots/**", ".claude/**"],
+    // Playwright suites, not vitest tests: e2e/ (npm run test:geometry), e2e-web/ (npm run test:web-demo)
+    // and scripts/screenshots/ (npm run screenshots).
+    exclude: [...configDefaults.exclude, "e2e/**", "e2e-web/**", "scripts/screenshots/**", ".claude/**"],
   },
   resolve: {
     alias: {

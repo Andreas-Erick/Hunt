@@ -31,6 +31,7 @@ import {
   type SyncScheduler,
 } from "@/lib/syncScheduler";
 import type { SyncPayload } from "@/lib/syncTypes";
+import { currentPlatform } from "@/lib/platform";
 import { habitDayActions, type HabitDayActions } from "./habitDayActions";
 import { listActions, type ListActions } from "./listActions";
 import { mergePersistedFocus } from "./persistedFocus";
@@ -331,6 +332,8 @@ async function runSyncOnce(
   get: StoreGet,
   set: StoreSet
 ): Promise<{ error: SyncErrorCode | null; wroteLocal: boolean }> {
+  // The browser demo has no sync hub (ADR-0010): a pass is a no-op, not a network error.
+  if (!currentPlatform.sync) return { error: null, wroteLocal: false };
   const res = await performServerSync(readStoreActiveFocus(get()), syncTransport);
 
   if (!res.ok) {

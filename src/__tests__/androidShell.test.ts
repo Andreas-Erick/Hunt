@@ -311,10 +311,10 @@ describe("AndroidManifest.xml and backup rules", () => {
     ]);
   });
 
-  it("is versionCode >= 27 (1.16.1) so it installs over the shipped 1.16.0 (26)", () => {
+  it("is versionCode >= 28 (1.17.0) so it installs over the shipped 1.16.1 (27)", () => {
     const code = Number(/android:versionCode="(\d+)"/.exec(manifest)?.[1]);
-    expect(code).toBeGreaterThanOrEqual(27);
-    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.16.1");
+    expect(code).toBeGreaterThanOrEqual(28);
+    expect(/android:versionName="([^"]+)"/.exec(manifest)?.[1]).toBe("1.17.0");
   });
 
   it("declares tablet screen support and multi-window resizeability", () => {

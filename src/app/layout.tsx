@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Hanken_Grotesk, JetBrains_Mono, Newsreader, Space_Grotesk } from "next/font/google";
 import { LOOK_BOOT_SCRIPT } from "@/lib/lookPreference";
+import { publicAssetUrl } from "@/lib/publicAsset";
 import "./globals.css";
 
 // next/font downloads these at build time and serves them from /_next/static,
@@ -56,11 +57,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/hunt-logo.png", type: "image/png", sizes: "512x512" },
+      { url: publicAssetUrl("/favicon.ico"), sizes: "any" },
+      { url: publicAssetUrl("/hunt-logo.png"), type: "image/png", sizes: "512x512" },
     ],
-    shortcut: "/favicon.ico",
-    apple: "/hunt-logo.png",
+    shortcut: publicAssetUrl("/favicon.ico"),
+    apple: publicAssetUrl("/hunt-logo.png"),
   },
 };
 

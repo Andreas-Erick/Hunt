@@ -253,9 +253,47 @@ jobs:
             dist/release/Hunt-Desktop-Setup-${{ needs.verify.outputs.version }}.exe
             dist/release/Hunt-Desktop-Windows-${{ needs.verify.outputs.version }}.zip
 
+  build-web-demo:
+    name: Build browser demo (static zip)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: refs/tags/${{ needs.verify.outputs.tag }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Served at /demos/hunt/ (ADR-0010); a site that serves it elsewhere rebuilds with
+      # HUNT_WEB_BASE_PATH set.
+      - name: Build the static demo into out/
+        env:
+          HUNT_WEB_BASE_PATH: /demos/hunt
+        run: npm run build:web
+
+      # The folder's contents sit at the zip's root: unzip straight into /demos/hunt/.
+      - name: Zip the static folder
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          (cd out && zip -r -X -q ../dist/release/hunt-web-demo.zip .)
+          ls -l dist/release/hunt-web-demo.zip
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-demo
+          path: dist/release/hunt-web-demo.zip
+
   publish-release:
     name: Publish GitHub Release
-    needs: [verify, build-android, build-desktop]
+    needs: [verify, build-android, build-desktop, build-web-demo]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -272,6 +310,11 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-windows
+          path: release-assets
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: web-demo
           path: release-assets
 
       - name: Generate SHA-256 checksums
@@ -291,6 +334,7 @@ jobs:
             "- **Windows Desktop Installer:** \`Hunt-Desktop-Setup-${VERSION}.exe\` (bundles Node.js runtime + Start Menu/Desktop shortcuts)" \
             "- **Windows Portable Bundle:** \`Hunt-Desktop-Windows-${VERSION}.zip\`" \
             "- **Android Companion APK:** \`Hunt-Mobile-${VERSION}.apk\` (installs in-place without wiping data)" \
+            "- **Browser demo:** \`hunt-web-demo.zip\` (static files for \`/demos/hunt/\`; sample data, no sync)" \
             "- **Checksums:** \`SHA256SUMS.txt\`" \
             > release-notes.md
           REPO="${{ github.repository }}"

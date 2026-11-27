@@ -8,6 +8,7 @@ import {
   type NotificationAccess,
 } from "@/lib/desktopReminders";
 import { useCommandStore } from "@/store/useCommandStore";
+import { IS_WEB_DEMO } from "@/lib/webDemo";
 
 /** The reminder time on a Task row's metadata line. */
 export function ReminderBadge({ time }: { time: string }) {
@@ -26,7 +27,9 @@ export function ReminderBadge({ time }: { time: string }) {
 export const REMINDER_ACCESS_NOTE: Partial<Record<NotificationAccess, string>> = {
   denied:
     "Notifications are blocked for Hunt, so this reminder will not show here. Allow notifications in the site settings (the icon left of the address), then reload.",
-  unsupported: "Reminders show as notifications on the Hunt desktop app.",
+  unsupported: IS_WEB_DEMO
+    ? "This demo sends no notifications. In the real Hunt app, reminders fire on the desktop and the phone."
+    : "Reminders show as notifications on the Hunt desktop app.",
 };
 
 /**

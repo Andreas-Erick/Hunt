@@ -1,11 +1,10 @@
-import { seedInitialDataIfNeeded } from "@/lib/db";
 import {
   logDiagnostic,
   recordBreadcrumb,
   summarizeError,
 } from "@/lib/diagnostics";
 import { restoreMirroredNoteDrafts } from "@/lib/noteDraftStore";
-import { syncDataExistsElsewhere } from "@/lib/syncEngine";
+import { currentPlatform } from "@/lib/platform";
 import { getClientSyncToken } from "@/lib/syncToken";
 import { useCommandStore } from "@/store/useCommandStore";
 
@@ -41,8 +40,9 @@ export function bootOnce(): Promise<void> {
       )
       .then(() => {
         if (generation !== bootGeneration) return;
-        // db.ts stays Dexie-only; the sync-side "data exists" check is injected here.
-        return seedInitialDataIfNeeded(syncDataExistsElsewhere);
+        // db.ts stays Dexie-only; the platform injects the sync-side "data exists" check
+        // (native) or writes the demo's sample data (browser demo, ADR-0010).
+        return currentPlatform.seedIfEmpty();
       })
       .catch((err) =>
         logDiagnostic({

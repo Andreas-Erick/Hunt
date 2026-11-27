@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
 import { startDesktopReminders } from "@/lib/desktopReminders";
+import { currentPlatform } from "@/lib/platform";
+import { IS_WEB_DEMO } from "@/lib/webDemo";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
@@ -21,6 +23,7 @@ import { ListsView } from "@/components/ListsView";
 import { TelemetryDashboardView } from "@/components/TelemetryDashboardView";
 import { GuideView } from "@/components/GuideView";
 import { RegionErrorBoundary } from "@/components/RegionErrorBoundary";
+import { DemoBanner } from "@/components/DemoBanner";
 
 const AUTO_SYNC_INTERVAL_MS = 5000;
 /** visibilitychange + focus usually fire together; one sync covers both. */
@@ -133,7 +136,8 @@ export default function HomePage() {
   // while the window is hidden; catches up as soon as it becomes visible. The
   // interval uses autoSync (backs off after failures); a resume syncs now.
   useEffect(() => {
-    if (!booted) return;
+    // The browser demo has no sync hub to poll (ADR-0010).
+    if (!booted || !currentPlatform.sync) return;
     let lastResumeSync = 0;
     const isVisible = () => !document.hidden;
     const syncOnResume = () => {
@@ -171,6 +175,8 @@ export default function HomePage() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen min-h-[100dvh] bg-base text-neutral-100">
+        {/* Focus is full-height and distraction-free, so it drops the banner like the top bar. */}
+        {IS_WEB_DEMO && activeView !== "focus" && <DemoBanner />}
         <TopTelemetryBar />
 
         {(dbError || actionError) && (
