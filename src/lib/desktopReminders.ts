@@ -16,6 +16,7 @@ import {
   type ReminderNotificationData,
 } from "./desktopReminderActions";
 import type { Habit } from "./domainTypes";
+import { IS_WEB_DEMO } from "./webDemo";
 import { requestOpenTask, revealWhenDrawn } from "./openItemRequest";
 import { isSlipCheckIn, reminderAction, SLIP_CHECK_IN_TEXT } from "./reminderActions";
 import { startReminderAlarm } from "./reminderAlarm";
@@ -32,6 +33,9 @@ import type { DueReminder, ReminderSources } from "./reminders";
 export type NotificationAccess = NotificationPermission | "unsupported";
 
 export function notificationAccess(): NotificationAccess {
+  // The browser demo never asks: it runs in someone else's page, often in a cross-origin
+  // iframe where Chrome refuses the prompt anyway (ADR-0010).
+  if (IS_WEB_DEMO) return "unsupported";
   if (typeof window === "undefined" || typeof window.Notification === "undefined") {
     return "unsupported";
   }

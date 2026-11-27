@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { formatChronoMMSS } from "@/lib/dateUtils";
 import { APP_VERSION } from "@/lib/version";
+import { IS_WEB_DEMO } from "@/lib/webDemo";
 import { useCommandStore, type HudView } from "@/store/useCommandStore";
 import { hudAudio } from "@/lib/hudAudio";
 import {
@@ -28,6 +29,7 @@ import {
   DesktopWindowControls,
   useIsDesktopLauncher,
 } from "./DesktopWindowControls";
+import { DemoPhoneSheet } from "./DemoPhoneSheet";
 import { HuntLogo } from "./HuntLogo";
 import { MobileSyncModal } from "./MobileSyncModal";
 import { RegionErrorBoundary } from "./RegionErrorBoundary";
@@ -323,10 +325,15 @@ export function TopTelemetryBar() {
         region="Phone & Sync"
         onDismiss={() => setSyncModalOpen(false)}
       >
-        <MobileSyncModal
-          isOpen={syncModalOpen}
-          onClose={() => setSyncModalOpen(false)}
-        />
+        {/* The demo has no sync server to pair with (ADR-0010). */}
+        {IS_WEB_DEMO ? (
+          <DemoPhoneSheet isOpen={syncModalOpen} onClose={() => setSyncModalOpen(false)} />
+        ) : (
+          <MobileSyncModal
+            isOpen={syncModalOpen}
+            onClose={() => setSyncModalOpen(false)}
+          />
+        )}
       </RegionErrorBoundary>
     </>
   );

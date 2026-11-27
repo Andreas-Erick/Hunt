@@ -5,7 +5,7 @@ import {
   summarizeError,
 } from "@/lib/diagnostics";
 import { restoreMirroredNoteDrafts } from "@/lib/noteDraftStore";
-import { syncDataExistsElsewhere } from "@/lib/syncEngine";
+import { currentPlatform } from "@/lib/platform";
 import { getClientSyncToken } from "@/lib/syncToken";
 import { useCommandStore } from "@/store/useCommandStore";
 
@@ -42,7 +42,9 @@ export function bootOnce(): Promise<void> {
       .then(() => {
         if (generation !== bootGeneration) return;
         // db.ts stays Dexie-only; the sync-side "data exists" check is injected here.
-        return seedInitialDataIfNeeded(syncDataExistsElsewhere);
+        return seedInitialDataIfNeeded(
+          currentPlatform.sync?.dataExistsElsewhere ?? (async () => false)
+        );
       })
       .catch((err) =>
         logDiagnostic({

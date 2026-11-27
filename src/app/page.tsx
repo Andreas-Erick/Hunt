@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
 import { startDesktopReminders } from "@/lib/desktopReminders";
+import { currentPlatform } from "@/lib/platform";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
@@ -133,7 +134,8 @@ export default function HomePage() {
   // while the window is hidden; catches up as soon as it becomes visible. The
   // interval uses autoSync (backs off after failures); a resume syncs now.
   useEffect(() => {
-    if (!booted) return;
+    // The browser demo has no sync hub to poll (ADR-0010).
+    if (!booted || !currentPlatform.sync) return;
     let lastResumeSync = 0;
     const isVisible = () => !document.hidden;
     const syncOnResume = () => {
