@@ -7,6 +7,7 @@ import { installGlobalFaultTraps, recordBreadcrumb } from "@/lib/diagnostics";
 import { bootOnce } from "@/lib/bootSequence";
 import { startDesktopReminders } from "@/lib/desktopReminders";
 import { currentPlatform } from "@/lib/platform";
+import { IS_WEB_DEMO } from "@/lib/webDemo";
 import {
   disposeCommandStoreScheduler,
   useCommandStore,
@@ -22,6 +23,7 @@ import { ListsView } from "@/components/ListsView";
 import { TelemetryDashboardView } from "@/components/TelemetryDashboardView";
 import { GuideView } from "@/components/GuideView";
 import { RegionErrorBoundary } from "@/components/RegionErrorBoundary";
+import { DemoBanner } from "@/components/DemoBanner";
 
 const AUTO_SYNC_INTERVAL_MS = 5000;
 /** visibilitychange + focus usually fire together; one sync covers both. */
@@ -173,6 +175,7 @@ export default function HomePage() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen min-h-[100dvh] bg-base text-neutral-100">
+        {IS_WEB_DEMO && <DemoBanner />}
         <TopTelemetryBar />
 
         {(dbError || actionError) && (

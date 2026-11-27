@@ -1,4 +1,3 @@
-import { seedInitialDataIfNeeded } from "@/lib/db";
 import {
   logDiagnostic,
   recordBreadcrumb,
@@ -41,10 +40,9 @@ export function bootOnce(): Promise<void> {
       )
       .then(() => {
         if (generation !== bootGeneration) return;
-        // db.ts stays Dexie-only; the sync-side "data exists" check is injected here.
-        return seedInitialDataIfNeeded(
-          currentPlatform.sync?.dataExistsElsewhere ?? (async () => false)
-        );
+        // db.ts stays Dexie-only; the platform injects the sync-side "data exists" check
+        // (native) or writes the demo's sample data (browser demo, ADR-0010).
+        return currentPlatform.seedIfEmpty();
       })
       .catch((err) =>
         logDiagnostic({

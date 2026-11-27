@@ -1,3 +1,5 @@
+import { seedInitialDataIfNeeded } from "./db";
+import { seedDemoIfEmpty } from "./demoStore";
 import { httpSyncTransport, syncDataExistsElsewhere, type SyncTransport } from "./syncEngine";
 import { IS_WEB_DEMO } from "./webDemo";
 
@@ -17,17 +19,24 @@ export interface HuntPlatform {
     /** The seed's "is there data elsewhere?" check (see syncDataExistsElsewhere). */
     dataExistsElsewhere: () => Promise<boolean>;
   } | null;
+  /**
+   * Fills an empty local database on boot: the native starter template (only when no other
+   * device holds data), or the demo's sample data (demoSeed.ts). Never touches existing rows.
+   */
+  seedIfEmpty: () => Promise<void>;
 }
 
 export const nativePlatform: HuntPlatform = {
   id: "native",
   sync: { transport: httpSyncTransport, dataExistsElsewhere: syncDataExistsElsewhere },
+  seedIfEmpty: () => seedInitialDataIfNeeded(syncDataExistsElsewhere),
 };
 
 /** No sync, no network: every request this build would make is answered by not making it. */
 export const webDemoPlatform: HuntPlatform = {
   id: "web-demo",
   sync: null,
+  seedIfEmpty: async () => void (await seedDemoIfEmpty()),
 };
 
 /** Fixed at build time (NEXT_PUBLIC_HUNT_DEMO), so the unused platform drops out of the bundle. */
