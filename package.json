@@ -16,7 +16,7 @@
     "build": "next build --webpack",
     "build:mobile-core": "node scripts/build-mobile-core.mjs",
     "start": "next start",
-    "lint": "eslint --max-warnings 0 src e2e scripts",
+    "lint": "eslint --max-warnings 0 src e2e e2e-web scripts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:quiet": "vitest run --reporter=dot --silent",
@@ -26,7 +26,8 @@
     "prepare": "node scripts/install-hooks.mjs",
     "hunt": "Start-Hunt.bat",
     "build:web": "node scripts/build-web-demo.mjs",
-    "preview:web": "node scripts/serve-web-demo.mjs"
+    "preview:web": "node scripts/serve-web-demo.mjs",
+    "test:web-demo": "playwright test -c playwright.webdemo.config.ts"
   },
   "dependencies": {
     "dexie": "^4.0.10",

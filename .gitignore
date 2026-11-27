@@ -15,6 +15,7 @@ coverage/
 # Playwright geometry suite output
 test-results/
 playwright-report/
+playwright-report-web/
 blob-report/
 tsconfig.tsbuildinfo
 next-env.d.ts
