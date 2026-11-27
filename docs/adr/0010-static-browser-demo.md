@@ -68,7 +68,8 @@ The other demo stand-ins:
 - `DemoBanner` shows "Live demo: data stays in your
   browser. Get the real app". Its **Reset demo** rewrites
   the seed, clears Hunt's localStorage keys (keeping the
-  look and sound choice) and reloads.
+  look and sound choice) and reloads. Like the top bar, it
+  hides in Focus.
 
 Business logic is not forked: the store, the domain
 modules and every view are the same code as the native

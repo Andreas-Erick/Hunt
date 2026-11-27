@@ -54,6 +54,17 @@ for (const width of [360, 1280]) {
     await expect(frame.getByRole("heading", { name: /review/i }).first()).toBeVisible();
     await expectNoSideScroll(frame);
 
+    // Focus fills the frame exactly: no banner, no top bar, no scroll.
+    await frame.getByRole("button", { name: "Focus", exact: true }).click();
+    await expect(frame.getByRole("button", { name: /start focus/i })).toBeVisible();
+    await expect(frame.getByRole("region", { name: "Live demo" })).toHaveCount(0);
+    // Polled: the timer's web font can swap in a frame after the button shows.
+    await expect
+      .poll(() => frame.locator("html").evaluate((el) => el.scrollHeight - el.clientHeight), {
+        message: "vertical overflow in Focus (px)",
+      })
+      .toBeLessThanOrEqual(0);
+
     // No sync server, no host-site paths, no third parties: only the demo's own files.
     const origin = new URL(page.url()).origin;
     const foreign = requests.filter((url) => url !== `${origin}/` && !url.startsWith(`${origin}${BASE}`));

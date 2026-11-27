@@ -175,7 +175,8 @@ export default function HomePage() {
   return (
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen min-h-[100dvh] bg-base text-neutral-100">
-        {IS_WEB_DEMO && <DemoBanner />}
+        {/* Focus is full-height and distraction-free, so it drops the banner like the top bar. */}
+        {IS_WEB_DEMO && activeView !== "focus" && <DemoBanner />}
         <TopTelemetryBar />
 
         {(dbError || actionError) && (
